@@ -235,6 +235,29 @@ main {
   font-size: 0.95rem;
 }
 
+/* Skill tags */
+.tags {
+  margin-top: 1.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.tag {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.4rem 0.85rem;
+  border-radius: 999px;
+  font-size: 0.88rem;
+}
+
+.muted-line {
+  margin-top: 1.5rem;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
 /* Social links */
 .social-row {
   margin-top: 1.25rem;
