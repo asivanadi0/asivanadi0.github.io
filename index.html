@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Home</title>
+  <meta name="description" content="A personal site hosted on GitHub Pages." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div class="backdrop" aria-hidden="true"></div>
+
+  <header class="site-header">
+    <nav class="nav">
+      <a class="brand" href="./">yourname<span>.dev</span></a>
+      <div class="nav-links">
+        <a href="#about">About</a>
+        <a href="#projects">Projects</a>
+        <a href="#contact">Contact</a>
+      </div>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <p class="eyebrow">Hosted on GitHub Pages</p>
+      <h1>Hi, I'm <span class="accent">Your Name</span>.</h1>
+      <p class="lede">
+        I build things for the web. This is my little corner of the internet —
+        a fast, static site with no frameworks and no fuss.
+      </p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="#projects">See my work</a>
+        <a class="btn btn-ghost" href="#contact">Get in touch</a>
+      </div>
+    </section>
+
+    <section id="about" class="panel">
+      <h2>About</h2>
+      <p>
+        Replace this text with a short intro about yourself. Because this site is
+        plain HTML and CSS, it loads instantly and is trivial to edit — just open
+        <code>index.html</code> and change the words.
+      </p>
+    </section>
+
+    <section id="projects" class="panel">
+      <h2>Projects</h2>
+      <div class="cards">
+        <article class="card">
+          <h3>Project One</h3>
+          <p>A short description of what this project does and why it matters.</p>
+          <a href="#">View →</a>
+        </article>
+        <article class="card">
+          <h3>Project Two</h3>
+          <p>A short description of what this project does and why it matters.</p>
+          <a href="#">View →</a>
+        </article>
+        <article class="card">
+          <h3>Project Three</h3>
+          <p>A short description of what this project does and why it matters.</p>
+          <a href="#">View →</a>
+        </article>
+      </div>
+    </section>
+
+    <section id="contact" class="panel">
+      <h2>Contact</h2>
+      <p>
+        The best way to reach me is by email at
+        <a href="mailto:you@example.com">you@example.com</a>, or find me on
+        <a href="https://github.com/">GitHub</a>.
+      </p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>&copy; <span id="year"></span> Your Name. Built with plain HTML &amp; hosted on GitHub Pages.</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
