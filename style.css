@@ -202,6 +202,64 @@ main {
   font-size: 0.95rem;
 }
 
+/* Experience timeline */
+.timeline {
+  margin-top: 1.5rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.timeline-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 1.3rem 1.4rem;
+}
+
+.timeline-meta {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin-bottom: 0.35rem;
+}
+
+.timeline-item h3 {
+  margin: 0 0 0.4rem;
+}
+
+.timeline-item p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+/* Social links */
+.social-row {
+  margin-top: 1.25rem;
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.social {
+  display: inline-block;
+  padding: 0.55rem 1.1rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 0.95rem;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.social:hover {
+  text-decoration: none;
+  transform: translateY(-2px);
+  border-color: rgba(110, 168, 254, 0.5);
+}
+
 /* Footer */
 .site-footer {
   max-width: var(--maxw);
