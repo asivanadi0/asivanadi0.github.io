@@ -365,6 +365,123 @@ main,
   font-size: 0.9rem;
 }
 
+/* Writing list (home) */
+.writing-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.writing-list li {
+  display: grid;
+  grid-template-columns: 6.4rem minmax(0, 1fr);
+  gap: 1rem;
+  padding: 0;
+}
+
+.writing-list time {
+  padding-top: 0.15rem;
+  color: var(--quiet);
+  font-family: var(--mono);
+  font-size: 0.72rem;
+}
+
+.writing-list h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 650;
+}
+
+.writing-list h3 a {
+  text-decoration: none;
+}
+
+.writing-list h3 a:hover,
+.writing-list h3 a:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.writing-list p {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+/* Article */
+.article-header {
+  padding: 4.5rem 0 2.5rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.article-header h1 {
+  max-width: 18ch;
+  margin: 0.5rem 0 1rem;
+  font-size: clamp(2rem, 6.5vw, 3.4rem);
+  font-weight: 650;
+  letter-spacing: -0.045em;
+  line-height: 1.08;
+}
+
+.article-meta {
+  margin: 0 0 1.25rem;
+  color: var(--quiet);
+  font-family: var(--mono);
+  font-size: 0.72rem;
+}
+
+.article-dek {
+  margin-bottom: 0;
+}
+
+.article-body {
+  max-width: 38rem;
+  padding: 2.75rem 0 4rem;
+}
+
+.article-body h2 {
+  margin: 2.4rem 0 0.85rem;
+  font-size: 1.15rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.article-body h3 {
+  margin: 1.85rem 0 0.7rem;
+  font-size: 1rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.article-body h3 a {
+  text-decoration-color: var(--line);
+}
+
+.article-body ul {
+  margin: 0 0 1rem;
+  padding-left: 1.15rem;
+}
+
+.article-body li {
+  margin: 0.35rem 0;
+}
+
+.article-body li::marker {
+  color: var(--quiet);
+}
+
+.article-body code {
+  font-family: var(--mono);
+  font-size: 0.86em;
+  padding: 0.08em 0.28em;
+  background: var(--accent-soft);
+  border-radius: 0.2em;
+}
+
+.article-body em {
+  font-style: italic;
+}
+
 .notfound {
   width: min(calc(100% - 3rem), var(--max-width));
   margin: 0 auto;
@@ -428,8 +545,17 @@ main,
   }
 
   .timeline li,
-  .cv-entry {
+  .cv-entry,
+  .writing-list li {
     grid-template-columns: 5.4rem minmax(0, 1fr);
+  }
+
+  .article-header {
+    padding: 3.25rem 0 2rem;
+  }
+
+  .article-body {
+    padding: 2.25rem 0 3.5rem;
   }
 
   .footer {
