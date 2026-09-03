@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Contributing to NVIDIA Cluster Readiness Engine — Anpoo Sivanadi</title>
+  <meta name="description" content="A first-person account of opening draft pull requests against NVIDIA Cluster Readiness Engine: Dependabot tool pins and release workflow policy tests." />
+  <link rel="canonical" href="https://asivanadi0.github.io/nvcre.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Contributing to NVIDIA Cluster Readiness Engine — Anpoo Sivanadi" />
+  <meta property="og:description" content="Issue-first draft PRs for Makefile tool pins under Dependabot and release workflow policy invariants. Status: waiting on maintainer ack." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/nvcre.html" />
+  <meta property="article:published_time" content="2026-09-02T12:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/cv.html">cv</a>
+      <a href="/nvcre.html" aria-current="page">writing</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Contributing to NVIDIA Cluster Readiness Engine</h1>
+        <p class="article-meta">
+          <time datetime="2026-09-02">2 September 2026</time>
+          · Anpoo Sivanadi
+        </p>
+        <p class="dek article-dek">
+          Two draft pull requests against an Apache-2.0 Go Kubernetes controller,
+          opened issue-first and still waiting on maintainer acknowledgment.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          I’m a Staff Software Engineer. Outside of day job work, I look for open
+          source projects where the contribution surface is concrete: a named
+          issue, a clear acceptance shape, and a path I can verify on a laptop
+          without inventing a story about hardware I don’t have.
+        </p>
+        <p>
+          That is how I ended up in
+          <a href="https://github.com/NVIDIA/cluster-readiness-engine" target="_blank" rel="noopener noreferrer">NVIDIA/cluster-readiness-engine</a>
+          (NVCRE), a Kubernetes controller that certifies GPU clusters. The
+          project is Apache-2.0 and written in Go. My fork is
+          <a href="https://github.com/asivanadi0/cluster-readiness-engine" target="_blank" rel="noopener noreferrer">asivanadi0/cluster-readiness-engine</a>.
+        </p>
+        <p>
+          This note is a status report, not a victory lap. Nothing below is
+          merged. Maintainers have not replied on the issues I commented on.
+          NVIDIA CI has not run on either pull request. The drafts stay drafts
+          until that changes.
+        </p>
+
+        <h2>Issue-first, not PR-first</h2>
+        <p>
+          I avoided claiming work that was already spoken for. Issue
+          <a href="https://github.com/NVIDIA/cluster-readiness-engine/issues/140" target="_blank" rel="noopener noreferrer">#140</a>
+          was already assigned to kaynetu, so I left it alone.
+        </p>
+        <p>
+          I focused on two open, unassigned issues authored by mchmarny. Both
+          sit under epic
+          <a href="https://github.com/NVIDIA/cluster-readiness-engine/issues/262" target="_blank" rel="noopener noreferrer">#262</a>.
+          I commented on each one before opening a pull request, and said I
+          would wait for acknowledgment before treating the work as mine to
+          land.
+        </p>
+
+        <h3>
+          <a href="https://github.com/NVIDIA/cluster-readiness-engine/issues/279" target="_blank" rel="noopener noreferrer">Issue #279</a>
+          — Bring Makefile and workflow tool pins under automated updates
+        </h3>
+        <p>
+          Phase 0 of the epic. Depends on
+          <a href="https://github.com/NVIDIA/cluster-readiness-engine/issues/264" target="_blank" rel="noopener noreferrer">#264</a>.
+          Sized S. Still open and unassigned when I commented.
+        </p>
+        <p>
+          My comment proposed a <code>tools.go</code> / gomod Dependabot path:
+          move pinned Go-install tool versions into the module graph so the
+          existing Dependabot gomod ecosystem can age them, instead of leaving
+          version strings only in the Makefile. I said I would wait for ack
+          before opening a PR. I opened a draft anyway so the change is
+          inspectable; it is still labeled draft and still closes #279 only if
+          maintainers want that direction.
+        </p>
+
+        <h3>
+          <a href="https://github.com/NVIDIA/cluster-readiness-engine/issues/274" target="_blank" rel="noopener noreferrer">Issue #274</a>
+          — Workflow policy regression tests
+        </h3>
+        <p>
+          Phase 4 of the epic. Depends on
+          <a href="https://github.com/NVIDIA/cluster-readiness-engine/issues/265" target="_blank" rel="noopener noreferrer">#265</a>
+          and
+          <a href="https://github.com/NVIDIA/cluster-readiness-engine/issues/270" target="_blank" rel="noopener noreferrer">#270</a>.
+          Sized M. Still open and unassigned when I commented.
+        </p>
+        <p>
+          Four invariants were still outstanding on the issue:
+        </p>
+        <ul>
+          <li><code>attest.yml</code> is the sole signer</li>
+          <li><code>id-token: write</code> only on signing jobs</li>
+          <li>every <code>uses:</code> is a SHA</li>
+          <li><code>NVCRECTL_PLATFORMS</code> matches expected-asset lists</li>
+        </ul>
+        <p>
+          My comment took those four remaining invariants as mutation tests. That
+          is the scope of the second draft PR.
+        </p>
+
+        <h2>Draft PR #294: Makefile Go tool pins via tools.go</h2>
+        <p>
+          <a href="https://github.com/NVIDIA/cluster-readiness-engine/pull/294" target="_blank" rel="noopener noreferrer">PR #294</a>
+          — <em>build: bring Makefile Go tool pins under Dependabot via tools.go</em>.
+          Draft, open, head on <code>asivanadi0</code>, base NVIDIA <code>main</code>.
+          Intended to close #279. Diff: +862 / −35 across 7 files.
+        </p>
+        <p>Files touched:</p>
+        <ul>
+          <li><code>tools/tools.go</code></li>
+          <li><code>Makefile</code></li>
+          <li><code>go.mod</code> and <code>go.sum</code></li>
+          <li><code>.github/dependabot.yml</code></li>
+          <li>comments on <code>attest.yml</code> and <code>release.yml</code></li>
+        </ul>
+        <p>
+          Behavior change, limited to build tooling: six Makefile
+          <code>go install</code> tool versions now live in <code>go.mod</code>
+          through <code>tools.go</code> and the Go <code>tool</code> directive.
+          Dependabot keeps using its existing gomod ecosystem and cooldown.
+          The Makefile reads versions with <code>gomodver</code>.
+          <code>GOTOOLCHAIN</code> is pinned for CLI installs.
+        </p>
+        <p>
+          Cosign, crane, syft, yq, kind, tilt, and kwok stay deliberately
+          manual, with that choice documented in the PR. This is not a
+          runtime or product-code change.
+        </p>
+        <p>
+          Checks so far: DCO SUCCESS, CodeRabbit SUCCESS. NVIDIA CI has not
+          run; copy-pr-bot is waiting on <code>/ok to test</code>.
+        </p>
+
+        <h2>Draft PR #295: release workflow policy invariants</h2>
+        <p>
+          <a href="https://github.com/NVIDIA/cluster-readiness-engine/pull/295" target="_blank" rel="noopener noreferrer">PR #295</a>
+          — <em>test: enforce release workflow policy invariants (#274)</em>.
+          Draft, open. Diff: +502 / −2 across 2 files.
+        </p>
+        <p>Files touched:</p>
+        <ul>
+          <li><code>test/releasepolicy/workflow_policy_test.go</code></li>
+          <li><code>.github/workflows/release.yml</code></li>
+        </ul>
+        <p>
+          The new tests treat the four remaining #274 invariants as mutation
+          tests: if a future change breaks the policy, the suite should fail
+          before the workflow ships that way. Same check status as #294: DCO
+          SUCCESS, CodeRabbit SUCCESS, no NVIDIA CI yet for the same
+          <code>/ok to test</code> gate.
+        </p>
+
+        <h2>What I could verify locally</h2>
+        <p>
+          On the machine I used for this work I cloned upstream
+          <code>main</code> at <code>8120b15</code>, with Go 1.27.
+          <code>make test</code>, <code>make lint</code>, and
+          <code>make build</code> passed.
+        </p>
+        <p>
+          That is the limit of the local story. There was no Docker, so UAT
+          was skipped. There was no NVIDIA GPU, so I did not run a full
+          Kubernetes GPU certification path. I am not claiming a cluster run,
+          NCCL results, or any product validation beyond those Makefile
+          targets.
+        </p>
+
+        <h2>What this is not</h2>
+        <p>
+          A Kubernetes Slack post was drafted. I am not claiming it was
+          posted.
+        </p>
+        <p>
+          There are no maintainer quotes here because there are none yet. No
+          review approvals. No merge. No NVIDIA CI pass or fail to report.
+          The drafts are not merge-ready.
+        </p>
+
+        <h2>Next</h2>
+        <p>
+          Waiting on maintainer acknowledgment on
+          <a href="https://github.com/NVIDIA/cluster-readiness-engine/issues/279" target="_blank" rel="noopener noreferrer">#279</a>
+          and
+          <a href="https://github.com/NVIDIA/cluster-readiness-engine/issues/274" target="_blank" rel="noopener noreferrer">#274</a>,
+          then <code>/ok to test</code>, then real CI and human review. Until
+          that sequence happens, both pull requests stay drafts.
+        </p>
+        <p>
+          If you want the primary records, start here:
+        </p>
+        <ul>
+          <li>
+            Upstream:
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine" target="_blank" rel="noopener noreferrer">NVIDIA/cluster-readiness-engine</a>
+          </li>
+          <li>
+            Fork:
+            <a href="https://github.com/asivanadi0/cluster-readiness-engine" target="_blank" rel="noopener noreferrer">asivanadi0/cluster-readiness-engine</a>
+          </li>
+          <li>
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/pull/294" target="_blank" rel="noopener noreferrer">PR #294</a>
+            and
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/pull/295" target="_blank" rel="noopener noreferrer">PR #295</a>
+          </li>
+        </ul>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated September 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
