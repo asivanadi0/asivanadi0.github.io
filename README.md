@@ -26,7 +26,6 @@ omitted.
 - `cv.html` — printable public career chronology
 - `writing.html` — writing index
 - `nvcre.html` — NVIDIA Cluster Readiness Engine note
-- `gig-worker-passport.html` — Gig Worker Passport project
 - `style.css` — responsive light/dark and print styles
 - `404.html` — not-found page
 - `robots.txt` and `sitemap.xml` — search discovery
