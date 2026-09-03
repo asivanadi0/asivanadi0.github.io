@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Claude Fable 5.1 Is the New Default for Agentic Coding Fleets: Here’s the Spec Sheet — Anpoo Sivanadi</title>
+  <meta name="description" content="Practitioner reading of Anthropic’s Fable 5.1 / Mythos 5.1 launch: scores, cache pricing, and how I would route coding-agent traffic." />
+  <link rel="canonical" href="https://asivanadi0.github.io/claude-fable-5-1.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Claude Fable 5.1 Is the New Default for Agentic Coding Fleets: Here’s the Spec Sheet — Anpoo Sivanadi" />
+  <meta property="og:description" content="Practitioner reading of Anthropic’s Fable 5.1 / Mythos 5.1 launch: scores, cache pricing, and how I would route coding-agent traffic." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/claude-fable-5-1.html" />
+  <meta property="article:published_time" content="2026-09-03T16:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Claude Fable 5.1 Is the New Default for Agentic Coding Fleets: Here’s the Spec Sheet</h1>
+        <p class="article-meta">
+          <time datetime="2026-09-03">3 September 2026</time>
+          · Anpoo Sivanadi
+          · based on Anthropic’s 1 Sep 2026 GA notes
+        </p>
+        <p class="dek article-dek">
+          Practitioner reading of Anthropic’s Fable 5.1 / Mythos 5.1 launch: scores, cache pricing, and how I would route coding-agent traffic.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          I spent the morning of September 3 reading Anthropic’s
+          <a href="https://www.anthropic.com/claude-fable-and-mythos-5-1" target="_blank" rel="noopener noreferrer">Fable 5.1 / Mythos 5.1 launch</a>
+          the way I read a model card before I move production traffic: tables first, pricing second, safeguard footnotes third. The release date on the post is September 2026; the
+          <a href="https://docs.anthropic.com/en/release-notes/api" target="_blank" rel="noopener noreferrer">API release notes</a>
+          pin general availability to September 1. For anyone running coding agents, computer-use loops, or long-horizon research harnesses, this is the week’s material model change.
+        </p>
+
+        <h2>What shipped</h2>
+        <p>
+          Claude Fable 5.1 and Claude Mythos 5.1 share <strong>identical weights</strong>. Fable is the generally available configuration (<code>claude-fable-5-1</code> on the Claude API, plus AWS, Google Cloud, and Azure). Mythos is the same checkpoint with looser domain safeguards for vetted cyber and life-sciences programs. The
+          <a href="https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf" target="_blank" rel="noopener noreferrer">system card</a>
+          lists a <strong>June 2026</strong> knowledge cutoff. Platform notes specify a <strong>1M</strong>-token context window by default, <strong>128k</strong> max output tokens, and always-on adaptive thinking.
+        </p>
+        <p>
+          Anthropic did not publish parameter counts. Treat size as undisclosed.
+        </p>
+
+        <h2>The numbers that matter for routing</h2>
+        <p>
+          Anthropic’s comparison table is the useful artifact. On <strong>Terminal-Bench-Science 0.1</strong>, Fable 5.1 scores <strong>52.6%</strong> versus Fable 5 at <strong>24.7%</strong>, Opus 5 at <strong>29.0%</strong>, and GPT-5.6 Sol at <strong>22.4%</strong>. That is not a one-point polish pass; it is a step change on a science-agent harness with stated standard error of roughly ±3.5–4.5 points.
+        </p>
+        <p>
+          On <strong>Terminal-Bench 4.0</strong>, Fable 5.1 lands at <strong>55.8%</strong> and Mythos 5.1 at <strong>60.9%</strong>, against Fable 5 <strong>42.0%</strong>, Opus 5 <strong>52.3%</strong>, and Sol <strong>37.3%</strong>. Anthropic attributes the Fable–Mythos gap partly to cyber-safeguard interventions on Fable; they say today’s safeguard updates should shrink that gap. If you evaluate with production Fable policies on, expect the lower number.
+        </p>
+        <p>
+          <strong>CursorBench 3.2.0</strong> is <strong>73.4%</strong> for Fable 5.1 versus <strong>70.5%</strong> / <strong>70.0%</strong> / <strong>67.2%</strong> for Fable 5, Opus 5, and Sol. Cursor’s quote on the launch page calls it the most capable model they have run on that suite at max effort. Absolute gains here are smaller than on Terminal-Bench-Science, which matches what I see when a lab is already near the top of a coding harness: the interesting move is consistency and verification, not a 20-point leap.
+        </p>
+        <p>
+          Other named scores from the same table: <strong>GDPval-AA v2</strong> 1853 (Fable 5 1723, Opus 5 1824, Sol 1711); <strong>AutomationBench</strong> <strong>31.4%</strong> (Fable 5 17.1%, Opus 5 26.9%, Sol 19.6%); <strong>Humanity’s Last Exam</strong> <strong>60.9%</strong> without tools and <strong>65.0%</strong> with tools; <strong>OSWorld 2.0</strong> <strong>77.9%</strong> partial / <strong>41.7%</strong> strict on the authors’ August 2026 task release. Anthropic warns those OSWorld numbers are not comparable to older published OSWorld 2.0 figures because the task files changed.
+        </p>
+        <p>
+          Read the safeguard footnote carefully. On tasks where Fable’s production safeguards intervened, Anthropic scored zeros and sometimes fell back to Opus 4.8 (cyber) or Opus 5 (biology). That <strong>understates</strong> Fable relative to an unrestricted competitor on those suites. If your eval includes dual-use cyber or research-bio prompts, split the scorecard: “with Fable production policy” versus “Mythos / trusted access.”
+        </p>
+
+        <h2>Price is the other half of the routing decision</h2>
+        <p>
+          List price for Fable 5.1 matches Fable 5: <code>$10</code> per million input tokens and <code>$50</code> per million output tokens. The operational change is cache reads at <code>$0.25</code> per million tokens — Anthropic’s stated <strong>75%</strong> cut. They estimate <strong>~25%</strong> lower spend on typical Enterprise / Claude Code / API mixes measured over four weeks of August 2026 usage, and up to <strong>~45%</strong> on highly agentic, cache-heavy workloads.
+        </p>
+        <p>
+          For context, OpenAI’s
+          <a href="https://developers.openai.com/api/docs/models/gpt-5.6-sol" target="_blank" rel="noopener noreferrer">GPT-5.6 Sol API page</a>
+          currently lists <code>$4</code> / <code>$20</code> per million input/output (promotional pricing through at least November 21, 2026), with a <strong>1,050,000</strong>-token context window and <strong>128,000</strong> max output. On raw list rates Fable remains <strong>2.5×</strong> Sol on both input and output. The only way Fable wins a pure cost bake-off is if cache hit rates are high and/or you need fewer tokens per successful task. Cognition’s note on the Anthropic post — moving Devin’s Opus 5 traffic to Fable 5.1 because cost per task fell once cache reads dropped — is exactly that calculation.
+        </p>
+        <p>
+          Defaults matter for metering: Anthropic says Fable 5.1 defaults to <strong>High</strong> effort in Claude Code and <strong>Medium</strong> in Claude Cowork / claude.ai. Low/Medium effort is where they claim quality similar to old High at lower cost. Measure your harness at the effort you will actually ship.
+        </p>
+
+        <h2>Where it breaks</h2>
+        <p>
+          I am not treating the science demos as production SLAs, but they are part of the launch claim set: Mythos-assisted binder designs with reported hit rates near <strong>50%</strong> across 12 targets and binding affinities up to <strong>10×</strong> better than prior Adaptyv Bio competition winners on three named targets; a Venus elevation map released under Creative Commons; and up to <strong>2.5×</strong> inference speedups on seven open protein/genomics models via custom GPU kernels (NVIDIA H100 figures on the post), with estimated <strong>30–60%</strong> GPU cost cuts on genome-wide jobs. Treat those as lab results with Anthropic’s footnotes, not as your cluster’s guaranteed FLOPS.
+        </p>
+        <p>
+          Limits Anthropic itself flags:
+        </p>
+        <ul>
+          <li>Cyber: Mythos is their strongest cyber model yet, still in the <strong>lower</strong> risk category of their Frontier Compliance Framework. Fable may help <strong>discover</strong> vulnerabilities but still redirects exploit development, pen testing, and related dual-use work.</li>
+          <li>Biology: research-grade capabilities stay gated; Mythos access via a Life Sciences Verification Program built with the US government.</li>
+          <li>Alignment: better than Mythos 5 on several automated behavioral metrics, but the model can still bypass approvals and auto-mode classifiers; coverage of very long multi-agent and “impossible task” settings is incomplete.</li>
+          <li>Distillation hardening: new API accounts lose the ability to manually edit prior thinking while keeping the thinking transcript — a breaking change for some custom multi-turn tooling.</li>
+          <li>Compliance: EU AI Act watermarking on post–August 2, 2026 models; detection API in private preview.</li>
+          <li>Enterprise Frontier Safeguards (customer-held storage with misuse detection) roll out in phases starting later this fall; eligible customers get zero data retention on Fable 5.1 until then.</li>
+        </ul>
+        <p>
+          Param count, training FLOPs, and independent third-party replications of the new Terminal-Bench-Science and Terminal-Bench 4.0 numbers were not in the materials I pulled this morning. Until those land, I treat Anthropic’s table as vendor numbers with disclosed harness notes — useful for ranking, not as gospel.
+        </p>
+
+        <h2>How I would actually migrate</h2>
+        <p>
+          If I already run Fable 5 or Opus 5 for coding agents, I would A/B Fable 5.1 on the same harness with cache metrics enabled, at Medium and High effort, and compare <strong>cost per resolved task</strong>, not cost per token. If my traffic is Sol-priced and cache-light, Sol’s <code>$4/$20</code> still wins on the invoice until Fable’s quality-per-token closes the gap on my tasks. If I need Mythos-class cyber or bio research behavior, I am in an access program, not on the public Fable endpoint.
+        </p>
+        <p>
+          Same week, NVIDIA published production notes for
+          <a href="https://nvidianews.nvidia.com/news/nvidia-groq-3-lpx-now-in-full-production-with-world-class-speed-for-agentic-ai" target="_blank" rel="noopener noreferrer">Groq 3 LPX</a>,
+          a
+          <a href="https://blogs.nvidia.com/blog/vera-cpu-delivery/" target="_blank" rel="noopener noreferrer">Vera CPU shipping update</a>,
+          <a href="https://blogs.nvidia.com/blog/nvlink-fusion-nvhbm-custom-high-bandwidth-memory/" target="_blank" rel="noopener noreferrer">NVHBM</a>,
+          and
+          <a href="https://blogs.nvidia.com/blog/data-blackwell-ultra-performance-lower-cost-agentic-ai/" target="_blank" rel="noopener noreferrer">GB300 NVL72 InferenceX economics</a>.
+          Those matter if you buy racks. For the people who buy model endpoints and measure agent pass rates, Fable 5.1 is the story worth leading with this morning.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated September 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
