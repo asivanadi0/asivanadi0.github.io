@@ -365,7 +365,117 @@ main,
   font-size: 0.9rem;
 }
 
-/* Writing list (home) */
+/* Selected work + writing lists */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+}
+
+.experience-lede {
+  margin-bottom: 1.25rem;
+}
+
+.section-link.inline {
+  grid-column: auto;
+  margin-top: 1rem;
+}
+
+.work-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.work-list li {
+  display: grid;
+  grid-template-columns: 6.4rem minmax(0, 1fr);
+  gap: 1rem;
+  padding: 1rem 0;
+  border-top: 1px solid var(--line);
+}
+
+.work-list li:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.work-kind {
+  margin: 0;
+  padding-top: 0.15rem;
+  color: var(--quiet);
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.work-list h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 650;
+}
+
+.work-list h3 a {
+  text-decoration: none;
+}
+
+.work-list h3 a:hover,
+.work-list h3 a:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.work-list p {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.page-header {
+  padding: 4.5rem 0 2.5rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.page-header h1 {
+  margin: 0.5rem 0 1rem;
+  font-size: clamp(2rem, 6.5vw, 3.4rem);
+  font-weight: 650;
+  letter-spacing: -0.045em;
+  line-height: 1.08;
+}
+
+.page-dek {
+  margin-bottom: 0;
+}
+
+.page-body {
+  padding: 2.75rem 0 4rem;
+}
+
+.writing-index li + li {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--line);
+}
+
+.project-links {
+  margin-top: 2rem;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .writing-list {
   margin: 0;
   padding: 0;
@@ -586,10 +696,6 @@ main,
     gap: 0.65rem 1rem;
   }
 
-  .nav a[href="#education"] {
-    display: none;
-  }
-
   .hero {
     padding: 4.5rem 0 3.5rem;
   }
@@ -606,8 +712,17 @@ main,
 
   .timeline li,
   .cv-entry,
-  .writing-list li {
+  .writing-list li,
+  .work-list li {
     grid-template-columns: 5.4rem minmax(0, 1fr);
+  }
+
+  .page-header {
+    padding: 3.25rem 0 2rem;
+  }
+
+  .page-body {
+    padding: 2.25rem 0 3.5rem;
   }
 
   .article-header {

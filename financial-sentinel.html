@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Financial Sentinel — Anpoo Sivanadi</title>
+  <meta name="description" content="Financial Sentinel: real-time financial risk monitoring using X API and Grok. Co-created by Anpoo Sivanadi and Prashant Gupta." />
+  <link rel="canonical" href="https://asivanadi0.github.io/financial-sentinel.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Financial Sentinel — Anpoo Sivanadi" />
+  <meta property="og:description" content="Real-time financial risk monitoring using X API and Grok." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/financial-sentinel.html" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Project</p>
+        <h1>Financial Sentinel</h1>
+        <p class="article-meta">
+          Co-created with Prashant Gupta
+          ·
+          <a href="https://github.com/gamepop/fin-x-watcher" target="_blank" rel="noopener noreferrer">GitHub</a>
+          ·
+          <a href="https://devpost.com/software/financial-sentinel" target="_blank" rel="noopener noreferrer">project page</a>
+        </p>
+        <p class="dek article-dek">
+          Real-time financial risk monitoring using X API and Grok. Watches
+          banks, exchanges, wallets, and trading platforms for institution-specific
+          risk signals that show up on social media before they hit traditional news.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <h2>Problem</h2>
+        <p>
+          During the 2023 banking crisis, Silicon Valley Bank collapsed in about
+          48 hours. Warning signs appeared on X hours before mainstream coverage.
+          Retail investors and customers who were not watching social media had no
+          early signal.
+        </p>
+        <p>
+          Institution-specific risk often spreads on social media first: an
+          exchange freezing withdrawals, a trading app halting orders, unusual
+          activity at a bank. Nobody has time to watch dozens of institutions
+          around the clock.
+        </p>
+
+        <h2>Approach</h2>
+        <p>
+          Financial Sentinel is an early-warning system that monitors financial
+          institutions in real time, analyzes sentiment with Grok, and surfaces
+          risk findings with evidence. It tracks institutions across banks, crypto
+          exchanges, wallets, stock trading platforms, robo-advisors, payment apps,
+          and neobanks.
+        </p>
+        <p>The pipeline:</p>
+        <ul>
+          <li>Fetches live posts from X API v2 (search, counts, and user lookup)</li>
+          <li>Scores viral risk from engagement velocity, verification status, and influence</li>
+          <li>Runs Grok sentiment analysis with grounded citations back to source posts</li>
+          <li>Streams progress over Server-Sent Events so the UI updates stage by stage</li>
+          <li>Sends Slack alerts for medium and high risk findings</li>
+        </ul>
+        <p>
+          Resilience patterns include a circuit breaker around external APIs,
+          exponential backoff, and a Grok live-search fallback when rate limits hit.
+          Every finding keeps direct post URLs for verification.
+        </p>
+
+        <h2>Result</h2>
+        <p>
+          A working FastAPI backend and Next.js frontend that can analyze an
+          institution end to end: fetch posts, compute volume trends, run Grok
+          analysis, and return a structured risk level with evidence. The chat UI
+          is built with CopilotKit.
+        </p>
+        <p>
+          Stack: FastAPI, X API v2, Grok, Next.js, CopilotKit.
+        </p>
+        <p class="link-row project-links">
+          <a href="https://github.com/gamepop/fin-x-watcher" target="_blank" rel="noopener noreferrer">github <span aria-hidden="true">↗</span></a>
+          <a href="https://devpost.com/software/financial-sentinel" target="_blank" rel="noopener noreferrer">project page <span aria-hidden="true">↗</span></a>
+          <a href="/">← home</a>
+        </p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated September 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>

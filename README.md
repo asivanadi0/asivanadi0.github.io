@@ -1,11 +1,11 @@
 # Anpoo Sivanadi
 
 Source for [asivanadi0.github.io](https://asivanadi0.github.io), a small static
-professional site hosted on GitHub Pages.
+site hosted on GitHub Pages.
 
 ## Publishing rule
 
-The site is a factual public index, not a private records store.
+The site is a factual public index.
 
 - Publish only completed, independently verifiable work.
 - Link to primary third-party records: upstream PRs/designs, release notes,
@@ -22,8 +22,12 @@ omitted.
 
 ## Files
 
-- `index.html` — home, selected experience, and education
+- `index.html` — home: selected work, experience, writing, connect
 - `cv.html` — printable public career chronology
+- `writing.html` — writing index
+- `nvcre.html` — NVIDIA Cluster Readiness Engine note
+- `financial-sentinel.html` — Financial Sentinel project
+- `gig-worker-passport.html` — Gig Worker Passport project
 - `style.css` — responsive light/dark and print styles
 - `404.html` — not-found page
 - `robots.txt` and `sitemap.xml` — search discovery
