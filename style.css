@@ -567,7 +567,8 @@ main,
   text-decoration-color: var(--line);
 }
 
-.article-body ul {
+.article-body ul,
+.article-body ol {
   margin: 0 0 1rem;
   padding-left: 1.15rem;
 }
