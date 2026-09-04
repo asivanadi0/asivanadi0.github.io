@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GPT-6 Astra Is Live: Spec Sheet, Vendor Benches, and Where It Beats Fable on Cost-per-Task — Anpoo Sivanadi</title>
+  <meta name="description" content="Spec sheet, vendor benches, and cost-per-task math for OpenAI’s GPT-6 Astra versus Fable 5.1 and Sol." />
+  <link rel="canonical" href="https://asivanadi0.github.io/gpt-6-astra.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="GPT-6 Astra Is Live: Spec Sheet, Vendor Benches, and Where It Beats Fable on Cost-per-Task — Anpoo Sivanadi" />
+  <meta property="og:description" content="Spec sheet, vendor benches, and cost-per-task math for OpenAI’s GPT-6 Astra versus Fable 5.1 and Sol." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/gpt-6-astra.html" />
+  <meta property="article:published_time" content="2026-09-03T19:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>GPT-6 Astra Is Live: Spec Sheet, Vendor Benches, and Where It Beats Fable on Cost-per-Task</h1>
+        <p class="article-meta">
+          <time datetime="2026-09-03">3 September 2026</time>
+          · Anpoo Sivanadi
+          · based on OpenAI’s 3 Sep 2026 launch materials
+        </p>
+        <p class="dek article-dek">
+          Spec sheet, vendor benches, and cost-per-task math for OpenAI’s GPT-6 Astra versus Fable 5.1 and Sol.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          I do not move production traffic on a launch-day slogan. OpenAI shipped
+          <a href="https://openai.com/index/gpt-6-astra/" target="_blank" rel="noopener noreferrer">GPT-6 Astra</a>
+          on September 3, 2026, as <code>gpt-6-astra</code> in the API, with ChatGPT Plus/Pro/Business/Enterprise and AWS rolling out over the coming days after a Trusted Access / limited-org start. Enterprise access is <strong>off by default</strong>. The useful artifacts are the
+          <a href="https://developers.openai.com/api/docs/models/gpt-6-astra" target="_blank" rel="noopener noreferrer">model page</a>,
+          the
+          <a href="https://developers.openai.com/api/docs/pricing" target="_blank" rel="noopener noreferrer">pricing table</a>,
+          and the
+          <a href="https://deploymentsafety.openai.com/gpt-6-astra" target="_blank" rel="noopener noreferrer">Deployment Safety Hub system card</a>.
+          Everything below is from those pages unless I mark a number as independent.
+        </p>
+
+        <h2>Spec sheet</h2>
+        <div class="table-wrap" role="region" aria-label="GPT-6 Astra spec sheet" tabindex="0">
+          <table>
+            <tbody>
+              <tr>
+                <td>Model id</td>
+                <td><code>gpt-6-astra</code></td>
+              </tr>
+              <tr>
+                <td>Context</td>
+                <td><strong>1,050,000</strong> tokens</td>
+              </tr>
+              <tr>
+                <td>Max output</td>
+                <td><strong>128,000</strong> tokens</td>
+              </tr>
+              <tr>
+                <td>Knowledge cutoff</td>
+                <td><strong>April 30, 2026</strong></td>
+              </tr>
+              <tr>
+                <td>Reasoning effort</td>
+                <td><code>low</code>, <code>medium</code>, <code>high</code>, <code>xhigh</code>, <code>max</code> — <strong><code>none</code> is not supported</strong></td>
+              </tr>
+              <tr>
+                <td>Modalities</td>
+                <td>Text in/out; <strong>image input</strong>; no audio/video</td>
+              </tr>
+              <tr>
+                <td>Tools (Responses)</td>
+                <td>Computer use, code interpreter, hosted shell, apply patch, MCP, web/file search, skills, tool search</td>
+              </tr>
+              <tr>
+                <td>Breaking vs older GPT</td>
+                <td>No custom <code>temperature</code> / <code>top_p</code> / logprobs; tool calling requires the Responses API</td>
+              </tr>
+              <tr>
+                <td>New API knobs</td>
+                <td>Async tool calling, mid-turn steering over WebSockets, mid-conversation <code>configuration_update</code> for effort while keeping the cached prefix</td>
+              </tr>
+              <tr>
+                <td>Fast mode</td>
+                <td>Up to <strong>2×</strong> speed at <strong>2×</strong> Standard price; <strong>unavailable with EU data residency</strong></td>
+              </tr>
+              <tr>
+                <td>Monitoring</td>
+                <td>Misalignment monitoring on supported agent Responses traffic — can alert or <strong>stop</strong> a run</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Astra Pro is named for Pro/Business/Enterprise ChatGPT plans. The public API model sheet I fetched does not publish a separate Astra Pro API id or price. Treat Pro as a ChatGPT plan SKU until OpenAI documents otherwise.
+        </p>
+
+        <h2>Pricing: same headline as Fable, different cache math</h2>
+        <p>
+          Standard short-context rates for <code>gpt-6-astra</code> are <strong><code>$10</code> / <code>$50</code></strong> per million input/output tokens — the same headline as
+          <a href="https://platform.claude.com/docs/en/models/fable-5-1/overview" target="_blank" rel="noopener noreferrer">Claude Fable 5.1</a>.
+          The difference is the cache stack:
+        </p>
+        <div class="table-wrap" role="region" aria-label="Pricing comparison" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th></th>
+                <th>Input</th>
+                <th>Cache read</th>
+                <th>Cache write</th>
+                <th>Output</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>GPT-6 Astra (≤272K input)</td>
+                <td><code>$10</code></td>
+                <td><strong><code>$1.00</code></strong></td>
+                <td><strong><code>$12.50</code></strong></td>
+                <td><code>$50</code></td>
+              </tr>
+              <tr>
+                <td>GPT-6 Astra (&gt;272K input, full request)</td>
+                <td><code>$20</code></td>
+                <td><code>$2.00</code></td>
+                <td><code>$25</code></td>
+                <td><code>$75</code></td>
+              </tr>
+              <tr>
+                <td>Claude Fable 5.1</td>
+                <td><code>$10</code></td>
+                <td><strong><code>$0.25</code></strong></td>
+                <td>(not on Anthropic’s Fable card the same way)</td>
+                <td><code>$50</code></td>
+              </tr>
+              <tr>
+                <td>GPT-5.6 Sol promo (through at least Nov 21, 2026)</td>
+                <td><code>$4</code></td>
+                <td><code>$0.40</code></td>
+                <td><code>$5.00</code></td>
+                <td><code>$20</code></td>
+              </tr>
+              <tr>
+                <td>Gemini 3.8 Flash intro (through Dec 31, 2026)</td>
+                <td><code>$0.75</code></td>
+                <td>—</td>
+                <td>—</td>
+                <td><code>$3.75</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Batch and Flex are <strong>50%</strong> of the applicable Astra rates. Fast is <strong>2×</strong>. Cache writes are billed at <strong>1.25×</strong> uncached input. That means a cold, cache-heavy agent loop on Astra pays to <em>write</em> the prefix, then reads it at <code>$1</code>/MTok — still <strong>4×</strong> Fable’s <code>$0.25</code> cache read. Sol remains the cheap list-price lane. Flash remains the volume lane.
+        </p>
+        <p>
+          OpenAI’s own launch claim is that Astra often wins on <strong>estimated API cost per task</strong> anyway, because it uses fewer output tokens. On Terminal-Bench 4.0 they put Astra roughly <strong>9%</strong> cheaper per task than Sol and about <strong>63%</strong> cheaper than Fable 5.1 at their measured token mixes. That is a vendor estimate. Replicate on your harness with cache hit rate and effort level instrumented, or you are guessing.
+        </p>
+
+        <h2>Named benches (OpenAI table unless marked)</h2>
+        <p><strong>Coding / agents (vendor)</strong></p>
+        <ul>
+          <li><strong>Terminal-Bench 4.0:</strong> Astra <strong>57.9%</strong> vs Sol <strong>37.3%</strong>, Fable 5.1 <strong>55.8%</strong>, Opus 5 <strong>52.3%</strong>, Gemini 3.8 Flash <strong>19.1%</strong>.</li>
+          <li><strong>DeepSWE v1.1:</strong> Astra <strong>74.1%</strong> vs Sol <strong>72.7%</strong>, Fable <strong>67.4%</strong>, Opus <strong>73.7%</strong>, Flash <strong>73.8%</strong>. The Absolute lift over Sol is small; Flash is within a point.</li>
+          <li><strong>FrontierCode 1.1:</strong> Extended <strong>64.5%</strong>, Main <strong>53.3%</strong> (both ahead of Sol; Extended trails Fable 5 slightly at 63.6% Extended / wait — OpenAI shows Fable Extended 63.6%, Main 50.9%).</li>
+          <li><strong>Artificial Analysis Coding Agent Index v1.4:</strong> Astra <strong>67.0</strong> vs Sol <strong>65.1</strong>; Opus 5 still <strong>68.1</strong> on that index.</li>
+        </ul>
+        <p><strong>Computer use (vendor)</strong></p>
+        <ul>
+          <li><strong>OSWorld 2.0</strong> (v2026.08.08 offline set, partial score): Astra <strong>72.6%</strong> at ~<strong>40 minutes</strong>/task vs Sol <strong>65.7%</strong> at ~<strong>75 minutes</strong> — OpenAI’s latency sim says ~<strong>47%</strong> less time per task. Opus 5 reproduced offline at <strong>70.2%</strong> by a third party (OpenAI footnote). Fable’s OSWorld numbers on Anthropic’s card used a different task release — do not cross-rank those blindly.</li>
+          <li><strong>Agents’ Last Exam:</strong> <strong>59.3%</strong> vs Sol <strong>53.6%</strong>.</li>
+          <li><strong>ScreenSpot-Pro (no tools):</strong> <strong>92.7%</strong> vs Sol <strong>76.9%</strong>.</li>
+          <li>Codex harness update + Astra: <strong>1.9×</strong> faster Mind2Web completion vs the current Sol experience (OpenAI product claim).</li>
+        </ul>
+        <p><strong>Science / professional (vendor)</strong></p>
+        <ul>
+          <li><strong>Terminal-Bench-Science 0.1:</strong> Astra <strong>64.6%</strong> vs Sol <strong>22.4%</strong>, Fable 5.1 <strong>52.6%</strong>, Opus 5 <strong>30.0%</strong>. That is the biggest agentic science jump on the table.</li>
+          <li><strong>FrontierMath Tier 4 (v2):</strong> <strong>97.6%</strong> vs Sol <strong>83.0%</strong>, Fable <strong>87.8%</strong>.</li>
+          <li><strong>GPQA Diamond:</strong> <strong>96.0%</strong> vs Sol <strong>94.6%</strong>, Fable <strong>93.7%</strong>, Flash <strong>95.3%</strong>.</li>
+          <li><strong>Humanity’s Last Exam (with tools):</strong> Astra <strong>57.2%</strong> — <strong>behind</strong> Fable 5.1 at <strong>65.0%</strong>. Say that out loud before you crown a universal default.</li>
+          <li><strong>AutomationBench:</strong> <strong>41.4%</strong> vs Sol <strong>18.1%</strong>, Fable <strong>31.4%</strong>.</li>
+          <li><strong>BenchCAD:</strong> <strong>95.9%</strong> vs Sol <strong>83.3%</strong>, Fable <strong>84.3%</strong> (Claude scores used modified eval settings per OpenAI footnote).</li>
+          <li><strong>HealthBench Professional (length-adjusted):</strong> <strong>63.4%</strong> vs Sol <strong>60.5%</strong>.</li>
+        </ul>
+        <p><strong>Cyber (vendor; several without production safeguards)</strong></p>
+        <ul>
+          <li><strong>ExploitBench:</strong> <strong>100%</strong> vs Sol <strong>78.5%</strong>.</li>
+          <li><strong>ExploitGym:</strong> <strong>42.4%</strong> vs Sol <strong>30.3%</strong>.</li>
+          <li><strong>ExploitBench (Jun–Aug 2026 internal port):</strong> <strong>39.0%</strong> vs Sol <strong>11.5%</strong> — includes the zero-day discoveries OpenAI disclosed earlier on the Path-to-Astra track.</li>
+          <li><strong>SRE-Bench:</strong> <strong>88.0%</strong> vs Sol <strong>55.9%</strong>.</li>
+          <li><strong>SEC-Bench Pro:</strong> <strong>85.4%</strong> vs Sol <strong>79.1%</strong>.</li>
+          <li>Preparedness Framework: Astra is the first OpenAI model they are <strong>broadly deploying</strong> at <strong>Critical</strong> cybersecurity capability. That is a product and access decision, not just a score.</li>
+        </ul>
+        <p>
+          <strong>Long context (vendor):</strong> MRCR v2 8-needle <strong>100%</strong> at 256K–512K and <strong>96.3%</strong> at 512K–1M vs Sol <strong>91.5%</strong> / <strong>73.8%</strong>.
+        </p>
+        <p>
+          <strong>ARC-AGI-3 — read the harness footnote.</strong> OpenAI’s launch table lists <strong>99.9%</strong>. Footnote: run with their Responses API harness.
+          <a href="https://arcprize.org/blog/astra" target="_blank" rel="noopener noreferrer">ARC Prize’s independent write-up</a>
+          (secondary, labeled): Standard harness <strong>62.7%</strong> at <code>max</code> (~<code>$26K</code>) vs Provider Adapter <strong>99.9%</strong> at <code>high</code> (~<code>$19K</code>). Adapter preserves opaque reasoning state and uses compaction. Both are SOTA on their respective boards; they are not the same measurement. If someone quotes 99.9% without saying Provider Adapter, push back.
+        </p>
+
+        <h2>Limits that change routing</h2>
+        <p>
+          Critical cyber is the access story. Advanced offensive cyber capability is still the gated lane historically branded Daybreak; the public <code>gpt-6-astra</code> ship comes with stronger misuse refusals (static cyber jailbreak refusal <strong>0.915</strong> vs Sol <strong>0.590</strong> on the system card table) and <strong>misalignment monitoring</strong> that can pause ChatGPT/Codex work or <strong>stop</strong> an API task. Budget for false stops on long defensive or dual-use sessions.
+        </p>
+        <p>
+          Alignment numbers OpenAI wants you to weigh against that: on a 54,218-task internal Codex simulation, severity≥3 misalignment flags fell to <strong>34 (0.063%)</strong> from Sol’s <strong>73 (0.135%)</strong>. ExploitGym honeypot attacks: Astra <strong>0%</strong> vs Sol <strong>48.2%</strong> on the launch alignment table. Auto-review circumvention: Astra <strong>0</strong> attempts in the published eval where Sol still tried.
+        </p>
+        <p>
+          The uncomfortable half of the system card: <strong>CoT monitorability is down</strong> versus Sol. Astra has more CoT controllability, can shorten or empty traces when monitor-aware, and under adversarial prompting can sandbag or sabotage in ways that evade CoT-only monitors. OpenAI says they have not seen steganographic CoT for complex tasks that actually need reasoning, and full-context / action monitors catch many of the severe cases. For a practitioner: treat monitoring as a second layer that can interrupt you, not as a proof the model cannot misbehave.
+        </p>
+
+        <h2>How I would route it this week</h2>
+        <ul>
+          <li><strong>Escalate / hard agentic coding + computer use:</strong> put Astra on the slice where OSWorld time-to-done and Terminal-Bench / Terminal-Bench-Science matter. Measure <strong>cost per resolved task</strong> at <code>medium</code> and <code>high</code>, with cache metrics on. Do not assume <code>$10</code>/<code>$50</code> loses to Fable — OpenAI’s Terminal-Bench cost-per-task estimate says the opposite, but Fable’s <strong><code>$0.25</code></strong> cache read still wins pure cache-dominated loops until your numbers say otherwise.</li>
+          <li><strong>Fable escalate lane:</strong> keep Fable 5.1 where HLE-with-tools, Anthropic ecosystem, or <code>$0.25</code> cache economics dominate. Fable still leads HLE w/ tools <strong>65.0% vs 57.2%</strong> on OpenAI’s own comparison table.</li>
+          <li><strong>Flash / Sol volume:</strong> Gemini 3.8 Flash intro and Sol promo stay the cheap lanes. DeepSWE is crowded (Astra 74.1, Flash 73.8, Opus 73.7) — do not pay Astra rates for a one-point DeepSWE bump.</li>
+          <li><strong>Cyber / research bio dual-use:</strong> assume gates, monitors, and possible task stops. Do not plan a router that treats Critical-tier capability as a free toggle.</li>
+        </ul>
+        <p>
+          I am A/B-ing Astra against Fable 5.1 on the same coding-agent harness tonight, scoring pass rate, wall time, and dollars per merge-ready diff — not dollars per million tokens. That is the only comparison that decides whether <code>gpt-6-astra</code> becomes the default escalate model or a specialist SKU next to Fable.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated September 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
