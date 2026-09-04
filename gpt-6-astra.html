@@ -115,7 +115,7 @@
 
         <h2>Pricing: same headline as Fable, different cache math</h2>
         <p>
-          Standard short-context rates for <code>gpt-6-astra</code> are <strong>$10 / $50</strong> per million input/output tokens — the same headline as
+          Standard short-context rates for <code>gpt-6-astra</code> are <strong><code>$10</code> / <code>$50</code></strong> per million input/output tokens — the same headline as
           <a href="https://platform.claude.com/docs/en/models/fable-5-1/overview" target="_blank" rel="noopener noreferrer">Claude Fable 5.1</a>.
           The difference is the cache stack:
         </p>
@@ -133,44 +133,44 @@
             <tbody>
               <tr>
                 <td>GPT-6 Astra (≤272K input)</td>
-                <td>$10</td>
-                <td><strong>$1.00</strong></td>
-                <td><strong>$12.50</strong></td>
-                <td>$50</td>
+                <td><code>$10</code></td>
+                <td><strong><code>$1.00</code></strong></td>
+                <td><strong><code>$12.50</code></strong></td>
+                <td><code>$50</code></td>
               </tr>
               <tr>
                 <td>GPT-6 Astra (&gt;272K input, full request)</td>
-                <td>$20</td>
-                <td>$2.00</td>
-                <td>$25</td>
-                <td>$75</td>
+                <td><code>$20</code></td>
+                <td><code>$2.00</code></td>
+                <td><code>$25</code></td>
+                <td><code>$75</code></td>
               </tr>
               <tr>
                 <td>Claude Fable 5.1</td>
-                <td>$10</td>
-                <td><strong>$0.25</strong></td>
+                <td><code>$10</code></td>
+                <td><strong><code>$0.25</code></strong></td>
                 <td>(not on Anthropic’s Fable card the same way)</td>
-                <td>$50</td>
+                <td><code>$50</code></td>
               </tr>
               <tr>
                 <td>GPT-5.6 Sol promo (through at least Nov 21, 2026)</td>
-                <td>$4</td>
-                <td>$0.40</td>
-                <td>$5.00</td>
-                <td>$20</td>
+                <td><code>$4</code></td>
+                <td><code>$0.40</code></td>
+                <td><code>$5.00</code></td>
+                <td><code>$20</code></td>
               </tr>
               <tr>
                 <td>Gemini 3.8 Flash intro (through Dec 31, 2026)</td>
-                <td>$0.75</td>
+                <td><code>$0.75</code></td>
                 <td>—</td>
                 <td>—</td>
-                <td>$3.75</td>
+                <td><code>$3.75</code></td>
               </tr>
             </tbody>
           </table>
         </div>
         <p>
-          Batch and Flex are <strong>50%</strong> of the applicable Astra rates. Fast is <strong>2×</strong>. Cache writes are billed at <strong>1.25×</strong> uncached input. That means a cold, cache-heavy agent loop on Astra pays to <em>write</em> the prefix, then reads it at $1/MTok — still <strong>4×</strong> Fable’s $0.25 cache read. Sol remains the cheap list-price lane. Flash remains the volume lane.
+          Batch and Flex are <strong>50%</strong> of the applicable Astra rates. Fast is <strong>2×</strong>. Cache writes are billed at <strong>1.25×</strong> uncached input. That means a cold, cache-heavy agent loop on Astra pays to <em>write</em> the prefix, then reads it at <code>$1</code>/MTok — still <strong>4×</strong> Fable’s <code>$0.25</code> cache read. Sol remains the cheap list-price lane. Flash remains the volume lane.
         </p>
         <p>
           OpenAI’s own launch claim is that Astra often wins on <strong>estimated API cost per task</strong> anyway, because it uses fewer output tokens. On Terminal-Bench 4.0 they put Astra roughly <strong>9%</strong> cheaper per task than Sol and about <strong>63%</strong> cheaper than Fable 5.1 at their measured token mixes. That is a vendor estimate. Replicate on your harness with cache hit rate and effort level instrumented, or you are guessing.
@@ -216,7 +216,7 @@
         <p>
           <strong>ARC-AGI-3 — read the harness footnote.</strong> OpenAI’s launch table lists <strong>99.9%</strong>. Footnote: run with their Responses API harness.
           <a href="https://arcprize.org/blog/astra" target="_blank" rel="noopener noreferrer">ARC Prize’s independent write-up</a>
-          (secondary, labeled): Standard harness <strong>62.7%</strong> at <code>max</code> (~$26K) vs Provider Adapter <strong>99.9%</strong> at <code>high</code> (~$19K). Adapter preserves opaque reasoning state and uses compaction. Both are SOTA on their respective boards; they are not the same measurement. If someone quotes 99.9% without saying Provider Adapter, push back.
+          (secondary, labeled): Standard harness <strong>62.7%</strong> at <code>max</code> (~<code>$26K</code>) vs Provider Adapter <strong>99.9%</strong> at <code>high</code> (~<code>$19K</code>). Adapter preserves opaque reasoning state and uses compaction. Both are SOTA on their respective boards; they are not the same measurement. If someone quotes 99.9% without saying Provider Adapter, push back.
         </p>
 
         <h2>Limits that change routing</h2>
@@ -232,8 +232,8 @@
 
         <h2>How I would route it this week</h2>
         <ul>
-          <li><strong>Escalate / hard agentic coding + computer use:</strong> put Astra on the slice where OSWorld time-to-done and Terminal-Bench / Terminal-Bench-Science matter. Measure <strong>cost per resolved task</strong> at <code>medium</code> and <code>high</code>, with cache metrics on. Do not assume $10/$50 loses to Fable — OpenAI’s Terminal-Bench cost-per-task estimate says the opposite, but Fable’s <strong>$0.25</strong> cache read still wins pure cache-dominated loops until your numbers say otherwise.</li>
-          <li><strong>Fable escalate lane:</strong> keep Fable 5.1 where HLE-with-tools, Anthropic ecosystem, or $0.25 cache economics dominate. Fable still leads HLE w/ tools <strong>65.0% vs 57.2%</strong> on OpenAI’s own comparison table.</li>
+          <li><strong>Escalate / hard agentic coding + computer use:</strong> put Astra on the slice where OSWorld time-to-done and Terminal-Bench / Terminal-Bench-Science matter. Measure <strong>cost per resolved task</strong> at <code>medium</code> and <code>high</code>, with cache metrics on. Do not assume <code>$10</code>/<code>$50</code> loses to Fable — OpenAI’s Terminal-Bench cost-per-task estimate says the opposite, but Fable’s <strong><code>$0.25</code></strong> cache read still wins pure cache-dominated loops until your numbers say otherwise.</li>
+          <li><strong>Fable escalate lane:</strong> keep Fable 5.1 where HLE-with-tools, Anthropic ecosystem, or <code>$0.25</code> cache economics dominate. Fable still leads HLE w/ tools <strong>65.0% vs 57.2%</strong> on OpenAI’s own comparison table.</li>
           <li><strong>Flash / Sol volume:</strong> Gemini 3.8 Flash intro and Sol promo stay the cheap lanes. DeepSWE is crowded (Astra 74.1, Flash 73.8, Opus 73.7) — do not pay Astra rates for a one-point DeepSWE bump.</li>
           <li><strong>Cyber / research bio dual-use:</strong> assume gates, monitors, and possible task stops. Do not plan a router that treats Critical-tier capability as a free toggle.</li>
         </ul>
