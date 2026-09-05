@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OpenAI Jalapeño: Spec Sheet, InferenceX Numbers, and the Tokens-per-Megawatt Bet — Anpoo Sivanadi</title>
+  <meta name="description" content="OpenAI’s Jalapeño inference ASIC: InferenceX tokens-per-megawatt numbers, HBM4 package math, and what the caveats actually are." />
+  <link rel="canonical" href="https://asivanadi0.github.io/jalapeno.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="OpenAI Jalapeño: Spec Sheet, InferenceX Numbers, and the Tokens-per-Megawatt Bet — Anpoo Sivanadi" />
+  <meta property="og:description" content="OpenAI’s Jalapeño inference ASIC: InferenceX tokens-per-megawatt numbers, HBM4 package math, and what the caveats actually are." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/jalapeno.html" />
+  <meta property="article:published_time" content="2026-09-05T08:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>OpenAI Jalapeño: Spec Sheet, InferenceX Numbers, and the Tokens-per-Megawatt Bet</h1>
+        <p class="article-meta">
+          <time datetime="2026-09-05">5 September 2026</time>
+          · Anpoo Sivanadi
+          · based on Hot Chips 2026 / OpenAI first-results coverage
+        </p>
+        <p class="dek article-dek">
+          OpenAI’s Jalapeño inference ASIC: InferenceX tokens-per-megawatt numbers, HBM4 package math, and what the caveats actually are.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          OpenAI walked into
+          <a href="https://openai.com/index/jalapeno-first-results/" target="_blank" rel="noopener noreferrer">Hot Chips 2026</a>
+          on August 25 with the first measured results for <strong>Jalapeño</strong>, its Broadcom-built, TSMC-fabbed inference ASIC. The pitch is not “we invented a new FLOP.” It is <strong>tokens per megawatt</strong> at a latency an interactive agent can live with — and a claim that a first-generation captive part already beats shipping Blackwell racks on that axis.
+        </p>
+        <p>
+          I am reading the
+          <a href="https://openai.com/index/jalapeno-first-results/" target="_blank" rel="noopener noreferrer">OpenAI scorecard</a>,
+          the
+          <a href="https://newsletter.semianalysis.com/p/openai-jalapeno-better-than-nvidia" target="_blank" rel="noopener noreferrer">SemiAnalysis lab write-up</a>,
+          and
+          <a href="https://www.theregister.com/systems/2026/08/25/openais-upcoming-jalapeno-chip-looks-like-itll-be-an-inference-beast/5292052" target="_blank" rel="noopener noreferrer">The Register’s rack math</a>.
+          This is create-only. Jalapeño is <strong>not for sale</strong>. Treat every “beats Rubin” line as analyst estimate until matched AgentX / MTP runs land.
+        </p>
+
+        <h2>Spec sheet (package + rack)</h2>
+        <div class="table-wrap" role="region" aria-label="Jalapeño package and rack spec sheet" tabindex="0">
+          <table>
+            <tbody>
+              <tr>
+                <td>Role</td>
+                <td><strong>Inference-only</strong> ASIC (training stays on GPUs)</td>
+              </tr>
+              <tr>
+                <td>Partners</td>
+                <td>Design: OpenAI + <strong>Broadcom</strong>; fab: <strong>TSMC N3P</strong> compute + <strong>N3E</strong> I/O chiplet; systems: <strong>Celestica</strong></td>
+              </tr>
+              <tr>
+                <td>Package TDP</td>
+                <td><strong>700 W</strong> rated; measured sustained <strong>≤550 W</strong> on tested workloads</td>
+              </tr>
+              <tr>
+                <td>Memory</td>
+                <td><strong>216 GiB HBM4</strong>, six 12-high stacks, <strong>15.4 TB/s</strong> (~10 Gbps pin)</td>
+              </tr>
+              <tr>
+                <td>Compute (B0)</td>
+                <td><strong>~13.4 PFLOPs MXFP4</strong> per reticle-sized compute die (SemiAnalysis)</td>
+              </tr>
+              <tr>
+                <td>Scale-up / rack</td>
+                <td><strong>128</strong> XPUs per accelerator rack; <strong>1.7 EFLOPS</strong> MXFP4, <strong>~27.5 TB</strong> HBM4, ~<strong>2 PB/s</strong> aggregate BW (<a href="https://www.theregister.com/systems/2026/08/25/openais-upcoming-jalapeno-chip-looks-like-itll-be-an-inference-beast/5292052" target="_blank" rel="noopener noreferrer">Register</a>)</td>
+              </tr>
+              <tr>
+                <td>Domain</td>
+                <td>Local: 128 XPUs over copper backplane; global: up to <strong>2,048</strong> XPUs across 16 racks (Tomahawk 6 + optics)</td>
+              </tr>
+              <tr>
+                <td>Host</td>
+                <td>Sidecar <strong>Katsu</strong> trays: 2× Turin-class EPYC, <strong>1.5 TB</strong> DRAM, 400G frontend; ASIC trays nicknamed <strong>Vindaloo</strong></td>
+              </tr>
+              <tr>
+                <td>Software</td>
+                <td><strong>Gluon</strong> (Triton-family) + internal <strong>Teacup</strong> serving; Codex/GPT-Astra for kernels</td>
+              </tr>
+              <tr>
+                <td>Availability</td>
+                <td>Engineering samples now; deploy <strong>late 2026</strong>; volume ramp <strong>through 2027</strong></td>
+              </tr>
+              <tr>
+                <td>Buy / rent</td>
+                <td><strong>No</strong> — captive OpenAI silicon</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Primary sources:
+          <a href="https://openai.com/index/jalapeno-first-results/" target="_blank" rel="noopener noreferrer">OpenAI</a>,
+          <a href="https://newsletter.semianalysis.com/p/openai-jalapeno-better-than-nvidia" target="_blank" rel="noopener noreferrer">SemiAnalysis</a>,
+          <a href="https://www.theregister.com/systems/2026/08/25/openais-upcoming-jalapeno-chip-looks-like-itll-be-an-inference-beast/5292052" target="_blank" rel="noopener noreferrer">The Register</a>,
+          <a href="https://locsic.com/thinking/jalapeno-first-results-audit/" target="_blank" rel="noopener noreferrer">Locsic audit</a>.
+        </p>
+
+        <h2>InferenceX table (STP, 8k in / 1k out)</h2>
+        <p>
+          OpenAI normalized by <strong>published package TDP</strong> (700 W vs 1,200 W GB200 / 1,400 W GB300). Mode: <strong>single-token prediction</strong> — no speculative decoding on the Jalapeño side of the published table.
+        </p>
+        <div class="table-wrap" role="region" aria-label="InferenceX STP results" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Model</th>
+                <th>Baseline</th>
+                <th>Peak mixed TPS/kW</th>
+                <th>E2E latency</th>
+                <th>Min TBT</th>
+                <th>Throughput @ baseline’s best TBT</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>GPT-OSS 120B</td>
+                <td>GB200</td>
+                <td><strong>85,448 vs 44,960 (~1.9×)</strong></td>
+                <td>1.03 s vs 1.80 s (~1.7× lower)</td>
+                <td>0.69 vs 1.87 ms (~2.7×)</td>
+                <td><strong>~53.7×</strong> (22,935 vs 427)</td>
+              </tr>
+              <tr>
+                <td>DeepSeek R1 670B MXFP4</td>
+                <td>GB300</td>
+                <td><strong>19,641 vs 11,781 (~1.7×)</strong></td>
+                <td>1.65 s vs 5.99 s (~3.6×)</td>
+                <td>1.43 vs 5.90 ms (~4.1×)</td>
+                <td><strong>~104.3×</strong> (12,258 vs 118)</td>
+              </tr>
+              <tr>
+                <td>Kimi K2.5 1T MXFP4</td>
+                <td>GB300</td>
+                <td><strong>18,195 vs 11,862 (~1.5×)</strong></td>
+                <td>1.56 s vs 5.31 s (~3.4×)</td>
+                <td>1.44 vs 5.48 ms (~3.8×)</td>
+                <td><strong>~56.1×</strong> (6,744 vs 120)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          SemiAnalysis verified InferenceX runs <strong>in OpenAI’s lab</strong>. They did <strong>not</strong> run the full suite or publish <strong>AgentX</strong> (long-context, multi-turn) yet. That matters: 8k/1k is a cleaner serving microbenchmark than agent traffic with prefix-cache and router stress.
+        </p>
+        <p>
+          The “100×” column is easy to misuse. It is <strong>not</strong> “100× faster chip.” It is “how many mixed tokens per kW you still get when you lock time-between-tokens to the <strong>baseline’s</strong> previous-best interactive point.” GB300 collapses on throughput when you force that latency; Jalapeño does not. Cite the conditional clause or do not cite the multiple.
+        </p>
+
+        <h2>Architecture: data movement, not peak density</h2>
+        <p>
+          SemiAnalysis’s B0 note is the useful correction: Jalapeño’s paper MXFP4 density is <strong>~24% below</strong> a similar-size Rubin die on the same node (<strong>13.4 vs 17.5 PFLOPs</strong>), yet measured <strong>throughput per watt</strong> lands ahead of the published Blackwell tables. The gap is <strong>idle time and KV traffic</strong>, not a magic MAC.
+        </p>
+        <p>
+          Design thesis from OpenAI:
+        </p>
+        <ul>
+          <li><strong>Slice</strong> cores with matching HBM slices so each core keeps a low-latency local view of its memory</li>
+          <li>Keep <strong>KV cache</strong> explicitly placed and local instead of bouncing it across a disaggregated prefill/decode fleet</li>
+          <li>Homogeneous fungible XPUs rather than fixed prefill vs decode pools (traffic mix moves; stranded pools do not)</li>
+          <li>Weight-stationary <strong>MXFP</strong> systolic with support for <strong>smaller matmul shapes</strong> (fewer cliffs than giant TPU-style arrays)</li>
+          <li>Out-of-order cores + prefetch instead of only software scratchpads — SemiAnalysis flags the tradeoff: harder to reason about, friendlier to Codex-written kernels</li>
+        </ul>
+        <p>
+          Scale-up is rack-first: <strong>128</strong> XPUs local (4.8 Tb/s uni-dir per XPU on the local fabric in SemiAnalysis’s recount), then <strong>2,048</strong> across 16 racks. That is a different product shape from NVL72’s 72-GPU coherent domain. If your mental model is “one NVLink island,” update it — Jalapeño is betting that a larger, Ethernet/Tomahawk-class domain plus local KV beats moving state between specialized pools.
+        </p>
+
+        <h2>What the caveats actually are</h2>
+        <ol>
+          <li>
+            <strong>Blackwell, not Rubin, in the headline table.</strong> GB200/GB300 are HBM3E-era. Rubin ships HBM4. SemiAnalysis calls the Blackwell comparison “somewhat incomplete and unfair,” then says Jalapeño’s STP tokens/MW still look ahead of Rubin’s published July MTP numbers — preliminary, immature-vs-immature. Hold “beats Rubin” loosely until matched MTP + AgentX exists.
+          </li>
+          <li>
+            <strong>Vendor-run InferenceX.</strong> Public harness, OpenAI fingers on the keyboard. SemiAnalysis watched; they did not own the full battery.
+          </li>
+          <li>
+            <strong>STP vs production MTP.</strong> Real Nvidia fleets lean on speculative / multi-token tricks. The published table strips that from Jalapeño for cleanliness; production Blackwell may look better than the STP baseline.
+          </li>
+          <li>
+            <strong>Engineering samples → 2027 volume.</strong> Late-2026 deploy is “very small” in Richard Ho’s framing; SemiAnalysis’s shipping model puts the main wave in <strong>Q4’27</strong>. Yield, dock-to-rack, and multi-rack ops are still ahead.
+          </li>
+          <li>
+            <strong>Captive.</strong> You will feel this as OpenAI API latency and cost, not as a cloud SKU named Jalapeño.
+          </li>
+          <li>
+            <strong>Training unchanged.</strong> OpenAI still needs Nvidia (and others) for training and for overflow inference. This is a <strong>denominator</strong> play on power-limited serving, not an exit from merchant GPUs.
+          </li>
+        </ol>
+
+        <h2>How I would evaluate the claim if I ran clusters</h2>
+        <ol>
+          <li>
+            <strong>Demand tokens/s/MW at a fixed TBT</strong>, not peak FLOPs. Same model, same quant, same 8k/1k and a long-context AgentX-class trace.
+          </li>
+          <li>
+            <strong>Insist on Rubin NVL72 as the peer</strong>, with MTP enabled on both sides or disabled on both. Blackwell-only tables are marketing scaffolding now.
+          </li>
+          <li>
+            <strong>Separate prefill and decode curves.</strong> OpenAI’s “no PDD” bet only wins if the homogenous pool stays busy when the input/output mix swings.
+          </li>
+          <li>
+            <strong>Track measured wall power</strong>, not just 700 W nameplate. Their ≤550 W sustained claim is the interesting number; verify it under your concurrency.
+          </li>
+          <li>
+            <strong>Watch API economics after late-2026 deploy.</strong> Captive silicon shows up as rate limits and $/successful-agent-task before it shows up as a datasheet you can PO.
+          </li>
+        </ol>
+
+        <h2>Where it sits next to what I already wrote about</h2>
+        <div class="table-wrap" role="region" aria-label="Product ladder by memory and power story" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Rung</th>
+                <th>Product</th>
+                <th>Memory / power story</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Deskside discrete</td>
+                <td><a href="/halo-station.html">Threadripper Halo Station</a></td>
+                <td>288–576 GB HBM3E on PCIe MI350P</td>
+              </tr>
+              <tr>
+                <td>Merchant rack</td>
+                <td>GB300 / Rubin NVL72</td>
+                <td>Coherent GPU island, HBM3E→HBM4</td>
+              </tr>
+              <tr>
+                <td>Captive inference</td>
+                <td><strong>Jalapeño</strong></td>
+                <td>216 GiB HBM4 @ 15.4 TB/s, 700 W, 128→2,048 XPU domain</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Halo Station is the deskside HBM math problem. Jalapeño is the <strong>datacenter power-budget</strong> problem. Same decade, different purchase order.
+        </p>
+
+        <h2>Bottom line</h2>
+        <p>
+          Jalapeño’s first public scorecard is the strongest first-gen captive inference ASIC result I have seen with a third-party harness and named package numbers. The honest read is <strong>1.5–1.9× peak mixed TPS/kW and materially lower latency vs Blackwell on InferenceX STP</strong>, with architecture that prioritizes KV locality and fungible XPUs over peak density. The dishonest read is “100× faster than Nvidia” or “CUDA is dead tomorrow.” Volume is 2027, Rubin is the real peer, and AgentX is still owed. Until those land, I treat Jalapeño as a verified <strong>tokens-per-megawatt</strong> existence proof — and a reminder that when the grid is the bottleneck, the winning datasheet is the one that keeps KV local and the rack busy.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated September 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
