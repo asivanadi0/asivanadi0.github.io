@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AMD’s Threadripper Halo Station: Spec Sheet, HBM Math, and the DGX Station Bet It Is Making — Anpoo Sivanadi</title>
+  <meta name="description" content="AMD’s Threadripper Halo Station at IFA 2026: MI350P HBM math, the path to four cards, and the DGX Station architectural bet." />
+  <link rel="canonical" href="https://asivanadi0.github.io/halo-station.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="AMD’s Threadripper Halo Station: Spec Sheet, HBM Math, and the DGX Station Bet It Is Making — Anpoo Sivanadi" />
+  <meta property="og:description" content="AMD’s Threadripper Halo Station at IFA 2026: MI350P HBM math, the path to four cards, and the DGX Station architectural bet." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/halo-station.html" />
+  <meta property="article:published_time" content="2026-09-04T18:30:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>AMD’s Threadripper Halo Station: Spec Sheet, HBM Math, and the DGX Station Bet It Is Making</h1>
+        <p class="article-meta">
+          <time datetime="2026-09-04">4 September 2026</time>
+          · Anpoo Sivanadi
+          · based on IFA 2026 floor coverage
+        </p>
+        <p class="dek article-dek">
+          AMD’s Threadripper Halo Station at IFA 2026: MI350P HBM math, the path to four cards, and the DGX Station architectural bet.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          AMD opened
+          <a href="https://www.techpowerup.com/352347/amd-introduces-threadripper-halo-station-at-ifa-2026" target="_blank" rel="noopener noreferrer">IFA 2026</a>
+          on September 4 with a deskside box aimed at people who already argue about HBM budgets: the <strong>Threadripper Halo Station</strong>. Jack Huynh called it the most powerful workstation in the world and said it can run models with more than a trillion parameters locally. I am not buying the slogan. I am buying the bill of materials — and the architectural bet against NVIDIA’s coherent DGX Station class.
+        </p>
+        <p>
+          This is a create-only read of what reporters on the floor documented today. AMD has not published a full SKU sheet, price, or availability window. Treat every “path to four” line as design intent until OEM configs land.
+        </p>
+
+        <h2>Spec sheet (show unit + platform class)</h2>
+        <div class="table-wrap" role="region" aria-label="Threadripper Halo Station spec sheet" tabindex="0">
+          <table>
+            <tbody>
+              <tr>
+                <td>Host CPU (assumed)</td>
+                <td><strong>Threadripper PRO 9995WX</strong> — only 96-core TR PRO SKU; Huynh said “96 cores of Threadripper Pro”</td>
+              </tr>
+              <tr>
+                <td>CPU shape</td>
+                <td><strong>96C / 192T</strong> Zen 5 (“Shimada Peak”), boost ~<strong>5.4 GHz</strong>, up to <strong>2 TB</strong> DDR5, <strong>128</strong> PCIe 5.0 lanes</td>
+              </tr>
+              <tr>
+                <td>Accelerators (show)</td>
+                <td><strong>2× Instinct MI350P</strong> (PCIe, CDNA 4 / TSMC N3)</td>
+              </tr>
+              <tr>
+                <td>Expand</td>
+                <td>Huynh: <strong>“path to four”</strong> MI350P → <strong>576 GB</strong> HBM3E</td>
+              </tr>
+              <tr>
+                <td>HBM per card</td>
+                <td><strong>144 GB HBM3E</strong> at about <strong>4 TB/s</strong></td>
+              </tr>
+              <tr>
+                <td>Show HBM pool</td>
+                <td><strong>288 GB</strong> (2×144)</td>
+              </tr>
+              <tr>
+                <td>Compute (per STH)</td>
+                <td>~<strong>2.3 PFLOPS</strong> MXFP8 per MI350P</td>
+              </tr>
+              <tr>
+                <td>Board power</td>
+                <td>up to <strong>~600 W</strong> TBP per MI350P; CPU ~<strong>350 W</strong> class</td>
+              </tr>
+              <tr>
+                <td>Cooling</td>
+                <td><strong>Liquid</strong> on CPU and accelerators (closed loops on the show unit)</td>
+              </tr>
+              <tr>
+                <td>Form</td>
+                <td>Tower workstation; show board reported by ServeTheHome as <code>ASUS Pro WS WRX90E-SAGE SE</code></td>
+              </tr>
+              <tr>
+                <td>Price / ship / OEM</td>
+                <td><strong>Not announced</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Primary coverage I used:
+          <a href="https://www.servethehome.com/amd-announces-threadripper-halo-station/" target="_blank" rel="noopener noreferrer">ServeTheHome</a>,
+          <a href="https://www.storagereview.com/news/amd-reveals-threadripper-halo-station-96-cores-and-up-to-576gb-of-hbm3e-aimed-straight-at-dgx-station" target="_blank" rel="noopener noreferrer">StorageReview</a>,
+          <a href="https://www.techpowerup.com/352347/amd-introduces-threadripper-halo-station-at-ifa-2026" target="_blank" rel="noopener noreferrer">TechPowerUp</a>,
+          <a href="https://www.tomshardware.com/pc-components/cpus/amd-unveils-threadripper-halo-station-an-ai-workstation-packing-96-cores-and-dual-liquid-cooled-mi350p-accelerators-the-most-powerful-workstation-in-the-world-can-run-trillion-parameter-models-says-amd" target="_blank" rel="noopener noreferrer">Tom’s Hardware</a>.
+        </p>
+
+        <h2>What the HBM math actually says</h2>
+        <p>
+          A trillion-parameter claim is a <strong>capacity</strong> claim until someone publishes tokens/sec and a harness. Rough weight floors:
+        </p>
+        <div class="table-wrap" role="region" aria-label="HBM capacity math for trillion-parameter models" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Precision</th>
+                <th>~1T params</th>
+                <th>Fits 288 GB?</th>
+                <th>Fits 576 GB?</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>FP16 / BF16</td>
+                <td>~2 TB</td>
+                <td>No</td>
+                <td>No</td>
+              </tr>
+              <tr>
+                <td>FP8 / INT8</td>
+                <td>~1 TB</td>
+                <td>No</td>
+                <td>No</td>
+              </tr>
+              <tr>
+                <td>~4-bit</td>
+                <td>~500 GB</td>
+                <td>Borderline / no with KV</td>
+                <td>Yes for weights alone</td>
+              </tr>
+              <tr>
+                <td>More aggressive quant</td>
+                <td>lower</td>
+                <td>Maybe</td>
+                <td>Comfortable for weights</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          So the four-card <strong>576 GB</strong> story is the one that makes the “trillion-parameter local” line coherent at aggressive quantization. The two-card <strong>288 GB</strong> show unit is a different product for most dense weights — closer to “very large MoE / heavy quant / multi-model deskside” than a full 1T FP8 resident set. StorageReview makes the same cut: ~500 GB for 1T at 4-bit, which wants the four-card pool, with the <strong>2 TB</strong> host DDR5 and NVMe behind it for everything else.
+        </p>
+        <p>
+          Bandwidth is the other half. At ~<strong>4 TB/s</strong> HBM3E per MI350P, one card is in a different class from LPDDR5X “AI PC” unified memory. That is why this box sits above AMD’s Ryzen AI Halo / Max ladder and next to rack-adjacent Instinct iron, not next to a Strix/Kraken mini PC.
+        </p>
+
+        <h2>The DGX Station fight</h2>
+        <p>
+          NVIDIA’s recent deskside answer (GB300-class DGX Station / MSI XpertStation WS300 in StorageReview’s framing) bets on <strong>one big accelerator + Grace CPU</strong> sharing a large <strong>coherent</strong> memory pool over NVLink-C2C. AMD’s answer is the opposite:
+        </p>
+        <ul>
+          <li><strong>Discrete PCIe MI350P cards</strong> instead of a single coherent GPU+CPU package</li>
+          <li><strong>x86 Threadripper PRO</strong> host instead of Arm Grace (toolchain and driver story many of us already run)</li>
+          <li><strong>Scale by adding cards</strong> (2 → 4) instead of buying a denser single module</li>
+          <li><strong>Split pools</strong>: HBM on the Instincts, big DDR5 on the host — not one unified fabric</li>
+        </ul>
+        <p>
+          If your workload loves a single address space and NVLink-C2C bandwidth, the NVIDIA coherent pool still wins on paper. If your workload is ROCm + multi-GPU PCIe serving, or you refuse an Arm deskside toolchain, Halo Station is the first AMD-branded deskside that speaks that dialect with MI350-class HBM.
+        </p>
+        <p>
+          Nobody has published a public Halo Station tok/s table yet. Until then, the honest comparison is architectural, not a leaderboard.
+        </p>
+
+        <h2>Power, noise, and what was missing on stage</h2>
+        <p>
+          Two <strong>600 W</strong> accelerators plus a <strong>~350 W</strong> CPU is on the order of <strong>1.5 kW</strong> of silicon before the rest of the box. Huynh’s liquid-cooling pitch (“stay super quiet”) is not marketing fluff at that TDP — it is the only way this stays a desk product instead of a lab cart. The show unit used <strong>per-device closed loops</strong>, not a shared custom loop, which ServeTheHome reads as COTS assembly more than a sealed appliance. Fine for a reference design. Awkward if you expected a sealed DGX-like brick with one service contract.
+        </p>
+        <p>
+          Also missing today:
+        </p>
+        <ul>
+          <li>Named OEM / channel (direct AMD vs system builder)</li>
+          <li>Interconnect detail between the four MI350Ps (PCIe topology, any Infinity Fabric / XGMI story)</li>
+          <li>Storage layout, NIC (show unit had an SFP-class card — good, unspecified)</li>
+          <li>Software image (ROCm version pin, Windows vs Linux, whether Project Zenith-class tooling shows up here or only on Ryzen AI Halo)</li>
+          <li>Price. Street math on TR PRO 9995WX + 2–4× MI350P is “enterprise quote,” not Newegg.</li>
+        </ul>
+
+        <h2>How I would actually evaluate one</h2>
+        <ol>
+          <li>
+            <strong>Demand the four-card BOM in writing.</strong> If the ship SKU is two-card only, re-rate the product as a 288 GB HBM workstation, not a 1T weight box.
+          </li>
+          <li>
+            <strong>Measure multi-GPU serving, not a single-card demo.</strong> <code>vLLM</code> / <code>SGLang</code> / <code>llama.cpp</code> tensor-parallel across PCIe MI350Ps is the workload that decides whether “path to four” matters.
+          </li>
+          <li>
+            <strong>A/B against a coherent DGX Station class box on the same model and quant.</strong> Same tokenizer, same batch, same context. Record tok/s, TTFT, and PCIe traffic. Coherence vs discrete is the real question.
+          </li>
+          <li>
+            <strong>Budget wall power and cooling.</strong> 1.5 kW-class silicon needs a circuit plan before a purchase order.
+          </li>
+          <li>
+            <strong>Pin ROCm.</strong> Deskside Instinct only helps if your stack’s day-0 wheel matches the driver AMD ships on the image.
+          </li>
+        </ol>
+
+        <h2>Where it sits in AMD’s ladder</h2>
+        <div class="table-wrap" role="region" aria-label="AMD product ladder by memory story" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Rung</th>
+                <th>Product</th>
+                <th>Memory story</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Edge / mini</td>
+                <td>Ryzen AI Halo / Max class</td>
+                <td>Unified LPDDR, tens–low hundreds of GB</td>
+              </tr>
+              <tr>
+                <td>Deskside HBM</td>
+                <td><strong>Threadripper Halo Station</strong></td>
+                <td>288–576 GB HBM3E + up to 2 TB DDR5</td>
+              </tr>
+              <tr>
+                <td>Rack</td>
+                <td>Instinct MI350X / platform</td>
+                <td>Full CDNA 4 rack SKUs</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          That ladder is the strategic point. AMD is no longer answering NVIDIA only in the rack. It is answering Spark-class and Station-class deskside products with named HBM capacity.
+        </p>
+
+        <h2>Bottom line</h2>
+        <p>
+          Threadripper Halo Station is the first AMD deskside I would put on the same evaluation sheet as a GB300-class DGX Station — not because the keynote said “trillion parameters,” but because <strong>144 GB HBM3E × N</strong> at MI350P bandwidth is a real capacity and bandwidth story for local and air-gapped inference. The open questions are boring and decisive: four-card ship config, multi-GPU interconnect behavior, ROCm image, and price. Until those land, treat today as a serious reference design announcement, not a buy.
+        </p>
+        <p>
+          I will revisit when an OEM posts a configure-to-order page with a wattage rating and a four-card option you can actually order.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated September 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
