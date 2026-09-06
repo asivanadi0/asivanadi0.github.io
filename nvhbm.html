@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NVIDIA NVHBM: Moving the Memory Controller Into the Stack — Anpoo Sivanadi</title>
+  <meta name="description" content="NVIDIA NVHBM moves the HBM controller into the stack for NVLink Fusion partners — bandwidth, power, and die-area targets, with the caveats that matter." />
+  <link rel="canonical" href="https://asivanadi0.github.io/nvhbm.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="NVIDIA NVHBM: Moving the Memory Controller Into the Stack — Anpoo Sivanadi" />
+  <meta property="og:description" content="NVIDIA NVHBM moves the HBM controller into the stack for NVLink Fusion partners — bandwidth, power, and die-area targets, with the caveats that matter." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/nvhbm.html" />
+  <meta property="article:published_time" content="2026-09-05T18:45:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>NVIDIA NVHBM: Moving the Memory Controller Into the Stack</h1>
+        <p class="article-meta">
+          <time datetime="2026-09-05">5 September 2026</time>
+          · Anpoo Sivanadi
+          · based on NVIDIA’s 26 Aug 2026 NVLink Fusion / NVHBM materials
+        </p>
+        <p class="dek article-dek">
+          NVIDIA NVHBM moves the HBM controller into the stack for NVLink Fusion partners — bandwidth, power, and die-area targets, with the caveats that matter.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          On August 26, NVIDIA expanded
+          <a href="https://blogs.nvidia.com/blog/nvlink-fusion-nvhbm-custom-high-bandwidth-memory/" target="_blank" rel="noopener noreferrer">NVLink Fusion</a>
+          with <strong>NVHBM</strong> — a custom high-bandwidth memory path for partners building XPUs that still want to live inside an NVIDIA rack-scale domain. Five days later, the
+          <a href="https://nvidianews.nvidia.com/news/nvidia-and-mediatek-deepen-long-standing-partnership-to-build-ai-edge-to-cloud-computing-platforms" target="_blank" rel="noopener noreferrer">MediaTek deal</a>
+          made the integration story concrete: hyperscalers bring the compute die; MediaTek ships a package that already speaks NVLink.
+        </p>
+        <p>
+          I am reading this as a <strong>package architecture</strong> move, not a GPU launch. The interesting claim is not “more HBM.” It is <strong>where the memory controller lives</strong>.
+        </p>
+
+        <h2>Spec sheet (architectural targets)</h2>
+        <div class="table-wrap" role="region" aria-label="NVHBM architectural targets spec sheet" tabindex="0">
+          <table>
+            <tbody>
+              <tr>
+                <td>What it is</td>
+                <td>Custom <strong>HBM base die</strong> + controller + PHY for <strong>NVLink Fusion</strong> XPUs (also the tech NVIDIA says it will use on future GPUs)</td>
+              </tr>
+              <tr>
+                <td>Vs JEDEC HBM4e</td>
+                <td>Up to <strong>30%</strong> higher bandwidth per stack; up to <strong>15%</strong> lower HBM power; up to <strong>25%</strong> more XPU <strong>compute die</strong> area</td>
+              </tr>
+              <tr>
+                <td>Compound claim</td>
+                <td>About <strong>30%</strong> end-to-end XPU performance (NVIDIA technical blog)</td>
+              </tr>
+              <tr>
+                <td>Interface change</td>
+                <td>Narrower XPU↔HBM PHY; reported up to <strong>~67%</strong> less PHY/support area on the compute die vs HBM4e layouts</td>
+              </tr>
+              <tr>
+                <td>Supply model</td>
+                <td><strong>Standard NVHBM</strong> implementation from <strong>multiple</strong> memory vendors</td>
+              </tr>
+              <tr>
+                <td>First named partner</td>
+                <td>Amazon <strong>Annapurna Labs</strong> — NVHBM collaboration; <strong>Trainium4</strong> first Trainium gen with <strong>NVLink Fusion</strong></td>
+              </tr>
+              <tr>
+                <td>Integration gateway</td>
+                <td><strong>MediaTek</strong> offers NVLink Fusion + NVHBM as a design foundation for customer XPUs (announced Aug 31)</td>
+              </tr>
+              <tr>
+                <td>Scale-up context</td>
+                <td>Sixth-gen <strong>NVLink</strong> domain (Fusion chiplet); NVLink-C2C to host CPUs; MGX rack path</td>
+              </tr>
+              <tr>
+                <td>Status</td>
+                <td><strong>Pre-production architectural targets</strong> — no independent silicon benches published as of early September 2026</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Primary sources:
+          <a href="https://blogs.nvidia.com/blog/nvlink-fusion-nvhbm-custom-high-bandwidth-memory/" target="_blank" rel="noopener noreferrer">NVIDIA blog</a>,
+          <a href="https://developer.nvidia.com/blog/nvidia-nvlink-fusion-brings-nvhbm-to-next-generation-ai-infrastructure/" target="_blank" rel="noopener noreferrer">NVIDIA technical blog</a>,
+          <a href="https://nvidianews.nvidia.com/news/nvidia-and-mediatek-deepen-long-standing-partnership-to-build-ai-edge-to-cloud-computing-platforms" target="_blank" rel="noopener noreferrer">NVIDIA × MediaTek newsroom</a>,
+          <a href="https://www.tomshardware.com/pc-components/dram/nvidia-custom-nvhbm-promises-30-percent-higher-bandwidth-15-percent-lower-power-than-commodity-hbm4e-custom-base-die-and-phy-will-be-available-to-nvlink-fusion-partners" target="_blank" rel="noopener noreferrer">Tom’s Hardware</a>,
+          <a href="https://www.storagereview.com/news/nvidia-nvhbm-moves-the-memory-controller-into-the-hbm-stack-with-amazons-trainium4-first-in-line" target="_blank" rel="noopener noreferrer">StorageReview</a>.
+        </p>
+
+        <h2>What actually moved</h2>
+        <p>
+          In a standard HBM4e package, the memory controller sits on the <strong>accelerator die</strong>. That logic burns area you would rather spend on matrix engines, vector units, or SRAM. NVHBM inverts that: the controller (and a custom PHY) live in the <strong>base die of the HBM stack</strong>. The XPU connects through a <strong>narrower</strong> interface.
+        </p>
+        <p>
+          Three effects fall out of that inversion:
+        </p>
+        <ol>
+          <li>
+            <strong>Bandwidth</strong> — NVIDIA says up to <strong>30%</strong> more stack bandwidth than commodity HBM4e. For weight streaming and KV traffic, that is the denominator that decides whether your math units stay busy.
+          </li>
+          <li>
+            <strong>Power</strong> — up to <strong>15%</strong> less HBM power. At one chip that is a footnote. Across a power-capped aisle it is headroom you can spend on clocks or more sockets. StorageReview’s facility-scale example (1 GW / ~2 kW XPUs → up to ~15k extra XPUs from the HBM power delta) is directional math, not a capacity plan — but the direction is why operators care.
+          </li>
+          <li>
+            <strong>Die area</strong> — up to <strong>25%</strong> more of the main XPU die available for compute. Tom’s and StorageReview also flag PHY/support shrink and simpler interposer routing; treat secondary percentages as reporting on NVIDIA materials until a packaging teardown lands.
+          </li>
+        </ol>
+        <p>
+          NVIDIA’s compound line is the one to keep honest: bandwidth + area + power savings → about <strong>30%</strong> end-to-end XPU performance. That is a <strong>vendor stack claim</strong>, not a public InferenceX table.
+        </p>
+
+        <h2>Why this is not “just better HBM”</h2>
+        <p>
+          NVHBM is <strong>not</strong> a drop-in JEDEC replacement for every GPU on the market. It is a <strong>building block for NVLink Fusion partners</strong>. Commodity HBM4e remains the merchant path. NVHBM is the path where NVIDIA designs the base die with memory vendors, partners adopt a smaller PHY, and the package is meant to land in an NVLink scale-up domain.
+        </p>
+        <p>
+          That is the strategic half of the story. If a hyperscaler ships a custom XPU but still wants:
+        </p>
+        <ul>
+          <li>a coherent rack-scale fabric next to NVIDIA GPUs,</li>
+          <li>NVLink-C2C to host CPUs,</li>
+          <li>MGX-style rack machinery,</li>
+        </ul>
+        <p>
+          then owning the <strong>memory base die</strong> plus the <strong>Fusion chiplet</strong> keeps NVIDIA in the bill of materials even when the compute logo is Trainium, Maia, MTIA, or someone else’s.
+        </p>
+        <p>
+          Amazon is the named first collaborator. Annapurna will support <strong>NVLink Fusion starting with Trainium4</strong>, and is working NVHBM into that collaboration. MediaTek’s role is different: become the <strong>integration factory</strong> so a customer does not have to qualify every SerDes and packaging corner against NVIDIA’s stack alone.
+        </p>
+
+        <h2>How I would read it next to UALink</h2>
+        <p>
+          The open counterweight is <strong>UALink</strong> (UALink Consortium — AMD, Broadcom, Google, Meta, Microsoft, and others; not NVIDIA). AMD’s Helios path leans on <strong>UALink-over-Ethernet</strong> until native UALink switch silicon is volume-ready. That is a different bet: open protocol on Ethernet PHY vs proprietary NVLink switch silicon.
+        </p>
+        <p>
+          As of early September 2026, the production-ready custom-XPU-into-proven-scale-up story is still NVLink Fusion’s window. UALink 2.0 exists on paper; commercial switch volume is the missing piece. Operators who want optionality will keep both programs alive. Operators who need a rack this year will price the dependency explicitly.
+        </p>
+
+        <h2>Caveats that matter for anyone sizing a cluster</h2>
+        <ol>
+          <li>
+            <strong>Architectural, not measured.</strong> Every 15/25/30 number above is NVIDIA’s pre-silicon / early-program target. No independent lab has published an NVHBM-equipped XPU suite yet. Cite it as a target.
+          </li>
+          <li>
+            <strong>Captive ecosystem.</strong> NVLink switches and PHY control stay with NVIDIA. Fusion is heterogeneous compute on a NVIDIA-defined fabric, not a multi-vendor switch market.
+          </li>
+          <li>
+            <strong>Not Rubin shipping silicon.</strong> Benefits do not auto-apply to NVL72 boxes already in the field. This is for <strong>next</strong> custom XPU / future GPU generations that adopt the base die.
+          </li>
+          <li>
+            <strong>Pair with <a href="/jalapeno.html">Jalapeño</a>-style thinking carefully.</strong> OpenAI’s captive inference ASIC optimizes <strong>tokens per megawatt</strong> inside one company’s fleet. NVHBM optimizes <strong>who can build a custom die that still docks into NVLink</strong>. Same industry pressure (memory + power), different product shape.
+          </li>
+          <li>
+            <strong>Timeline.</strong> No public Trainium4 + NVHBM ship date beyond “next-generation” language. Plan capacity on named SKUs, not on the blog diagram.
+          </li>
+        </ol>
+
+        <h2>Bottom line</h2>
+        <p>
+          NVHBM is the quietest consequential line in the late-August stack: <strong>move the controller into the memory</strong>, free the compute die, sell the result only inside the Fusion partnership. For people who run heterogeneous racks, the actionable read is simple — when you evaluate the next custom XPU, ask whether the HBM path is JEDEC-generic or NVHBM-locked, and what that does to your interconnect choice for the following five years.
+        </p>
+        <p>
+          Create-only. Specs above are from NVIDIA’s August 26 materials and contemporaneous technical coverage; update when Annapurna or a memory vendor publishes a measured stack.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated September 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
