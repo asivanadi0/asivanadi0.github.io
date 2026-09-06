@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AMD Helios UALoE: Open Scale-Up on Ethernet, With the Bridge Caveats — Anpoo Sivanadi</title>
+  <meta name="description" content="AMD Helios rack with MI455X and UALink-over-Ethernet — open scale-up on merchant Ethernet, with the bridge caveats vs NVLink Fusion." />
+  <link rel="canonical" href="https://asivanadi0.github.io/helios-ualoe.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="AMD Helios UALoE: Open Scale-Up on Ethernet, With the Bridge Caveats — Anpoo Sivanadi" />
+  <meta property="og:description" content="AMD Helios rack with MI455X and UALink-over-Ethernet — open scale-up on merchant Ethernet, with the bridge caveats vs NVLink Fusion." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/helios-ualoe.html" />
+  <meta property="article:published_time" content="2026-09-06T06:30:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>AMD Helios UALoE: Open Scale-Up on Ethernet, With the Bridge Caveats</h1>
+        <p class="article-meta">
+          <time datetime="2026-09-06">6 September 2026</time>
+          · Anpoo Sivanadi
+          · based on AMD Helios / Hot Chips MI455X / UALoE materials
+        </p>
+        <p class="dek article-dek">
+          AMD Helios rack with MI455X and UALink-over-Ethernet — open scale-up on merchant Ethernet, with the bridge caveats vs NVLink Fusion.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          Yesterday I wrote about
+          <a href="/nvhbm.html">NVIDIA NVHBM</a>
+          — moving the memory controller into the HBM base die for <strong>NVLink Fusion</strong> partners. The open counterweight is not another GPU SKU. It is <strong>AMD Helios</strong>: 72× Instinct <strong>MI455X</strong> GPUs in one rack, glued together with <strong>UALink-over-Ethernet (UALoE)</strong> until native UALink switch silicon is volume-ready.
+        </p>
+        <p>
+          I am reading Helios as a <strong>scale-up fabric</strong> story first, and a GPU story second. The MI455X numbers are real and large. The question a cluster reader should ask is whether the fabric those GPUs sit on is production Ethernet bridging a still-maturing open standard — or a proprietary switch you already know how to operate.
+        </p>
+
+        <h2>Spec sheet (named numbers)</h2>
+        <div class="table-wrap" role="region" aria-label="AMD Helios UALoE named numbers spec sheet" tabindex="0">
+          <table>
+            <tbody>
+              <tr>
+                <td>Rack</td>
+                <td><strong>AMD Helios</strong> rack-scale AI platform (Advancing AI 2026, June 23)</td>
+              </tr>
+              <tr>
+                <td>GPUs per rack</td>
+                <td><strong>72×</strong> Instinct <strong>MI455X</strong> (18 open-rack-wide 4-GPU trays)</td>
+              </tr>
+              <tr>
+                <td>Per-GPU memory</td>
+                <td><strong>432 GB</strong> HBM4 across <strong>12</strong> stacks; <strong>23.3 TB/s</strong> HBM bandwidth</td>
+              </tr>
+              <tr>
+                <td>Package</td>
+                <td>Eight <strong>N2</strong> accelerator complex dies + <strong>N3P</strong> fabric/cache/I/O; <strong>256</strong> active WGPs; <strong>192 MB</strong> global L2; PCIe Gen 6</td>
+              </tr>
+              <tr>
+                <td>Per-GPU scale-up</td>
+                <td><strong>1.8 TB/s</strong> bidirectional UALoE (ServeTheHome / Hot Chips: <strong>72</strong> UALoE lanes → <strong>3.6 TB/s</strong>)</td>
+              </tr>
+              <tr>
+                <td>Rack HBM</td>
+                <td><strong>31 TB</strong> HBM4; <strong>1.7 PB/s</strong> aggregate HBM bandwidth</td>
+              </tr>
+              <tr>
+                <td>Rack compute (vendor peak)</td>
+                <td>Up to <strong>2.9</strong> EFLOPS FP4; <strong>1.4</strong> EFLOPS FP8</td>
+              </tr>
+              <tr>
+                <td>Rack scale-up</td>
+                <td>Up to <strong>260 TB/s</strong> aggregate UALoE bandwidth; single-hop over standard Ethernet switch ASICs</td>
+              </tr>
+              <tr>
+                <td>Rack scale-out</td>
+                <td>AMD cites <strong>43 TB/s</strong> scale-out; Pensando <strong>Vulcano 800</strong> AI NICs</td>
+              </tr>
+              <tr>
+                <td>Host</td>
+                <td>6th Gen EPYC <strong>9006</strong> (“Venice”) — one SP7 socket per tray over Infinity Fabric</td>
+              </tr>
+              <tr>
+                <td>Software</td>
+                <td>ROCm / ROCm.AI; <strong>AMD Fabric Manager</strong> + <strong>AFOS</strong>; <strong>vPods</strong> to partition the 72-GPU domain</td>
+              </tr>
+              <tr>
+                <td>Interconnect reality</td>
+                <td><strong>UALoE</strong> = UALink protocol on <strong>800 GbE</strong> PHY — bridge until native UALink switches ship</td>
+              </tr>
+              <tr>
+                <td>Kernel path</td>
+                <td>AMD UALink Linux patches <strong>v2</strong> (~95 patches) posted <strong>Aug 31, 2026</strong> for Helios UALoE bring-up; too late for Linux <strong>v7.3</strong>, aimed at <strong>v7.4</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Primary sources:
+          <a href="https://newsroom.amd.com/news/aai-2026-helios-update/" target="_blank" rel="noopener noreferrer">AMD Helios newsroom</a>,
+          <a href="https://www.amd.com/en/blogs/2026/amd-helios-resilient-scale-up-networking-for-ai.html" target="_blank" rel="noopener noreferrer">AMD Helios scale-up networking blog</a>,
+          <a href="https://www.servethehome.com/amd-mi400-gpu-at-hot-chips-2026/" target="_blank" rel="noopener noreferrer">ServeTheHome Hot Chips MI400</a>,
+          <a href="https://www.phoronix.com/news/AMD-UALink-Linux-Patches-v2" target="_blank" rel="noopener noreferrer">Phoronix UALink patches v2</a>,
+          <a href="https://www.techtimes.com/articles/326276/20260902/nvlink-fusion-vs-ualink-why-alphabet-funding-both-sides-ai-chip-interconnect-war.htm" target="_blank" rel="noopener noreferrer">TechTimes NVLink Fusion vs UALink</a>.
+        </p>
+
+        <h2>What Helios is actually selling</h2>
+        <p>
+          Helios is AMD’s rack-shaped answer to NVIDIA’s NVL72-class domains. The building block is a compute tray: four MI455X EAMs, one EPYC 9006 host, UALoE for scale-up, Pensando NICs for scale-out. Eighteen trays make the 72-GPU rack.
+        </p>
+        <p>
+          AMD’s competitive claims (AMD Performance Labs modeling, footnotes on the newsroom post) vs a Vera Rubin NVL72 reference include roughly <strong>15%</strong> more peak FP4, <strong>50%</strong> more HBM capacity, <strong>6%</strong> more HBM bandwidth, <strong>50%</strong> more scale-out bandwidth, and up to <strong>30%</strong> more tokens per dollar on a Kimi K2 Thinking ISL/OSL 32K/8K model. Treat those as <strong>vendor comparisons</strong>, not independent InferenceX curves. The absolute rack numbers — 31 TB HBM, 1.7 PB/s, 2.9 EFLOPS FP4, 260 TB/s scale-up — are the ones I keep for capacity math.
+        </p>
+        <p>
+          Hot Chips filled in the silicon. MI455X moves from MI355X’s <strong>288 GB</strong> HBM3E to <strong>432 GB</strong> HBM4 (~1.5× capacity) with roughly <strong>2.9×</strong> HBM bandwidth in AMD’s framing. Peak MXFP4 is listed at <strong>40.26</strong> PFLOPS on a 256-WGP design. Measured ROCm.AI slides AMD showed include <strong>20 TB/s</strong> MLA decode bandwidth in FP8 and <strong>20</strong> PFLOPS FP4 compute — again vendor measurements, useful as generation-over-generation deltas against MI355X, not as a substitute for a third-party rack suite.
+        </p>
+
+        <h2>UALoE is the interesting half</h2>
+        <p>
+          Scale-up is where Helios diverges from “another big GPU rack.”
+        </p>
+        <p>
+          UALink is the open consortium standard (AMD, Broadcom, Google, Meta, Microsoft, Intel, and dozens more — not NVIDIA). Spec ambition includes large pods and load/store semantics that Ethernet alone does not give you. <strong>UALink 2.0</strong> landed in April 2026 with in-network compute language. Commercial <strong>native</strong> UALink switch silicon from Astera Labs and peers was still not at production scale as of early September 2026.
+        </p>
+        <p>
+          So Helios ships <strong>UALoE</strong>: run the UALink protocol over a standard <strong>800 GbE</strong> physical layer and merchant Ethernet switch ASICs. AMD’s networking blog describes a single-hop fabric — every GPU reaches every other GPU through one switch — with up to <strong>260 TB/s</strong> aggregate scale-up bandwidth and access to the full <strong>31 TB</strong> of rack HBM in one domain. Resilience claims matter for people who actually run jobs: each GPU ties through <strong>18</strong> independent UALoE stations across switch trays so a link or tray event can fail over without killing the domain. <strong>vPods</strong> let you carve the 72-GPU domain into software-defined subsets for concurrent training and inference.
+        </p>
+        <p>
+          That is a coherent engineering story. It is also an admission: the open standard’s <strong>protocol</strong> is ready enough to put on Ethernet; the open standard’s <strong>switch silicon</strong> is not yet the thing you buy in volume for H2 2026 racks.
+        </p>
+
+        <h2>Why this pairs with NVHBM / Fusion</h2>
+        <p>
+          NVLink Fusion + NVHBM is the proprietary production path for custom XPUs that still want a proven 72-way domain: UCIe bridge chiplet into NVIDIA’s fabric, optional NVHBM base die for the memory path, NVIDIA keeping the switches and PHYs. Helios + UALoE is the open-protocol path that runs today on Ethernet bridging, with a roadmap toward native UALink switches later.
+        </p>
+        <p>
+          Hyperscalers are funding both. Alphabet sits on the UALink board, co-designs TPU v8i with MediaTek, and co-invested in the same MediaTek convertible-bond round that cemented MediaTek as NVIDIA’s NVLink Fusion XPU gateway. AWS is on the UALink board and named on Trainium4 + NVLink Fusion / NVHBM. That is not confusion. It is portfolio optionality at a scale most teams do not have.
+        </p>
+        <p>
+          For everyone else, the decision collapses to <strong>time vs replaceability</strong>:
+        </p>
+        <ul>
+          <li>Need a custom XPU in a validated scale-up domain in <strong>2026 / early 2027</strong> → Fusion (and possibly NVHBM) is the shipping integration story.</li>
+          <li>Willing to take an Ethernet-bridged UALink domain now and wait for native switch silicon → Helios / UALoE is the open bet, with Azure-class customers already on the deployment path per contemporary coverage.</li>
+        </ul>
+        <p>
+          Do not pretend those are the same product. Matching NVLink’s per-GPU <strong>1.8 TB/s</strong> bidirectional figure on a slide is not the same as matching five generations of NVSwitch operational muscle.
+        </p>
+
+        <h2>Linux and ops caveats</h2>
+        <p>
+          On <strong>August 31</strong>, AMD posted <strong>v2</strong> of the UALink mainline patches — on the order of <strong>95</strong> patches for infrastructure, plus a follow-on documentation series — wired toward AMDGPU and Helios UALoE. Fixes included 32-bit builds; AMD dropped a sysfs configuration API in favor of out-of-band tooling for now. Phoronix’s read: too late for Linux <strong>v7.3</strong>, plausible for <strong>v7.4</strong>; near-term Helios boxes will lean on vendor-blessed kernels.
+        </p>
+        <p>
+          That is normal for a new fabric. It is also a reminder that “open” does not mean “already boring in your distro.” Plan AFM / AFOS / fabric telemetry as first-class ops surface area, not as optional dashboards.
+        </p>
+        <p>
+          Other caveats I would put on any Helios capacity plan:
+        </p>
+        <ol>
+          <li>
+            <strong>Vendor peaks and modeled tokens/$ are not field benches.</strong> Use them to size envelopes; validate with your own ISL/OSL mix before you bet a floor.
+          </li>
+          <li>
+            <strong>UALoE is a bridge.</strong> Ask AMD (and your NIC/switch vendors) for the migration story to native UALink switch ASICs — power, latency, and whether the software domain stays stable across that cutover.
+          </li>
+          <li>
+            <strong>ROCm migration cost is real.</strong>
+            <a href="/halo-station.html">Halo Station</a>
+            and Helios both assume you can live outside CUDA. Budget porting and kernel maturity explicitly.
+          </li>
+          <li>
+            <strong>Not <a href="/halo-station.html">Halo Station</a>.</strong>
+            The deskside Threadripper Halo box and this 72-GPU rack share a brand family, not a deployment model.
+          </li>
+        </ol>
+
+        <h2>Bottom line</h2>
+        <p>
+          Helios is AMD putting a full rack number on the table — <strong>432 GB</strong> HBM4 per MI455X, <strong>31 TB</strong> and <strong>260 TB/s</strong> scale-up at the rack — and admitting the open interconnect ships first as <strong>Ethernet carrying UALink</strong>, not as native UALink silicon. Next to NVHBM and NVLink Fusion, that is the cleanest systems framing available in early September 2026: proprietary production-ready fabric with a memory-base-die lock-in path on one side; open protocol on merchant Ethernet with a silicon lag on the other.
+        </p>
+        <p>
+          If you run clusters, write the interconnect choice into the BOM the same way you write HBM generation into it. The GPU logo is loud. The switch tray decides who you can replace in five years.
+        </p>
+        <p>
+          Create-only. Specs above are from AMD’s July Helios materials, Hot Chips MI455X coverage, the Aug 31 Linux patch series, and early-September interconnect analysis; update when independent rack suites or native UALink switch SKUs publish.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated September 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
