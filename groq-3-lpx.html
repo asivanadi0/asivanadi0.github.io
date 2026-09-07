@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NVIDIA Groq 3 LPX: 3,431 tok/s at 100K — and the Batch-1 Caveat — Anpoo Sivanadi</title>
+  <meta name="description" content="NVIDIA Groq 3 LPX in production: Artificial Analysis 3,431 tok/s at 100K on Gemma 4 31B, and the batch-1 concurrency caveat." />
+  <link rel="canonical" href="https://asivanadi0.github.io/groq-3-lpx.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="NVIDIA Groq 3 LPX: 3,431 tok/s at 100K — and the Batch-1 Caveat — Anpoo Sivanadi" />
+  <meta property="og:description" content="NVIDIA Groq 3 LPX in production: Artificial Analysis 3,431 tok/s at 100K on Gemma 4 31B, and the batch-1 concurrency caveat." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/groq-3-lpx.html" />
+  <meta property="article:published_time" content="2026-09-06T20:45:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>NVIDIA Groq 3 LPX: 3,431 tok/s at 100K — and the Batch-1 Caveat</h1>
+        <p class="article-meta">
+          <time datetime="2026-09-06">6 September 2026</time>
+          · Anpoo Sivanadi
+          · based on NVIDIA’s 24 Aug 2026 Groq 3 LPX production materials
+        </p>
+        <p class="dek article-dek">
+          NVIDIA Groq 3 LPX in production: Artificial Analysis 3,431 tok/s at 100K on Gemma 4 31B, and the batch-1 concurrency caveat.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          This morning I wrote about
+          <a href="/helios-ualoe.html">AMD Helios UALoE</a>
+          — open scale-up on Ethernet while native UALink switch silicon catches up. The other half of an agentic serving stack is not another interconnect. It is <strong>decode interactivity</strong>: how fast one user (or one agent loop) gets the next token when the context is already long.
+        </p>
+        <p>
+          <strong>NVIDIA Groq 3 LPX</strong> is the rack NVIDIA put into full production on <strong>August 24, 2026</strong> for that job. Artificial Analysis measured a median <strong>3,431</strong> output tokens per second on <strong>Gemma 4 31B</strong> at <strong>100,000</strong>-token input context. That number is real, third-party, and useful. It is also <strong>concurrency 1</strong>. If you size a floor off the headline without writing the batch ceiling into the BOM, you will over-buy interactivity and under-buy slots.
+        </p>
+
+        <h2>Spec sheet (named numbers)</h2>
+        <div class="table-wrap" role="region" aria-label="NVIDIA Groq 3 LPX named numbers spec sheet" tabindex="0">
+          <table>
+            <tbody>
+              <tr>
+                <td>Rack</td>
+                <td><strong>NVIDIA Groq 3 LPX</strong> — interactive inference accelerator for <strong>Vera Rubin</strong></td>
+              </tr>
+              <tr>
+                <td>Accelerators</td>
+                <td><strong>256×</strong> Groq 3 <strong>LPU</strong> (LP30) per rack</td>
+              </tr>
+              <tr>
+                <td>Collective SRAM</td>
+                <td><strong>128 GB</strong> (500 MB per LPU)</td>
+              </tr>
+              <tr>
+                <td>On-chip SRAM bandwidth (rack)</td>
+                <td><strong>40 PB/s</strong></td>
+              </tr>
+              <tr>
+                <td>Scale-up bandwidth (rack)</td>
+                <td><strong>640 TB/s</strong></td>
+              </tr>
+              <tr>
+                <td>AI inference compute (rack)</td>
+                <td><strong>315 PFLOPS</strong></td>
+              </tr>
+              <tr>
+                <td>Per-LPU C2C</td>
+                <td><strong>96</strong> links @ <strong>112 Gbps</strong>; LPU acts as processor <strong>and</strong> router</td>
+              </tr>
+              <tr>
+                <td>Per-tray</td>
+                <td><strong>8</strong> LPUs / tray; <strong>32</strong> liquid-cooled 1U trays; <strong>4 GB</strong> SRAM; <strong>1.2 PB/s</strong> SRAM BW; <strong>9.6 PFLOPS</strong> FP8; <strong>20 TB/s</strong> scale-up</td>
+              </tr>
+              <tr>
+                <td>Execution model</td>
+                <td>Deterministic, <strong>compiler-scheduled</strong> C2C; <strong>320-byte</strong> vector unit of work</td>
+              </tr>
+              <tr>
+                <td>AA (100K context)</td>
+                <td>Median <strong>3,431</strong> out tok/s on Gemma 4 31B; <code>o200k_base</code> tokenizer; NVIDIA-hosted LPX</td>
+              </tr>
+              <tr>
+                <td>AA (10K context)</td>
+                <td>Median <strong>3,382</strong> out tok/s — almost flat vs 100K</td>
+              </tr>
+              <tr>
+                <td>SPEED-Bench (NVIDIA)</td>
+                <td>Median <strong>4,767</strong> out tok/s; P80 <strong>5,520</strong> on Gemma 4 coding tasks</td>
+              </tr>
+              <tr>
+                <td>vs nearest AA peer</td>
+                <td>NVIDIA cites <strong>~4×</strong> vs nearest alternative (~<strong>882</strong> tok/s Cerebras on same AA board, per contemporary coverage)</td>
+              </tr>
+              <tr>
+                <td>Pairing</td>
+                <td>Prefill / decode attention on <strong>Vera Rubin NVL72</strong>; latency-sensitive FFN / MoE decode on LPX; <strong>Dynamo</strong> orchestration</td>
+              </tr>
+              <tr>
+                <td>First cloud</td>
+                <td><strong>Nebius</strong> Token Factory; Groq cloud among early adopters</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Primary sources:
+          <a href="https://nvidianews.nvidia.com/news/nvidia-groq-3-lpx-now-in-full-production-with-world-class-speed-for-agentic-ai" target="_blank" rel="noopener noreferrer">NVIDIA newsroom</a>,
+          <a href="https://developer.nvidia.com/blog/how-nvidia-groq-3-lpx-unlocks-ultrafast-interactivity-at-long-context-on-nvidia-vera-rubin/" target="_blank" rel="noopener noreferrer">NVIDIA: ultrafast interactivity at long context</a>,
+          <a href="https://developer.nvidia.com/blog/inside-nvidia-groq-3-lpx-the-low-latency-inference-accelerator-for-the-nvidia-vera-rubin-platform/" target="_blank" rel="noopener noreferrer">NVIDIA: inside Groq 3 LPX</a>,
+          <a href="https://www.theregister.com/systems/2026/08/24/what-nvidias-first-groq-3-lpu-benchmarks-do-and-dont-tell-us-about-its-20b-gamble/5291880" target="_blank" rel="noopener noreferrer">The Register on the AA number</a>.
+        </p>
+
+        <h2>What LPX is actually selling</h2>
+        <p>
+          LPX is not “a faster Rubin.” Vera Rubin NVL72 stays the general-purpose training and inference workhorse. LPX is a <strong>second engine</strong> optimized for the part of decode where small batches and long KV caches make first-bit latency and coordination tax kill GPU tensor-parallel speedups.
+        </p>
+        <p>
+          NVIDIA’s framing is explicit: agentic sessions accumulate context across hundreds of turns. Late-session turns still have to attend over everything learned so far. Without long context you get a fast amnesiac. Without high tokens-per-second-per-user you get a smart agent that feels like batch overnight. LPX is the bet that <strong>interactivity at 100K+</strong> is a product feature, not a lab demo.
+        </p>
+        <p>
+          The silicon behind that bet is SRAM-first. Each LPU keeps about <strong>500 MB</strong> of compiler-managed on-chip SRAM as primary working storage — weights, activations, KV state placed explicitly, not guessed by a hardware cache. Rack-wide that aggregates to <strong>128 GB</strong> of SRAM and the <strong>40 PB/s</strong> on-chip bandwidth figure in NVIDIA’s rack table. The trade is classic Groq: enormous bandwidth, tiny capacity per die, so models spill across many chips over deterministic chip-to-chip links.
+        </p>
+
+        <h2>Why small-batch TP needs a different fabric</h2>
+        <p>
+          At high interactivity you want tiny batches. Tensor parallelism still helps on paper — split the matmul, combine the results — but the fixed cost of synchronizing many small tensors starts to dominate the bytes-on-the-wire time. NVIDIA’s tech blog puts the bottleneck on <strong>first-bit latency</strong>: deciding which link to use, synchronizing endpoints, arbitrating conflicts.
+        </p>
+        <p>
+          LPX’s answer is to remove runtime arbitration. The compiler sees all <strong>256</strong> LPUs, the <strong>128 GB</strong> SRAM pool, and the <strong>96×112 Gbps</strong> C2C mesh per chip, and emits a clock-cycle schedule before the workload starts. Send on the cycle the data is ready; consume on the cycle it arrives. On top of that, transfers and compute overlap at <strong>320-byte</strong> vector granularity — start shipping a slice of a matmul as soon as that slice exists, instead of waiting for the whole output matrix.
+        </p>
+        <p>
+          That is why the AA 10K and 100K medians sit almost on top of each other (<strong>3,382</strong> vs <strong>3,431</strong>). Deterministic routing plus heavy TP keeps output rate roughly flat as context grows, which is the property you want for late-session agent turns.
+        </p>
+
+        <h2>The number you should not paste into a capacity plan alone</h2>
+        <p>
+          Artificial Analysis’s <strong>3,431</strong> tok/s is the median of sequential client requests on a private NVIDIA-hosted LPX endpoint, measured at <strong>concurrency 1</strong>, with a shared <code>o200k_base</code> tokenizer. Public serverless peers on the same leaderboard were multi-tenant. So the comparison is “dedicated LPX peak interactivity” versus “shared commercial endpoints,” not a fair bake-off of equally loaded racks.
+        </p>
+        <p>
+          Gemma 4 31B is also a <strong>dense</strong> 31B — every parameter lights up each token. That is a friendly shape for an SRAM fabric: The Register notes FP8 needs a bit over <strong>31 GB</strong>, so the model fits in well under one 256-LPU rack (on the order of <strong>64</strong> LPUs for weights alone, with headroom for pipeline / data parallel replicas). Larger MoE models activate fewer parameters per token but thrash experts and need many more chips for the full weight set — DeepSeek-V3-class footprints are multi-rack in that analysis.
+        </p>
+        <p>
+          Capacity math at <strong>100K</strong> context is the other footgun. Headline tok/s is a single-stream figure. On a 256-LPU rack, KV and working-set pressure at that context length push effective concurrency toward a small batch (operator reads put the ceiling near <strong>~12</strong> concurrent 100K streams). Size your concurrent agent sessions off that envelope, not off 3,431 × N.
+        </p>
+        <p>
+          NVIDIA’s own SPEED-Bench coding numbers (<strong>4,767</strong> median / <strong>5,520</strong> P80) are useful as a same-model coding-loop check, and still vendor-run. Treat them as generation-over-generation color, not as a substitute for your ISL/OSL mix.
+        </p>
+
+        <h2>Heterogeneous decode is the real product</h2>
+        <p>
+          The AA scorecard is LPX-only. The shipping story NVIDIA wants you to buy is <strong>Vera Rubin NVL72 + LPX</strong>:
+        </p>
+        <ol>
+          <li>
+            <strong>Prefill–decode disaggregation</strong> — Rubin builds the KV cache; LPX decodes from SRAM-resident weights.
+          </li>
+          <li>
+            <strong>Attention–FFN disaggregation (AFD)</strong> — Rubin keeps attention over the growing KV in DRAM; LPX runs FFN / sparse MoE experts; intermediate activations cross once per layer per token.
+          </li>
+          <li>
+            <strong>External-drafter speculative decoding</strong> — LPX drafts; Rubin verifies; only draft tokens cross the link.
+          </li>
+        </ol>
+        <p>
+          <strong>NVIDIA Dynamo</strong> is the control plane that classifies requests, routes by latency target, and tries to keep interactive sessions out of throughput queues. That software layer is load-bearing. Without it, you own two racks and a research paper.
+        </p>
+        <p>
+          Vendor economics claims — up to <strong>35×</strong> tokens/s per MW at a premium operating point versus GB200 NVL72, up to <strong>10×</strong> revenue opportunity when LPX is paired in — stay in the footnote until independent rack suites publish. What I keep for planning is the architectural split: throughput path on Rubin, interactivity path on LPX, Dynamo in the middle.
+        </p>
+
+        <h2>Caveats I would write into any LPX BOM</h2>
+        <ol>
+          <li>
+            <strong>Batch-1 ≠ fleet capacity.</strong> Write concurrency and context length next to tok/s before you order trays.
+          </li>
+          <li>
+            <strong>Dense 31B is not your MoE production model.</strong> Re-bench on the active-parameter shape you actually serve.
+          </li>
+          <li>
+            <strong>Cerebras CS-4 / Nexus is shipping into the same window.</strong> AA’s ~4× gap is vs prior Cerebras endpoints; CS-4’s three-wafer backpack rack and Direct Wafer Links will re-open that comparison. AMD Helios + Cerebras disagg was already public at Advancing AI.
+          </li>
+          <li>
+            <strong>SRAM capacity is the tax.</strong> 500 MB/chip forces model parallelism; ops ownership includes the compiler schedule and C2C spine, not just CUDA graphs you already know.
+          </li>
+          <li>
+            <strong>Nebius is a signal, not coverage.</strong> One Token Factory launch does not mean every region or every model SKU.
+          </li>
+        </ol>
+
+        <h2>Bottom line</h2>
+        <p>
+          Groq 3 LPX is NVIDIA putting a <strong>named interactivity rack</strong> next to Vera Rubin: <strong>256</strong> LPUs, <strong>128 GB</strong> SRAM, <strong>640 TB/s</strong> scale-up, and a third-party <strong>3,431</strong> tok/s at <strong>100K</strong> on Gemma 4 31B. Next to this morning’s Helios UALoE piece, the early-September systems framing is clean — open scale-up fabric on one side of the aisle, proprietary decode accelerator with a batch-1 asterisk on the other.
+        </p>
+        <p>
+          If you run agent fleets, put <strong>tokens per second per user at your real context and concurrency</strong> on the same line as HBM generation and switch tray. The demo number sells the rack. The concurrency ceiling decides whether the rack pays for itself.
+        </p>
+        <p>
+          Create-only. Specs above are from NVIDIA’s Aug 24 production announcement, the two NVIDIA technical blogs, Artificial Analysis methodology as cited there, and contemporary Register analysis; update when independent multi-tenant LPX suites or MoE-at-100K numbers publish.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated September 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
