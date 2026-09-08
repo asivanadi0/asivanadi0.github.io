@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Release Workflow Policy Tests: Catch Signing Drift Before Release Day — Anpoo Sivanadi</title>
+  <meta name="description" content="Mutation-tested release-workflow policy — sole signer, OIDC scope, SHA-pinned actions, and asset-list drift — with NVCRE as the case study." />
+  <link rel="canonical" href="https://asivanadi0.github.io/release-workflow-policy-tests-signing-drift.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Release Workflow Policy Tests: Catch Signing Drift Before Release Day — Anpoo Sivanadi" />
+  <meta property="og:description" content="Mutation-tested release-workflow policy — sole signer, OIDC scope, SHA-pinned actions, and asset-list drift — with NVCRE as the case study." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/release-workflow-policy-tests-signing-drift.html" />
+  <meta property="article:published_time" content="2026-09-08T09:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Release Workflow Policy Tests: Catch Signing Drift Before Release Day</h1>
+        <p class="article-meta">
+          <time datetime="2026-09-08">8 September 2026</time>
+          · Anpoo Sivanadi
+          · systems note on release-workflow policy testing
+        </p>
+        <p class="dek article-dek">
+          Mutation-tested release-workflow policy — sole signer, OIDC scope, SHA-pinned actions, and asset-list drift — with NVCRE as the case study.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          Most projects unit-test the binary. Almost nobody unit-tests the YAML that <strong>signs</strong> the binary. That asymmetry is how supply-chain regressions land: a well-meaning refactor deletes a signing step, CI stays green, and the failure shows up on release day — under time pressure, on a red release, with the blog post already drafted.
+        </p>
+        <p>
+          This piece is about treating <strong>release workflow policy</strong> as code you can break in a PR and have <code>make test</code> refuse to merge. The concrete case study is <a href="/nvcre.html">NVIDIA Cluster Readiness Engine (NVCRE)</a> — a Go tool that validates GPU Kubernetes clusters and ships multi-platform binaries under a Sigstore / provenance contract — but the pattern applies to any repo whose trust story lives in <code>.github/workflows</code> more than in <code>main.go</code>.
+        </p>
+
+        <h2>The failure mode that unit tests miss</h2>
+        <p>
+          Application tests answer: <em>does this function still compute the right digest?</em>
+        </p>
+        <p>
+          Release policy answers a different question: <em>did we still sign what we claim we signed, with the identity we published, using credentials we intended to grant?</em>
+        </p>
+        <p>
+          Those answers diverge in predictable ways:
+        </p>
+        <div class="table-wrap" role="region" aria-label="Release workflow drift modes" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Drift</th>
+                <th>What CI still sees</th>
+                <th>What users get</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Second signer sneaks into another workflow</td>
+                <td>Green build</td>
+                <td>The published certificate-identity pin silently widens</td>
+              </tr>
+              <tr>
+                <td><code>id-token: write</code> on a job that never signs</td>
+                <td>Green build</td>
+                <td>Broader OIDC blast radius than the contract requires</td>
+              </tr>
+              <tr>
+                <td><code>uses: actions/checkout@v4</code> instead of a SHA</td>
+                <td>Green build</td>
+                <td>An unreviewed move of the release path</td>
+              </tr>
+              <tr>
+                <td>New platform in the Makefile, forgotten in the asset lists</td>
+                <td>Green build</td>
+                <td>An unsigned binary and unsigned SBOM next to notes that say every asset carries a Sigstore bundle</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          None of these break compilation. The release-time gate may catch them — but that is the <strong>last</strong> useful place to learn. Policy wants to fail in the PR that introduced the drift.
+        </p>
+
+        <h2>Four invariants worth pinning</h2>
+        <p>
+          NVCRE’s release-policy suite is a useful checklist for any project shipping attested binaries. The names below are the general form; the implementation detail is “reintroduce the defect and watch the test fail,” not “assert the happy path once.”
+        </p>
+
+        <h3>1. Sole signer, call-only</h3>
+        <p>
+          Exactly one workflow is allowed to invoke the signing primitives (<code>cosign sign</code> / <code>attest</code>, <code>actions/attest-build-provenance</code>, and cousins). That workflow is <code>workflow_call</code>-only — no <code>push</code>, no <code>workflow_dispatch</code>, no path that lets a branch forge the published identity.
+        </p>
+        <p>
+          Why: users pin <strong>one</strong> workflow identity. A second signer anywhere quietly expands what that pin accepts. A directly runnable attest workflow is an identity you can mint from a feature branch.
+        </p>
+
+        <h3>2. OIDC scope matches signing duty</h3>
+        <p>
+          Jobs that sign request <code>id-token: write</code> and nothing more. Jobs that do not sign do not request it at all.
+        </p>
+        <p>
+          Why: the OIDC token is the credential the whole provenance contract rests on. “This job might need it later” is how blast radius grows without a product decision.
+        </p>
+
+        <h3>3. No mutable tags on the release path</h3>
+        <p>
+          Every third-party <code>uses:</code> is a full 40-character commit SHA. Local <code>./</code> actions are fine; <code>@v4</code> that can move is an unreviewed change to release.
+        </p>
+        <p>
+          Why: Dependabot PRs that bump a tag are visible. A floating tag that retargets overnight is not. Pinning forces the review onto the SHA you actually run.
+        </p>
+
+        <h3>4. Expected assets match what release uploads</h3>
+        <p>
+          Platform lists, attest matrices, pre-publish checks, digest maps, and post-publish gates are easy to fork into <strong>four</strong> hardcoded copies of the same truth. Assets themselves often come from a Makefile glob (<code>NVCRECTL_PLATFORMS</code> and friends). Adding a platform can ship unsigned artifacts while every gate stays green and the release notes still claim universal Sigstore coverage.
+        </p>
+        <p>
+          Why: ADR-level commitments about “every asset is attested” are only real if the lists cannot drift independently. One source of truth, or tests that treat divergence as a hard fail.
+        </p>
+
+        <h2>Mutation tests, not decoration</h2>
+        <p>
+          A policy assertion that only reads the current YAML is a snapshot. The useful bar is <strong>mutation</strong>:
+        </p>
+        <ul>
+          <li>Add a second <code>cosign attest</code> outside the sole-signer workflow → <code>make test</code> fails.</li>
+          <li>Give the attest workflow a non-<code>workflow_call</code> trigger → fail.</li>
+          <li>Grant <code>id-token: write</code> to a non-signing job → fail.</li>
+          <li>Replace any pinned action SHA with a tag → fail.</li>
+          <li>Extend the platform list without updating every asset list → fail.</li>
+        </ul>
+        <p>
+          If reintroducing the defect does not fail the suite, the test is documentation with a green checkmark. NVCRE’s <code>test/releasepolicy</code> package runs in ordinary CI — no cluster, no network — which is the right cost model for something you want on every PR.
+        </p>
+
+        <h2>Where this sits relative to SLSA and Sigstore</h2>
+        <p>
+          SLSA Build levels and Sigstore verification give consumers a <strong>verify</strong> story. Policy tests give maintainers a <strong>do not regress the producer</strong> story. They are complementary:
+        </p>
+        <ul>
+          <li><strong>Sigstore / identity pins</strong> tell a downloader which workflow is allowed to have built the artifact.</li>
+          <li><strong>Sole-signer + call-only tests</strong> keep that published identity from quietly growing.</li>
+          <li><strong>SHA pins</strong> keep the actions inside that workflow from floating.</li>
+          <li><strong>Asset-list tests</strong> keep the set of blobs covered by attestations aligned with what actually shipped.</li>
+        </ul>
+        <p>
+          Skip the producer side and you get beautiful verification docs pointing at a pipeline that a refactor can hollow out without anyone noticing until <code>gh attestation verify</code> fails for a customer.
+        </p>
+
+        <h2>A practical adoption order</h2>
+        <p>
+          If you are starting from a release workflow that “mostly works”:
+        </p>
+        <ol>
+          <li><strong>Write down the identity contract</strong> you already publish (which workflow, which repo, which subject). That is the sole-signer target.</li>
+          <li><strong>Inventory <code>id-token: write</code>.</strong> Every grant should map to a job that actually signs or attest.</li>
+          <li><strong>Pin every third-party action on the release path by SHA.</strong> Do the Dependabot theater once; stop relying on tags for the trust boundary.</li>
+          <li><strong>Collapse or cross-check asset lists</strong> against the Makefile / matrix that actually uploads. Prefer one generated list; if you cannot, mutation-test the forks.</li>
+          <li><strong>Put the four checks in <code>make test</code></strong>, same job as unit tests. Release-time gates stay as belt-and-suspenders, not as the only alarm.</li>
+        </ol>
+
+        <h2>What this is not</h2>
+        <p>
+          This is not a substitute for code review, for a human release checklist, or for an offline key ceremony when your threat model requires one. It is also not “more YAML.” It is Go (or whatever your repo already tests in) that <strong>parses</strong> the workflows and refuses merges that violate the contract you already claim in docs.
+        </p>
+        <p>
+          For GPU and platform tooling — the NVCRE class of project — the binary is the product users install on clusters, but the <strong>attestation story</strong> is what lets those users trust the binary without rebuilding it. Policy tests are how that story survives the next tidy-up PR.
+        </p>
+        <p>
+          If your release notes say every asset carries a Sigstore bundle, your test suite should be able to prove that claim still holds after someone adds <code>linux/arm64</code> on a Friday afternoon.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated September 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
