@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Qualcomm × Amazon: Custom Inference Silicon, 1.6T Optics, and a Second ASIC Line Next to Trainium — Anpoo Sivanadi</title>
+  <meta name="description" content="Qualcomm × Amazon custom AI inference silicon and 1.6T optics — a second ASIC line next to Trainium, with the HBC and datasheet caveats." />
+  <link rel="canonical" href="https://asivanadi0.github.io/qualcomm-amazon-inference-1-6t-optical.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Qualcomm × Amazon: Custom Inference Silicon, 1.6T Optics, and a Second ASIC Line Next to Trainium — Anpoo Sivanadi" />
+  <meta property="og:description" content="Qualcomm × Amazon custom AI inference silicon and 1.6T optics — a second ASIC line next to Trainium, with the HBC and datasheet caveats." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/qualcomm-amazon-inference-1-6t-optical.html" />
+  <meta property="article:published_time" content="2026-09-08T19:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Qualcomm × Amazon: Custom Inference Silicon, 1.6T Optics, and a Second ASIC Line Next to Trainium</h1>
+        <p class="article-meta">
+          <time datetime="2026-09-08">8 September 2026</time>
+          · Anpoo Sivanadi
+          · based on Qualcomm’s 8 Sep 2026 Amazon collaboration materials
+        </p>
+        <p class="dek article-dek">
+          Qualcomm × Amazon custom AI inference silicon and 1.6T optics — a second ASIC line next to Trainium, with the HBC and datasheet caveats.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          <strong>Qualcomm and Amazon</strong> announced a multi-generation collaboration on <strong>custom AI inference silicon</strong> for large-scale AWS data centers, plus high-performance <strong>optical connectivity extending to 1.6 terabits per second</strong>. The SEC 8-K underneath the PR is the systems signal: Amazon can unlock equity only by actually buying chips and interconnect. That is not an earnings recap. It is a rack question — when does AWS want a <strong>second</strong> inference ASIC vendor next to Annapurna’s Trainium line, and what changes when the same partner co-designs the optical spine?
+        </p>
+
+        <h2>Spec sheet (what is named today)</h2>
+        <div class="table-wrap" role="region" aria-label="Qualcomm Amazon collaboration named numbers spec sheet" tabindex="0">
+          <table>
+            <tbody>
+              <tr>
+                <td>Announcement</td>
+                <td><strong>Sep 8, 2026</strong> — Qualcomm Technologies × Amazon / AWS</td>
+              </tr>
+              <tr>
+                <td>Compute scope</td>
+                <td>Multi-generation <strong>customized silicon for AI inference</strong> (SKU FLOPS / HBM not disclosed)</td>
+              </tr>
+              <tr>
+                <td>Optical scope</td>
+                <td>High-performance optical connectivity; solutions extending to <strong>1.6 Tb/s</strong>; Qualcomm <strong>SerDes</strong> + <strong>optical DSP</strong> (Alphawave line)</td>
+              </tr>
+              <tr>
+                <td>Purchase envelope</td>
+                <td>Up to about <strong>$60B</strong> of Qualcomm AI data-center chips / related products (Reuters / 8-K coverage)</td>
+              </tr>
+              <tr>
+                <td>Warrant</td>
+                <td>Amazon right to buy up to <strong>25M</strong> Qualcomm shares @ <strong>$161.26</strong>; vesting tied to purchases through <strong>~2036</strong>; initial <strong>~3.75M</strong> shares unlocked on starting commitments (HotHardware on the 8-K)</td>
+              </tr>
+              <tr>
+                <td>AWS context</td>
+                <td>Amazon custom-chip business cited at <strong>&gt;$25B</strong> annualized run-rate end of June quarter (Reuters)</td>
+              </tr>
+              <tr>
+                <td>Merchant roadmap (context, not the AWS SKU)</td>
+                <td>Dragonfly <strong>AI250</strong> HBC Gen 1: up to <strong>133 TB/s</strong> “effective” BW/card (<strong>18×</strong> vs AI200 LPDDR); <strong>AI300</strong> HBC Gen 2: <strong>54×</strong> vs AI200; scale-up via <strong>UALink</strong> + <strong>ESUN</strong>; connectivity portfolio <strong>800G / 1.6T</strong></td>
+              </tr>
+              <tr>
+                <td>Prior interconnect buy</td>
+                <td>Qualcomm’s <strong>~$2.4B</strong> Alphawave Semi acquisition (Tony Pialis now data-center chip chief)</td>
+              </tr>
+              <tr>
+                <td>Parallel deal shape</td>
+                <td>Marvell × Google custom AI + stake rights (weeks earlier, Reuters)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Primary sources:
+          <a href="https://www.prnewswire.com/news-releases/qualcomm-announces-multi-generational-product-collaboration-with-amazon-to-build-next-generation-ai-data-center-infrastructure-302871895.html" target="_blank" rel="noopener noreferrer">Qualcomm PR</a>,
+          <a href="https://www.reuters.com/technology/qualcomm-amazon-develop-custom-chips-ai-data-centers-2026-09-08/" target="_blank" rel="noopener noreferrer">Reuters</a>,
+          <a href="https://hothardware.com/news/qualcomm-strikes-deal-amazon-custom-ai-data-center-chips" target="_blank" rel="noopener noreferrer">HotHardware / 8-K read</a>,
+          <a href="https://www.qualcomm.com/news/releases/2026/06/qualcomm-unveils-comprehensive-data-center-roadmap-for-the-agent" target="_blank" rel="noopener noreferrer">Dragonfly Investor Day</a>,
+          <a href="https://www.theregister.com/systems/2026/06/30/qualcomms-proposed-solution-to-catch-up-in-ai-infra-bury-the-compute-under-the-dram/5264071" target="_blank" rel="noopener noreferrer">The Register on HBC</a>.
+        </p>
+
+        <h2>What actually shipped as news</h2>
+        <p>
+          Two workstreams, one contract.
+        </p>
+        <p>
+          First: <strong>custom inference XPUs</strong> for AWS. Qualcomm’s public Dragonfly cards (AI200 / AI250 / AI300) are the architectural color, not a promise that Amazon is buying the merchant SKU unchanged. The PR is careful — “customized silicon at scale,” “working together on AI inference.” Until AWS publishes a Trainium-style NeuronCore table for the Qualcomm part, treat every FLOP claim as <strong>merchant roadmap</strong>, not BOM.
+        </p>
+        <p>
+          Second: <strong>optical connectivity to 1.6T</strong>. That is the named bandwidth you can put next to an UltraServer drawing. Qualcomm says the collaboration uses its SerDes and optical DSP — the Alphawave stack it bought to stop showing up to hyperscalers with only a mobile NPU story. Campus-reach and AOC/AEC product language on the June Dragonfly deck already spanned <strong>800G</strong> and <strong>1.6T</strong>; today’s deal is Amazon writing that interconnect into a multi-year AWS build.
+        </p>
+        <p>
+          The financing shape matters for operators even if you never buy a Qualcomm share. Vesting against <strong>product purchases</strong> means Amazon’s incentive is to consume silicon and optics, not to sit on a paper option. The <strong>$60B</strong> ceiling is an upper bound through 2036, not a 2026 PO. Still: a second inference supplier with a purchase-tied warrant is a different signal than a slide about “exploring custom.”
+        </p>
+
+        <h2>Why a second inference line next to Trainium</h2>
+        <p>
+          AWS already has Annapurna.
+          <a href="/nvhbm.html">Trainium3</a>
+          UltraServers are in market; Trainium4 is the part that picks up <strong>NVLink Fusion</strong> so Amazon XPUs can sit on the same scale-up fabric as NVIDIA GPUs — the story I wrote when NVHBM landed. That is the “heterogeneous rack with NVIDIA’s switch” path.
+        </p>
+        <p>
+          Qualcomm is the other bet: <strong>power-efficient decode</strong> and a connectivity vendor that can also ship the SerDes/DSP for the optical plant. AWS’s published custom-chip run-rate (<strong>&gt;$25B</strong> annualized) already proves captive silicon is a business, not a lab. Adding Qualcomm does not retire Trainium. It segments the floor the way every hyperscaler is segmenting:
+        </p>
+        <ul>
+          <li><strong>Training / general GPU</strong> — still mostly NVIDIA (and some AMD).</li>
+          <li><strong>First-party training+inference XPU</strong> — Trainium / Inferentia family.</li>
+          <li><strong>Additional inference-optimized custom</strong> — today’s Qualcomm lane, SKU TBD.</li>
+          <li><strong>Scale-up / scale-out</strong> — NeuronLink inside the UltraServer; Ethernet / optics between; and now a co-designed <strong>1.6T</strong> optical path with the same partner building the accelerator.</li>
+        </ul>
+        <p>
+          If you run multi-cloud capacity planning, the useful question is not “will Qualcomm unseat CUDA.” It is <strong>which ISL/OSL shapes AWS will pin to the Qualcomm part</strong> once a SKU sheet exists — likely the memory-bandwidth-bound decode jobs where HBM TCO hurts and a non-HBM or HBC-style package looks attractive on tokens per watt.
+        </p>
+
+        <h2>The HBC asterisk (merchant roadmap, not AWS silicon)</h2>
+        <p>
+          I am not going to pretend Qualcomm published peak PFLOPS for AI250/AI300. They did not. The Register called that out in June, and the “effective” bandwidth language is load-bearing marketing.
+        </p>
+        <p>
+          What <em>is</em> named on the merchant deck:
+        </p>
+        <ul>
+          <li><strong>AI250 / HBC Gen 1</strong> — up to <strong>133 TB/s</strong> effective memory bandwidth per card; Qualcomm frames that as <strong>18×</strong> versus AI200’s LPDDR5X baseline.</li>
+          <li><strong>AI300 / HBC Gen 2</strong> — another step to <strong>54×</strong> versus AI200 on the same “effective” axis; sampling language points at <strong>2028</strong> for that generation.</li>
+          <li><strong>Architecture bet</strong> — 3D-stack compute under or beside DRAM so low-arithmetic-intensity ops never pay a full SoC hop; Qualcomm claims roughly <strong>6×</strong> bandwidth-per-watt versus HBM at card level (vendor estimate).</li>
+          <li><strong>Scale-up</strong> — <strong>UALink</strong> and <strong>ESUN</strong> (Ethernet for Scale-Up Networking) on the Dragonfly racks — the same open-scale-up family I wrote about for <a href="/helios-ualoe.html">AMD Helios UALoE</a>, where native UALink switch silicon is still catching up and Ethernet bridges fill 2026.</li>
+        </ul>
+        <p>
+          Use those numbers as <strong>architecture color</strong> for why Amazon might want Qualcomm in the tent. Do <strong>not</strong> paste 133 TB/s into an AWS capacity spreadsheet and call it the new Inferentia. The Sep 8 deal is custom. Custom means the BOM can diverge.
+        </p>
+        <p>
+          Against <a href="/groq-3-lpx.html">Groq 3 LPX</a> the contrast is clean: LPX sells deterministic SRAM decode with a third-party <strong>3,431</strong> tok/s at 100K and a batch-1 asterisk. Qualcomm sells (on the merchant side) LPDDR/HBC capacity and “effective” bandwidth multipliers with no public tok/s suite. Different proof standards. Different buyer.
+        </p>
+
+        <h2>Optics are half the product</h2>
+        <p>
+          People will screenshot the warrant and miss the interconnect.
+        </p>
+        <p>
+          AI racks are increasingly limited by <strong>how you move activations and KV between prefill and decode islands</strong>, not by whether the accelerator brochure has one more PFLOP. Co-designing <strong>1.6T</strong> optical with the same vendor building the inference XPU is AWS saying the network SKU is in the same multi-year conversation as the compute SKU. That matches how NVIDIA ships NVLink Switch + GPU as one platform, and how Helios talks UALink even while shipping UALoE.
+        </p>
+        <p>
+          Qualcomm’s June connectivity portfolio already spanned die-to-die, copper, optical, and campus-reach up to <strong>~20 km</strong>, with PAM4 and coherent-lite DSP language. Alphawave is why that paragraph is credible. The Amazon deal is why it is no longer only a slide for ByteDance and Middle East sovereign builds.
+        </p>
+
+        <h2>Caveats I would write into any AWS BOM note</h2>
+        <ol>
+          <li>
+            <strong>No public AWS Qualcomm XPU datasheet yet.</strong> No FLOPS, no HBM/LPDDR capacity, no TDP, no Neuron SDK support matrix. Plan with a placeholder SKU, not a fake table.
+          </li>
+          <li>
+            <strong>“Effective” bandwidth ≠ pin bandwidth.</strong> Register’s skepticism on the AI200/AI250 multipliers still applies until independent card measurements land.
+          </li>
+          <li>
+            <strong>$60B is a ceiling through 2036</strong>, not a 2026 ship plan. Vesting math is interesting; delivery schedules are what fill a floor.
+          </li>
+          <li>
+            <strong>Trainium4 + NVLink Fusion remains the heterogeneous-GPU path.</strong> Qualcomm is additive inference/optical, not a replacement announcement for Annapurna.
+          </li>
+          <li>
+            <strong>Marvell × Google</strong> shows the deal template is spreading. Custom silicon + equity rights is becoming how hyperscalers underwrite second-source ASIC vendors — watch the SKU sheet, not the warrant headline.
+          </li>
+        </ol>
+
+        <h2>Bottom line</h2>
+        <p>
+          On <strong>September 8, 2026</strong>, Qualcomm and Amazon put a named <strong>1.6T</strong> optical collaboration and a purchase-tied warrant next to a multi-generation <strong>custom AI inference</strong> silicon program for AWS. The architectural bet you can defend today sits on Qualcomm’s merchant Dragonfly/HBC roadmap and Alphawave SerDes/DSP — LPDDR/HBC-style memory bandwidth per watt, UALink/ESUN scale-up, and optics in the same contract as compute.
+        </p>
+        <p>
+          Next to the live posts on
+          <a href="/nvhbm.html">NVHBM / Trainium4 Fusion</a>,
+          <a href="/helios-ualoe.html">Helios UALoE</a>,
+          and
+          <a href="/groq-3-lpx.html">Groq 3 LPX</a>,
+          the early-September systems picture is consistent: hyperscalers are buying <strong>option sets</strong> — open scale-up, proprietary decode accelerators, captive ASICs, and now a second inference vendor with the optical plant in the same PO language.
+        </p>
+        <p>
+          When AWS publishes the Qualcomm XPU table, rewrite the FLOPS row. Until then, the operator takeaway is the dual scope: <strong>inference silicon + 1.6T optics</strong>, purchase-tied, multi-generation — not a smartphone diversification press release.
+        </p>
+        <p>
+          Create-only. Specs above are from the Sep 8 Qualcomm PR, Reuters, HotHardware’s 8-K read, Qualcomm’s June Dragonfly Investor Day materials, and The Register’s June HBC analysis; update when AWS names the custom SKU or independent optical/accelerator suites publish.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated September 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
