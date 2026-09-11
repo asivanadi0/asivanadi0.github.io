@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>d-Matrix Raptor Joins NVLink Fusion: 100 TB/s Cards, NVL144 Math, and the Decode-Silicon Bet — Anpoo Sivanadi</title>
+  <meta name="description" content="d-Matrix Raptor on NVIDIA NVLink Fusion / MGX — 100 TB/s card math, NVL144 aggregates, and the decode-silicon bet next to Groq LPX and Helios." />
+  <link rel="canonical" href="https://asivanadi0.github.io/dmatrix-raptor-nvlink-fusion-nvl144.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="d-Matrix Raptor Joins NVLink Fusion: 100 TB/s Cards, NVL144 Math, and the Decode-Silicon Bet — Anpoo Sivanadi" />
+  <meta property="og:description" content="d-Matrix Raptor on NVIDIA NVLink Fusion / MGX — 100 TB/s card math, NVL144 aggregates, and the decode-silicon bet next to Groq LPX and Helios." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/dmatrix-raptor-nvlink-fusion-nvl144.html" />
+  <meta property="article:published_time" content="2026-09-10T19:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>d-Matrix Raptor Joins NVLink Fusion: 100 TB/s Cards, NVL144 Math, and the Decode-Silicon Bet</h1>
+        <p class="article-meta">
+          <time datetime="2026-09-10">10 September 2026</time>
+          · Anpoo Sivanadi
+          · based on d-Matrix / NVIDIA Fusion materials and Register Hot Chips coverage
+        </p>
+        <p class="dek article-dek">
+          d-Matrix Raptor on NVIDIA NVLink Fusion / MGX — 100 TB/s card math, NVL144 aggregates, and the decode-silicon bet next to Groq LPX and Helios.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          Last week I wrote
+          <a href="/helios-ualoe.html">Helios UALoE</a>
+          as the open scale-up bridge and
+          <a href="/nvhbm.html">NVHBM</a>
+          as the Fusion-side memory lock-in. Tonight is the other Fusion story: <strong>decode silicon that wants the same rack you already buy for Vera Rubin</strong>.
+        </p>
+        <p>
+          On <strong>September 10, 2026</strong>, d-Matrix announced it will put next-gen <strong>Raptor</strong> XPUs into <strong>NVIDIA NVLink Fusion</strong> and the <strong>MGX</strong> rack reference architecture — Vera CPUs, NVLink switches, BlueField-4 DPUs, ConnectX-9 SuperNICs, Spectrum-X Ethernet, modular cable-free trays. Same day, NVIDIA’s blog frames the same deal as XPUs plugging into a liquid-cooled AI-factory path next to <strong>Vera Rubin NVL72</strong> and, notably, <strong>Groq 3 LPX</strong>. That is the interesting systems sentence: two SRAM-ish decode bets, one proprietary fabric, one rack family.
+        </p>
+        <p>
+          Primary sources:
+          <a href="https://www.d-matrix.ai/announcements/d-matrix-rackscale-nvidia/" target="_blank" rel="noopener noreferrer">d-Matrix PR</a>,
+          <a href="https://blogs.nvidia.com/blog/d-matrix-nvlink-fusion/" target="_blank" rel="noopener noreferrer">NVIDIA blog</a>,
+          <a href="https://www.theregister.com/systems/2026/09/10/d-matrix-drinks-the-nvidia-kool-aid-with-nvlink-fusion-and-mgx-rack-designs/5295403" target="_blank" rel="noopener noreferrer">The Register (Tobias Mann)</a>.
+        </p>
+
+        <h2>Spec sheet (named numbers)</h2>
+        <div class="table-wrap" role="region" aria-label="d-Matrix Raptor named numbers spec sheet" tabindex="0">
+          <table>
+            <tbody>
+              <tr>
+                <td>Announcement</td>
+                <td><strong>Sep 10, 2026</strong> — d-Matrix × NVIDIA NVLink Fusion / MGX collaboration (multi-year roadmap)</td>
+              </tr>
+              <tr>
+                <td>Product</td>
+                <td><strong>Raptor</strong> XPU — follow-on to production <strong>Corsair</strong>; 3D DRAM + SRAM compute “two-story” package</td>
+              </tr>
+              <tr>
+                <td>Fabric / rack</td>
+                <td><strong>NVLink Fusion</strong> scale-up; <strong>MGX</strong> rack ref; <strong>Vera</strong> CPUs; NVLink switches; <strong>BlueField-4</strong>; <strong>ConnectX-9</strong>; <strong>Spectrum-X</strong></td>
+              </tr>
+              <tr>
+                <td>Connectivity partner</td>
+                <td><strong>Astera Labs</strong> (NVLink Fusion ecosystem)</td>
+              </tr>
+              <tr>
+                <td>Workload split (vendor)</td>
+                <td>GPUs (e.g. <strong>Vera Rubin</strong>) for <strong>prefill</strong>; Raptor for <strong>decode</strong>; coding assistants / real-time chat / voice as latency targets</td>
+              </tr>
+              <tr>
+                <td>Tape-out / ship</td>
+                <td>Raptor tape-out <strong>before end of 2026</strong>; initial Raptor-in-MGX availability <strong>Q4 2027</strong> (d-Matrix)</td>
+              </tr>
+              <tr>
+                <td>Patents / eval</td>
+                <td><strong>&gt;100</strong> patents; evaluating at hyperscalers / frontier labs (vendor)</td>
+              </tr>
+              <tr>
+                <td>Hot Chips card (Register)</td>
+                <td>~<strong>32 GB</strong> 3D-stacked DRAM @ <strong>100 TB/s</strong> (~<strong>4.5×</strong> Rubin GPU memory bandwidth)</td>
+              </tr>
+              <tr>
+                <td>NVL144 XPU SKU (Register)</td>
+                <td>~half card: ~<strong>16 GB</strong> 3D-DRAM, ~<strong>50 TB/s</strong>; <strong>144</strong> XPUs → ~<strong>2.3 TB</strong> capacity, ~<strong>7.2 PB/s</strong> peak aggregate BW</td>
+              </tr>
+              <tr>
+                <td>Capacity framing (Register)</td>
+                <td>~<strong>2.3 TB</strong> ≈ models <strong>&gt;4T</strong> parameters at <strong>4-bit</strong></td>
+              </tr>
+              <tr>
+                <td>Groq contrast (Register math)</td>
+                <td>Groq SRAM ~<strong>150 TB/s</strong>/chip but ~<strong>500 MB</strong>; trillion-param @ <strong>8-bit</strong> might need <strong>&gt;2,000</strong> Groq <strong>3</strong> LPUs vs ~<strong>64</strong> d-Matrix systems @ <strong>8-bit</strong> / ~<strong>32</strong> @ <strong>4-bit</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          The PR is the deployment contract. The Register table is the bandwidth arithmetic from Hot Chips — attribute it that way until d-Matrix publishes a formal datasheet.
+        </p>
+
+        <h2>What actually shipped today</h2>
+        <p>
+          Nothing you can rack in Q4 2026. What shipped is a <strong>path</strong>: Raptor designed for Fusion/MGX from the ground up, tape-out this year, MGX-integrated systems targeted <strong>Q4 2027</strong>. Sid Sheth’s line in the NVIDIA blog is the honest constraint set — capital, time, and energy are finite — and the bet is that borrowing NVIDIA’s liquid-cooled rack, fabric, and supply chain beats inventing a second one.
+        </p>
+        <p>
+          Heterogeneous disaggregation is the product story, not a footnote. Prefill stays on GPU compute (Vera Rubin class). Decode moves to Raptor’s memory-bandwidth-heavy package. That is the same phase split that makes
+          <a href="/groq-3-lpx.html">Groq 3 LPX</a>
+          interesting next to Rubin, and the same reason I keep
+          <a href="/jalapeno.html">Jalapeño</a>
+          on a different axis (captive InferenceX scorecard, not a Fusion XPU tray).
+        </p>
+        <p>
+          d-Matrix also names Astera Labs for connectivity inside the Fusion ecosystem. That matters if you care who owns the PHY/bridge path when the XPU is not a GPU die.
+        </p>
+
+        <h2>How to read the Register bandwidth math</h2>
+        <p>
+          I am not treating Register’s NVL144 arithmetic as a BOM guarantee. I <strong>am</strong> treating it as the clearest public translation of Hot Chips into rack units:
+        </p>
+        <ol>
+          <li>
+            <strong>Card-class</strong> Raptor: <strong>32 GB</strong> @ <strong>100 TB/s</strong> — bandwidth closer to SRAM than to HBM stacks, with modest capacity per card versus HBM4 monsters.
+          </li>
+          <li>
+            <strong>NVL144 XPU</strong> framing: ~half that card → <strong>16 GB</strong> / <strong>50 TB/s</strong> × <strong>144</strong> → ~<strong>2.3 TB</strong> and ~<strong>7.2 PB/s</strong> peak aggregate on one all-to-all NVLink fabric (Register: systems with up to <strong>144</strong> Raptors by end of next year).
+          </li>
+          <li>
+            <strong>Capacity vs bandwidth trade:</strong> enough memory for multi-trillion-parameter models at 4-bit <em>in Register’s framing</em>, without pretending this is a training HBM envelope.
+          </li>
+        </ol>
+        <p>
+          The Groq comparison in that article is useful as a <strong>chip-count intuition pump</strong>, not as my capacity plan. SRAM at ~<strong>150 TB/s</strong> with ~<strong>500 MB</strong> forces many dies per model; 3D DRAM at a fraction of that bandwidth with tens of GB per XPU shrinks the die count. Keep it labeled <strong>Register math</strong>. Your ISL/OSL mix and precision still decide the tray count.
+        </p>
+
+        <h2>Where this sits next to Helios, NVHBM, and LPX</h2>
+        <div class="table-wrap" role="region" aria-label="Where Raptor sits next to Helios, NVHBM, and LPX" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Lane</th>
+                <th>What you buy</th>
+                <th>Interconnect reality</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><a href="/nvhbm.html">NVHBM</a> + Fusion</td>
+                <td>Custom XPU memory path into NVIDIA fabric</td>
+                <td>Proprietary production scale-up</td>
+              </tr>
+              <tr>
+                <td><a href="/helios-ualoe.html">Helios UALoE</a></td>
+                <td>72× MI455X on open-protocol Ethernet bridge</td>
+                <td>UALink on <strong>800 GbE</strong> until native switches</td>
+              </tr>
+              <tr>
+                <td><a href="/groq-3-lpx.html">Groq 3 LPX</a></td>
+                <td>SRAM decode rack in the NVIDIA AI-factory story</td>
+                <td>NVIDIA-owned decode sibling</td>
+              </tr>
+              <tr>
+                <td><strong>Raptor × Fusion</strong></td>
+                <td>3D-DRAM decode XPU on <strong>same MGX / NVLink</strong> family</td>
+                <td>Fusion peer list: Qualcomm, Arm, Marvell, Amazon, Fujitsu, MediaTek (Register); MediaTek/Marvell investment color (<strong>$3.5B</strong> / <strong>$2B</strong>) — <strong>no</strong> word if d-Matrix got similar</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Helios is “open protocol, Ethernet bridge, replaceability later.” Raptor is “specialized decode, but the switch tray and cooling plant are NVIDIA’s.” Those are not the same procurement risk. Fusion buys time-to-rack and a validated domain; it also writes NVIDIA into the BOM for Vera, NVSwitch, BlueField, ConnectX, and Spectrum-X even when the FLOPS logo says d-Matrix.
+        </p>
+        <p>
+          I would put Raptor next to LPX as <strong>two decode hypotheses under one fabric landlord</strong>, not as rivals that cancel each other. LPX is shipping-path SRAM density. Raptor is Hot Chips bandwidth with a <strong>Q4 2027</strong> MGX availability date. If you already planned Fusion XPUs after NVHBM, this is the decode-shaped entry on that same whiteboard.
+        </p>
+
+        <h2>Caveats I would write into any Raptor capacity ticket</h2>
+        <ol>
+          <li>
+            <strong>Availability is Q4 2027 for MGX-integrated Raptor.</strong> Tape-out YE2026 ≠ production rack.
+          </li>
+          <li>
+            <strong>100 TB/s / 32 GB and the NVL144 aggregates are Register’s Hot Chips read</strong>, not a d-Matrix datasheet line item in the PR. Ask for the SKU that actually ships in the tray.
+          </li>
+          <li>
+            <strong>Prefill/decode split is vendor architecture</strong>, not a measured InferenceX curve. Validate on your coding / chat / voice mix.
+          </li>
+          <li>
+            <strong>Walled-garden economics.</strong> Register notes NVIDIA investment sweetners for other Fusion peers; d-Matrix terms are undisclosed. Price the full rack (Vera + switches + NICs + cooling), not the XPU alone.
+          </li>
+          <li>
+            <strong>Not a substitute for Helios.</strong> Different fabric politics. Write the interconnect choice into the BOM the same way you write HBM generation into it.
+          </li>
+          <li>
+            <strong>Not Jalapeño.</strong> Captive OpenAI ASIC vs merchant Fusion XPU — different buyer, different software surface.
+          </li>
+        </ol>
+
+        <h2>Bottom line</h2>
+        <p>
+          d-Matrix’s Sep 10 announcement is the cleanest <strong>decode-XPU-on-NVLink-Fusion</strong> story in the Sep 8–10 window: Raptor’s 3D-DRAM package aimed at MGX next to Vera Rubin, with Register’s Hot Chips numbers (<strong>100 TB/s</strong> cards, NVL144 ~<strong>7.2 PB/s</strong> aggregate math) giving cluster readers something to argue about until a datasheet lands. Next to live Helios UALoE and Groq LPX, the decision is not “which logo is fastest.” It is whether you want open-protocol Ethernet bridging, SRAM decode under NVIDIA’s roof, or 3D-DRAM decode that still pays the Fusion tax for a proven switch tray.
+        </p>
+        <p>
+          If you run inference fleets, put Raptor on the same whiteboard as LPX and Helios with three columns: <strong>bandwidth per die</strong>, <strong>GB per die</strong>, and <strong>who owns the scale-up switch</strong>. The PR answers the third. Hot Chips (via Register) sketches the first two. Q4 2027 is when the sketch has to become a SKU.
+        </p>
+        <p>
+          Create-only. Specs above are from d-Matrix’s Sep 10 PR, NVIDIA’s same-day Fusion blog, and Tobias Mann’s Register Hot Chips translation; update when d-Matrix publishes a formal Raptor datasheet or independent rack suites.
+        </p>
+        <p>
+          Sources:
+          <a href="https://www.d-matrix.ai/announcements/d-matrix-rackscale-nvidia/" target="_blank" rel="noopener noreferrer">d-Matrix</a>
+          ·
+          <a href="https://blogs.nvidia.com/blog/d-matrix-nvlink-fusion/" target="_blank" rel="noopener noreferrer">NVIDIA</a>
+          ·
+          <a href="https://www.theregister.com/systems/2026/09/10/d-matrix-drinks-the-nvidia-kool-aid-with-nvlink-fusion-and-mgx-rack-designs/5295403" target="_blank" rel="noopener noreferrer">The Register</a>.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated September 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
