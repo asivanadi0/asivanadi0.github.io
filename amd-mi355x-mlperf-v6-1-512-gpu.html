@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AMD’s 512-GPU MI355X MLPerf: 5.75M tok/s on RoCE — and the +38% ROCm Asterisk — Anpoo Sivanadi</title>
+  <meta name="description" content="AMD + Crusoe’s 512-GPU MI355X MLPerf Inference v6.1 run — 5.75M tok/s on RoCE, plus the +38% same-silicon ROCm asterisk." />
+  <link rel="canonical" href="https://asivanadi0.github.io/amd-mi355x-mlperf-v6-1-512-gpu.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="AMD’s 512-GPU MI355X MLPerf: 5.75M tok/s on RoCE — and the +38% ROCm Asterisk — Anpoo Sivanadi" />
+  <meta property="og:description" content="AMD + Crusoe’s 512-GPU MI355X MLPerf Inference v6.1 run — 5.75M tok/s on RoCE, plus the +38% same-silicon ROCm asterisk." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/amd-mi355x-mlperf-v6-1-512-gpu.html" />
+  <meta property="article:published_time" content="2026-09-17T06:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>AMD’s 512-GPU MI355X MLPerf: 5.75M tok/s on RoCE — and the +38% ROCm Asterisk</h1>
+        <p class="article-meta">
+          <time datetime="2026-09-17">17 September 2026</time>
+          · Anpoo Sivanadi
+          · based on MLCommons Inference v6.1 / AMD–Crusoe supplemental materials
+        </p>
+        <p class="dek article-dek">
+          AMD + Crusoe’s 512-GPU MI355X MLPerf Inference v6.1 run — 5.75M tok/s on RoCE, plus the +38% same-silicon ROCm asterisk.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          Last night’s
+          <a href="/vera-rubin-nvl72-mlperf-v6-1.html">Vera Rubin NVL72</a>
+          note was NVIDIA’s first peer-reviewed preview tray. This morning is the other column on the same MLPerf Inference <strong>v6.1</strong> whiteboard: <strong>what happens when you put 512 Instinct MI355X GPUs on a standard RoCE Ethernet fabric</strong>, plus the round-over-round ROCm gains that landed on <strong>unchanged</strong> silicon.
+        </p>
+        <p>
+          On <strong>September 16, 2026</strong>, MLCommons published Inference v6.1. AMD and first-time submitter <strong>Crusoe</strong> filed the largest GPU count in MLPerf Inference history — <strong>512</strong> MI355X across <strong>64</strong> Crusoe Cloud nodes — and AMD separately published the software story: up to <strong>+38%</strong> GPT-OSS-120B throughput at <strong>8</strong> GPUs versus the same MI355X hardware in v6.0. Primary sources:
+          <a href="https://mlcommons.org/2026/09/mlperf-inference-v6-1-results/" target="_blank" rel="noopener noreferrer">MLCommons v6.1 announcement</a>,
+          the
+          <a href="https://mlcommons.org/wp-content/uploads/2026/09/Supplemental-MLCommons-MLPerf-Inference-v6.1.pdf" target="_blank" rel="noopener noreferrer">MLCommons supplemental PDF</a>
+          (AMD + Crusoe statements),
+          <a href="https://www.storagereview.com/news/mlperf-inference-v6-1-5-7x-per-accelerator-gains-a-512-gpu-run-and-vera-rubins-first-peer-reviewed-numbers" target="_blank" rel="noopener noreferrer">StorageReview’s round write-up</a>,
+          and
+          <a href="https://futurumgroup.com/insights/amd-mlperf-inference-61-results-show-rocm-gaining-38-on-the-same-mi355x-hardware/" target="_blank" rel="noopener noreferrer">Futurum’s ROCm-velocity read</a>.
+        </p>
+
+        <h2>Spec sheet (named numbers)</h2>
+        <div class="table-wrap" role="region" aria-label="AMD MI355X named numbers spec sheet" tabindex="0">
+          <table>
+            <tbody>
+              <tr>
+                <td>Announcement</td>
+                <td><strong>Sep 16, 2026</strong> — MLPerf Inference <strong>v6.1</strong> Closed Division</td>
+              </tr>
+              <tr>
+                <td>Cluster</td>
+                <td>Crusoe Cloud: <strong>512</strong> Instinct <strong>MI355X</strong> across <strong>64</strong> <code>mi355x-288gb-roce.8x</code> nodes on <strong>RoCE</strong> Ethernet</td>
+              </tr>
+              <tr>
+                <td>gpt-oss-120b (512-GPU)</td>
+                <td><strong>5.75M</strong> tok/s offline · <strong>5.39M</strong> tok/s Server (AMD/Crusoe; highest aggregate token throughput claimed for this round)</td>
+              </tr>
+              <tr>
+                <td>DeepSeek-R1 (512-GPU)</td>
+                <td><strong>2.90M</strong> tok/s Offline · <strong>2.41M</strong> tok/s Server</td>
+              </tr>
+              <tr>
+                <td>Serving stacks</td>
+                <td>gpt-oss: <strong>vLLM</strong>, native <strong>MXFP4</strong>, <strong>512</strong> independent single-GPU replicas + head-node dispatch; DeepSeek-R1: <strong>SGLang</strong>, one <strong>8</strong>-GPU replica per node (<strong>TP8 / EP8 / DP-attention 8</strong>), MXFP4 experts, <strong>FP8</strong> KV, <strong>BF16</strong> MLA-absorb</td>
+              </tr>
+              <tr>
+                <td>Scale claim</td>
+                <td>Near-linear throughput from <strong>1 → 64</strong> nodes (Crusoe supplemental)</td>
+              </tr>
+              <tr>
+                <td>72-GPU AMD line</td>
+                <td>GPT-OSS-120B: <strong>95%</strong> Offline + Server scale efficiency; ~<strong>1M</strong> tok/s (AMD supplemental)</td>
+              </tr>
+              <tr>
+                <td>MI355X (OAM / UBB 2.0)</td>
+                <td><strong>256</strong> CUs · <strong>288 GB</strong> HBM3E · <strong>8 TB/s</strong> · up to <strong>10.1</strong> PFLOPS MXFP4/MXFP6 (peak theoretical)</td>
+              </tr>
+              <tr>
+                <td>MI350P (PCIe 5.0 dual-slot, first MLPerf)</td>
+                <td><strong>128</strong> CUs · <strong>144 GB</strong> HBM3E · <strong>4 TB/s</strong> · up to <strong>4.6</strong> PFLOPS MXFP4/MXFP6</td>
+              </tr>
+              <tr>
+                <td>ROCm same-silicon (8-GPU MI355X vs v6.0)</td>
+                <td>GPT-OSS-120B: up to <strong>+38%</strong> Server / <strong>+28%</strong> Offline; Wan-2.2 SingleStream <strong>+70%</strong>; <strong>72</strong> GPUs in 6.1 beat <strong>94</strong> GPUs in 6.0 on multi-node GPT-OSS</td>
+              </tr>
+              <tr>
+                <td>Competitive color (AMD-cited Closed)</td>
+                <td>8-GPU MI355X led submitted 8-GPU <strong>B200</strong> GPT-OSS by <strong>33%</strong> Offline / <strong>26%</strong> Server and 8-GPU <strong>B300</strong> by <strong>14%</strong> / <strong>13%</strong>; 72-GPU MI355X led GB200 by <strong>18%</strong> Offline / <strong>7%</strong> Server</td>
+              </tr>
+              <tr>
+                <td>Partner spread</td>
+                <td><strong>7</strong> partners (Dell, Crusoe, MangoBoost, MiTAC, Oracle, HPE, Supermicro) averaged within <strong>~4%</strong> of AMD’s own numbers</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Preview and Closed Division results are peer-reviewed, but stack and topology still decide whether you can paste any multiplier into a capacity model. Treat AgentX / tok-per-megawatt columns from the NVIDIA Summit blog as a separate methodology from this RoCE table.
+        </p>
+
+        <h2>What the 512-GPU table actually says</h2>
+        <p>
+          Three levers matter if you already run or are quoting Instinct:
+        </p>
+        <ol>
+          <li>
+            <strong>Aggregate throughput on Ethernet.</strong> <strong>5.75M / 5.39M</strong> tok/s on gpt-oss-120b and <strong>2.90M / 2.41M</strong> on DeepSeek-R1 are cluster numbers, not a single-node flex. The fabric callout is explicit: <strong>standard RoCE</strong>, not a proprietary scale-up switch domain. That is the operational contrast to an
+            <a href="/vera-rubin-nvl72-mlperf-v6-1.html">NVL72</a>
+            tray — different landlord for the interconnect politics, different failure domain when a NIC or switch ASIC misbehaves.
+          </li>
+          <li>
+            <strong>How the model was carved.</strong> gpt-oss ran as <strong>512</strong> independent single-GPU vLLM replicas in native <strong>MXFP4</strong>. DeepSeek-R1 ran as <strong>64</strong> eight-GPU SGLang replicas with tensor + expert parallelism. If your fleet is one serving stack and one sharding recipe, do not collapse those two rows into one “MI355X is X×” cell.
+          </li>
+          <li>
+            <strong>The 72-GPU sanity check.</strong> AMD’s own <strong>95%</strong> scale efficiency and ~<strong>1M</strong> tok/s GPT-OSS line at <strong>72</strong> GPUs is the size most people can actually buy and operate before they talk about 512. Near-linear from 1→64 nodes is the claim that “more GPUs ≈ more revenue” is not fantasy <em>for that Crusoe submission</em> — still verify with your own burn-in, not a spreadsheet paste.
+          </li>
+        </ol>
+        <p>
+          This sits next to my
+          <a href="/helios-ualoe.html">Helios UALoE</a>
+          note the same way Rubin sits next to
+          <a href="/groq-3-lpx.html">Groq 3 LPX</a>
+          and
+          <a href="/dmatrix-raptor-nvlink-fusion-nvl144.html">d-Matrix Raptor</a>:
+          open-protocol Ethernet scale-up / scale-out is the AMD product thesis; MLPerf v6.1 is the receipt that the thesis can put half a thousand GPUs on one Closed Division scoreboard.
+        </p>
+
+        <h2>The +38% is the software audit</h2>
+        <p>
+          Hardware did not change between v6.0 and v6.1 for the MI355X configs Futurum and StorageReview highlight: still <strong>288 GB</strong> HBM3E and <strong>8 TB/s</strong> per GPU. The moving variable is <strong>ROCm</strong>. Up to <strong>+38%</strong> Server and <strong>+28%</strong> Offline on 8-GPU GPT-OSS, <strong>+70%</strong> on Wan-2.2 SingleStream, and a <strong>72</strong>-GPU cluster that out-throughput a <strong>94</strong>-GPU v6.0 submission — those are the lines I would put in a capacity ticket as <em>software appreciation</em>, not a new BOM.
+        </p>
+        <p>
+          AMD has also committed to a <strong>six-week</strong> ROCm release cadence (TheRock build system; ROCm <strong>10.0</strong> on Aug 27 as the first clocked release). One round of large gains does not prove the trajectory continues — Llama 2 70B already shows the mature-workload pattern where vendors tie because the easy kernels are gone. What changed is measurability: Closed Division, fixed silicon, partner reproduction within ~<strong>4%</strong>. That is a better audit trail than a vendor-only “3.3× since ROCm 7” claim.
+        </p>
+        <p>
+          Precision disclosure matters here. AMD says the GPT-OSS runs used the OpenAI <strong>MXFP4</strong> checkpoint with an <strong>FP8</strong> KV cache — the standard high-performance configuration, not an exotic quantization dodge — and has committed to publish reproduction steps. Keep that footnote next to any +38% slide.
+        </p>
+
+        <h2>MI350P and the partner band</h2>
+        <p>
+          Same CDNA 4 family, different chassis politics: <strong>MI350P</strong> is the dual-slot PCIe card (<strong>144 GB</strong> / <strong>4 TB/s</strong> / <strong>4.6</strong> PFLOPS peak MXFP4/MXFP6) making its first MLPerf appearance against selected RTX PRO 6000 Server and H200 NVL submissions. StorageReview also notes an eight-GPU <strong>MI350X</strong> holding roughly <strong>~80%</strong> of MI355X throughput across several workloads while MI355X carries a <strong>~40%</strong> higher rated TDP — useful when the facility is power-capped before it is FLOPS-capped.
+        </p>
+        <p>
+          Seven partners landing within ~<strong>4%</strong> of AMD’s reference (some slightly above) is the reproducibility band I care about more than any single leaderboard row. If your integrator cannot get within a few percent of that band on the published recipe, you have an ops problem, not a silicon problem.
+        </p>
+
+        <h2>Caveats I would write into any MI355X capacity ticket</h2>
+        <ol>
+          <li>
+            <strong>512-GPU ≠ your rack.</strong> Quote the Crusoe topology (64 × 8-GPU RoCE nodes, named stacks) separately from the 8-GPU and 72-GPU rows.
+          </li>
+          <li>
+            <strong>Stack-specific deltas.</strong> vLLM single-GPU replicas ≠ SGLang TP8/EP8. Match your serving path before you multiply.
+          </li>
+          <li>
+            <strong>Ethernet is the feature and the risk.</strong> RoCE scale-out is why this story exists next to Helios; it is also why NIC/firmware health and congestion control belong on the same ticket as HBM generation.
+          </li>
+          <li>
+            <strong>+38% is one cycle.</strong> Budget a re-run date under the six-week ROCm clock; do not freeze a software-only multiplier into a multi-year contract.
+          </li>
+          <li>
+            <strong>NVIDIA comparisons have footnotes.</strong> Some AMD vs NVIDIA slides still lean on v6.0 baselines where NVIDIA did not resubmit; prefer Closed same-round pairs (e.g. official 8-GPU B300) when you argue.
+          </li>
+          <li>
+            <strong>MI455X / Helios tray is absent.</strong> This round audits CDNA 4 (MI355X/MI350X/MI350P), not the Helios UALoE generation. Do not infer Helios multipliers from these tables.
+          </li>
+          <li>
+            <strong>Not a Rubin substitute.</strong>
+            <a href="/vera-rubin-nvl72-mlperf-v6-1.html">Vera Rubin NVL72</a>
+            answers a different interconnect and software stack question. Keep both columns.
+          </li>
+        </ol>
+
+        <h2>How I would use this tomorrow morning</h2>
+        <p>
+          If you already run MI355X, the actionable trio is: (a) pull the Closed Division gpt-oss and DeepSeek-R1 rows and compare <em>your</em> sharding recipe to Crusoe’s 512-replica vs TP8/EP8 split, (b) ask whether your ROCm train is on the six-week cadence before you assume the +38% has already landed in prod, and (c) put RoCE fabric health next to HBM generation on the same slide. If you are choosing among
+          <a href="/helios-ualoe.html">Helios UALoE</a>,
+          a full
+          <a href="/vera-rubin-nvl72-mlperf-v6-1.html">Rubin NVL72</a>
+          tray, and a dense MI355X Ethernet pod, MLPerf v6.1 answers the open-fabric aggregate-throughput question; it does not answer who owns your scale-up switch.
+        </p>
+        <p>
+          Create-only. Specs above are from MLCommons’ Sep 16 announcement and supplemental (AMD/Crusoe statements), StorageReview’s Sep 16 round-up, and Futurum’s Sep 16 ROCm analysis. Update when AMD publishes reproduction instructions or when MLPerf Endpoints starts accepting rolling MI455X results.
+        </p>
+        <p>
+          Sources:
+          <a href="https://mlcommons.org/2026/09/mlperf-inference-v6-1-results/" target="_blank" rel="noopener noreferrer">MLCommons</a>
+          ·
+          <a href="https://mlcommons.org/wp-content/uploads/2026/09/Supplemental-MLCommons-MLPerf-Inference-v6.1.pdf" target="_blank" rel="noopener noreferrer">Supplemental PDF</a>
+          ·
+          <a href="https://www.storagereview.com/news/mlperf-inference-v6-1-5-7x-per-accelerator-gains-a-512-gpu-run-and-vera-rubins-first-peer-reviewed-numbers" target="_blank" rel="noopener noreferrer">StorageReview</a>
+          ·
+          <a href="https://futurumgroup.com/insights/amd-mlperf-inference-61-results-show-rocm-gaining-38-on-the-same-mi355x-hardware/" target="_blank" rel="noopener noreferrer">Futurum</a>.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated September 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
