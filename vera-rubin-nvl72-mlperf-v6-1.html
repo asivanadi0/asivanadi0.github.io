@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Vera Rubin NVL72’s First MLPerf: 3.7× GB300 on Qwen3-VL — and the AgentX Tokens-per-Megawatt Asterisk — Anpoo Sivanadi</title>
+  <meta name="description" content="Vera Rubin NVL72’s first MLPerf Inference v6.1 preview — 3.7× GB300 on Qwen3-VL, plus the AgentX tokens-per-megawatt asterisk." />
+  <link rel="canonical" href="https://asivanadi0.github.io/vera-rubin-nvl72-mlperf-v6-1.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Vera Rubin NVL72’s First MLPerf: 3.7× GB300 on Qwen3-VL — and the AgentX Tokens-per-Megawatt Asterisk — Anpoo Sivanadi" />
+  <meta property="og:description" content="Vera Rubin NVL72’s first MLPerf Inference v6.1 preview — 3.7× GB300 on Qwen3-VL, plus the AgentX tokens-per-megawatt asterisk." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/vera-rubin-nvl72-mlperf-v6-1.html" />
+  <meta property="article:published_time" content="2026-09-16T18:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Vera Rubin NVL72’s First MLPerf: 3.7× GB300 on Qwen3-VL — and the AgentX Tokens-per-Megawatt Asterisk</h1>
+        <p class="article-meta">
+          <time datetime="2026-09-16">16 September 2026</time>
+          · Anpoo Sivanadi
+          · based on NVIDIA MLPerf / AI Infra Summit materials and CoreWeave multi-rack notes
+        </p>
+        <p class="dek article-dek">
+          Vera Rubin NVL72’s first MLPerf Inference v6.1 preview — 3.7× GB300 on Qwen3-VL, plus the AgentX tokens-per-megawatt asterisk.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          Last week’s
+          <a href="/dmatrix-raptor-nvlink-fusion-nvl144.html">d-Matrix Raptor</a>
+          note was decode silicon borrowing NVIDIA’s rack. Tonight is the other side of that whiteboard: <strong>what the NVL72 tray itself does when MLCommons opens the books</strong>, plus the Sep 15 AI Infra Summit numbers that try to reframe the unit of work as <strong>tokens per megawatt</strong>.
+        </p>
+        <p>
+          On <strong>September 16, 2026</strong>, NVIDIA published Vera Rubin NVL72’s first <strong>MLPerf Inference v6.1</strong> preview results. Same window: SemiAnalysis <strong>AgentX</strong> agentic tok/MW claims, Lambda’s first public <strong>DSX MaxLPS</strong> validation on Blackwell, and CoreWeave bringing up <strong>multi-rack</strong> Vera Rubin NVL72 on its cloud. Primary sources:
+          <a href="https://blogs.nvidia.com/blog/vera-rubin-nvl72-mlperf-inference/" target="_blank" rel="noopener noreferrer">NVIDIA MLPerf blog</a>,
+          <a href="https://blogs.nvidia.com/blog/ai-infra-summit-vera-rubin-dsx-energy-efficiencies-tokens-per-watt-ai-factories/" target="_blank" rel="noopener noreferrer">AI Infra Summit / DSX / AgentX blog</a>,
+          <a href="https://www.coreweave.com/news/coreweave-brings-up-multi-rack-nvidia-vera-rubin-nvl72-cluster" target="_blank" rel="noopener noreferrer">CoreWeave multi-rack PR</a>,
+          results retrieved from
+          <a href="https://www.mlcommons.org" target="_blank" rel="noopener noreferrer">mlcommons.org</a>
+          per NVIDIA’s citations.
+        </p>
+
+        <h2>Spec sheet (named numbers)</h2>
+        <div class="table-wrap" role="region" aria-label="Vera Rubin NVL72 named numbers spec sheet" tabindex="0">
+          <table>
+            <tbody>
+              <tr>
+                <td>Announcement</td>
+                <td><strong>Sep 16, 2026</strong> — Vera Rubin NVL72 MLPerf Inference <strong>v6.1</strong> preview debut</td>
+              </tr>
+              <tr>
+                <td>Suite / division</td>
+                <td>MLPerf Inference <strong>v6.1</strong>, Closed Division</td>
+              </tr>
+              <tr>
+                <td>Headline deltas (vendor, vs GB300 NVL72)</td>
+                <td>Up to <strong>3.7×</strong> throughput on <strong>Qwen3-VL</strong> (offline / server / interactive); up to <strong>2.5×</strong> on <strong>DeepSeek-R1</strong></td>
+              </tr>
+              <tr>
+                <td>Stacks named</td>
+                <td>Qwen3-VL: <strong><code>vLLM</code></strong> + <strong><code>NVIDIA Dynamo</code></strong>; DeepSeek-R1: <strong><code>TensorRT-LLM</code></strong></td>
+              </tr>
+              <tr>
+                <td>Cited MLPerf entries</td>
+                <td>Vera Rubin preview: <strong><code>6.1-0106</code></strong>, <strong><code>6.1-0074</code></strong>; GB300 scale pair: <strong><code>6.1-0073</code></strong>, <strong><code>6.1-0074</code></strong> (retrieved Sep 16, 2026)</td>
+              </tr>
+              <tr>
+                <td>Scale-up claim</td>
+                <td>GB300 DeepSeek-R1 offline: <strong>1→4</strong> racks (<strong>72→288</strong> GPUs) at <strong>99%</strong> scaling efficiency</td>
+              </tr>
+              <tr>
+                <td>Software-only gain</td>
+                <td>GB300 Qwen3-VL up to <strong>1.6×</strong> vs <strong>v6.0</strong> (lower KV cache precision, kernel fusion, disaggregated serving via <code>vLLM</code> + <code>Dynamo</code>)</td>
+              </tr>
+              <tr>
+                <td>Video color (GB300)</td>
+                <td>WAN 2.2 text-to-video: <strong>0.65</strong> 720p videos/s @ <strong>5.7</strong> s/video — <strong>9×</strong> throughput / <strong>7.5×</strong> lower latency vs single node (vendor)</td>
+              </tr>
+              <tr>
+                <td>Partner preview</td>
+                <td><strong>Nebius</strong> also submitted Vera Rubin NVL72 preview results</td>
+              </tr>
+              <tr>
+                <td>Ecosystem</td>
+                <td><strong>19</strong> partners in the broader NVIDIA v6.1 story; <strong>8</strong> on multi-node Blackwell NVL72</td>
+              </tr>
+              <tr>
+                <td>AgentX (SemiAnalysis; Sep 15 blog)</td>
+                <td>DeepSeek <strong>V4 Pro</strong>: up to <strong>30×</strong> throughput per megawatt vs GB300 NVL72; up to <strong>45×</strong> lower cost per million tokens (vendor framing)</td>
+              </tr>
+              <tr>
+                <td>DSX MaxLPS (Lambda on Blackwell)</td>
+                <td><strong>19</strong> nodes in a <strong>16</strong>-node full-power budget; ~<strong>4M → 5M</strong> tok/s cluster (<strong>+24%</strong>); <strong>+23%</strong> perf/W; Rubin claim: up to <strong>+40%</strong> GPUs in the same megawatt envelope</td>
+              </tr>
+              <tr>
+                <td>Groq 3 LPX combo (same Summit blog)</td>
+                <td>Up to <strong>35×</strong> tok/MW vs <strong>GB200</strong> NVL72 for <strong>2T+</strong> param / long-context path; <strong>2,529</strong> output tok/s/user on <strong>100K</strong>-context Qwen 3.8 <strong>27B</strong></td>
+              </tr>
+              <tr>
+                <td>CoreWeave (Sep 16)</td>
+                <td>Multi-rack Vera Rubin NVL72: <strong>72</strong> Rubin GPUs + <strong>36</strong> Vera CPUs per rack; <strong>NVLink 6</strong>; <strong>2×</strong> ConnectX-9 per GPU → <strong>1.6 Tb/s</strong> scale-out per GPU; Spectrum-X Ethernet between racks</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Preview results are peer-reviewed MLPerf entries, but they are still <strong>early silicon + early software</strong>. Treat the AgentX and MaxLPS lines as a separate methodology column from MLPerf Closed.
+        </p>
+
+        <h2>What the MLPerf table actually says</h2>
+        <p>
+          Three levers show up in NVIDIA’s own framing, and they map cleanly to how I write capacity tickets:
+        </p>
+        <ol>
+          <li>
+            <strong>System performance.</strong> Rubin NVL72’s first preview beats GB300 NVL72 by up to <strong>3.7×</strong> on Qwen3-VL and <strong>2.5×</strong> on DeepSeek-R1. Those are MoE-heavy, multi-scenario workloads — not a single chat prompt. The stack callouts matter: <code>Dynamo</code> + <code>vLLM</code> on the VL path, <code>TensorRT-LLM</code> on the reasoning path. If your fleet is one serving stack, do not paste the other stack’s multiplier into the spreadsheet.
+          </li>
+          <li>
+            <strong>Scaling efficiency.</strong> The GB300 four-rack DeepSeek-R1 offline line (<strong>99%</strong> from 72→288 GPUs) is the boring number I care about most. Peak tok/s that collapses when you add racks is a tax on every interconnect and orchestrator bug you have not found yet. Near-linear scale on a Closed Division run is the claim that “more GPUs ≈ more revenue” is not fantasy <em>for that submission</em>.
+          </li>
+          <li>
+            <strong>Software velocity.</strong> Up to <strong>1.6×</strong> on GB300 Qwen3-VL from v6.0→v6.1 without a new tray is the reminder that InferenceX / MLPerf deltas keep moving after the BOM freezes. Lower KV precision, kernel fusion, and disaggregated prefill/decode are the named levers. Post-deadline GPT-OSS-120B and DLRMv3 gains are explicitly <strong>not</strong> MLCommons-verified yet — leave them out of any contract language.
+          </li>
+        </ol>
+        <p>
+          NVIDIA also points at <code>NVFP4</code> across weights, attention, and KV cache, and at sixth-generation NVLink / NVLink Switch (vendor: <strong>10×</strong> packet rate and <strong>3×</strong> lower latency vs off-the-shelf Ethernet) as the rack fabric that makes expert parallelism and disaggregation pay off. That is the same NVL72 domain
+          <a href="/groq-3-lpx.html">Groq 3 LPX</a>
+          and
+          <a href="/dmatrix-raptor-nvlink-fusion-nvl144.html">Raptor</a>
+          are trying to sit next to — different decode hypotheses, one landlord for the switch tray.
+        </p>
+
+        <h2>AgentX and MaxLPS are not MLPerf</h2>
+        <p>
+          MLPerf Closed is request-shaped: offline, server, interactive scenarios with peer review. <strong>AgentX</strong> is trajectory-shaped: SemiAnalysis traces that keep context growth, tool-call delay, and sub-agent spawn. NVIDIA’s Summit blog says a single agent session can accumulate ~<strong>15×</strong> the tokens of a simple chat request. On that corpus, Vera Rubin NVL72 is claimed at up to <strong>30×</strong> tok/MW vs GB300 on DeepSeek V4 Pro, with up to <strong>45×</strong> lower $/M tokens.
+        </p>
+        <p>
+          I will not collapse 30× into the same cell as 3.7×. Different denominator (megawatts and agent trajectories vs Closed Division throughput), different governance (SemiAnalysis dashboard + NVIDIA implementation notes vs MLCommons). Useful as an <strong>agent-fleet stress test</strong>, not as a substitute for the Qwen3-VL / DeepSeek-R1 table.
+        </p>
+        <p>
+          <strong>DSX MaxLPS</strong> is the power scheduler story. Lambda’s Blackwell validation: fit <strong>19</strong> nodes in the power budget you thought was <strong>16</strong>, pick up ~<strong>1M</strong> tok/s cluster-wide (<strong>4M→5M</strong>, <strong>+24%</strong>) and <strong>+23%</strong> perf/W. The Rubin forward claim is up to <strong>+40%</strong> GPUs in the same megawatt envelope “in the right deployment environments.” That is a facility-controls product, not a Tensor Core. If your site is hard-capped on MW, MaxLPS and Flex (Emerald AI / Silicon Valley Power flexible-load demo in the same blog) belong on the same ticket as HBM generation.
+        </p>
+        <p>
+          The Summit blog also restates the
+          <a href="/groq-3-lpx.html">Groq 3 LPX</a>
+          pairing: up to <strong>35×</strong> tok/MW vs GB200 for <strong>2T+</strong> long-context paths, and <strong>2,529</strong> tok/s/user at <strong>100K</strong> on Qwen 3.8 27B. Read that next to my earlier LPX post the same way I read Raptor: SRAM decode under the NVIDIA roof, not a third interconnect politics.
+        </p>
+
+        <h2>CoreWeave: the multi-rack receipt</h2>
+        <p>
+          Same day as the MLPerf post, CoreWeave said it brought up <strong>multi-rack</strong> Vera Rubin NVL72 — hundreds of Rubin GPUs as one scale-out cluster. Per-rack BOM in their PR: <strong>72</strong> Rubin + <strong>36</strong> Vera, NVLink 6, ConnectX-9, BlueField-4; <strong>two</strong> ConnectX-9 per GPU for <strong>1.6 Tb/s</strong> scale-out bandwidth per GPU across multiplane / multirail Spectrum-X. That is the operational receipt that “preview MLPerf” is not only a lab submission lane. It does not independently verify the 3.7× line; it does say the tray is past single-rack bring-up at at least one AI cloud.
+        </p>
+
+        <h2>Caveats I would write into any Rubin capacity ticket</h2>
+        <ol>
+          <li>
+            <strong>Preview ≠ steady-state.</strong> First MLPerf preview submissions improve with software. Budget a re-run date, not a frozen multiplier.
+          </li>
+          <li>
+            <strong>Stack-specific deltas.</strong> 3.7× is Qwen3-VL with <code>vLLM</code>+<code>Dynamo</code>; 2.5× is DeepSeek-R1 with <code>TensorRT-LLM</code>. Match your serving stack before you multiply.
+          </li>
+          <li>
+            <strong>AgentX ≠ MLPerf.</strong> Keep tok/MW agent numbers in a separate column with methodology notes. Governance and corpus matter as much as the headline.
+          </li>
+          <li>
+            <strong>MaxLPS “+40% GPUs” is conditional.</strong> Lambda’s measured +24% tok/s is on Blackwell under a named power budget; the Rubin 40% is a forward claim for the right site.
+          </li>
+          <li>
+            <strong>Fungibility is the product pitch.</strong> Same NVL72 domain for training and inference is the reason Fusion partners (Raptor,
+            <a href="/nvhbm.html">NVHBM</a>)
+            and LPX keep showing up in the same blogs. Price the full rack (Vera + NVSwitch + NICs + cooling + power software), not the GPU sticker alone.
+          </li>
+          <li>
+            <strong>Not a Helios substitute.</strong>
+            <a href="/helios-ualoe.html">Helios UALoE</a>
+            is still the open-protocol Ethernet-bridge lane. Rubin MLPerf does not change UALink politics.
+          </li>
+        </ol>
+
+        <h2>How I would use this tomorrow morning</h2>
+        <p>
+          If you already run Blackwell NVL72, the actionable trio is: (a) pull the Closed Division entries <strong><code>6.1-0106</code> / <code>6.1-0074</code></strong> and compare <em>your</em> model mix to Qwen3-VL and DeepSeek-R1, (b) ask whether disaggregated prefill/decode + <code>Dynamo</code> is on your roadmap before you assume Rubin’s multiplier, and (c) put MaxLPS / site MW headroom on the same slide as HBM and NVLink generation. If you are choosing among
+          <a href="/groq-3-lpx.html">LPX</a>,
+          <a href="/dmatrix-raptor-nvlink-fusion-nvl144.html">Raptor</a>,
+          and a full Rubin tray, MLPerf answers the GPU-rack throughput question; AgentX answers a different one about agent trajectories per megawatt; neither answers who owns your scale-up switch.
+        </p>
+        <p>
+          Create-only. Specs above are from NVIDIA’s Sep 16 MLPerf blog (citing MLCommons entries retrieved that day), NVIDIA’s Sep 15 AI Infra Summit blog, and CoreWeave’s Sep 16 multi-rack PR. Update when MLCommons publishes fuller result tables or when independent AgentX submissions from other vendors land on the same dashboard.
+        </p>
+        <p>
+          Sources:
+          <a href="https://blogs.nvidia.com/blog/vera-rubin-nvl72-mlperf-inference/" target="_blank" rel="noopener noreferrer">NVIDIA MLPerf</a>
+          ·
+          <a href="https://blogs.nvidia.com/blog/ai-infra-summit-vera-rubin-dsx-energy-efficiencies-tokens-per-watt-ai-factories/" target="_blank" rel="noopener noreferrer">NVIDIA AI Infra Summit / DSX / AgentX</a>
+          ·
+          <a href="https://www.coreweave.com/news/coreweave-brings-up-multi-rack-nvidia-vera-rubin-nvl72-cluster" target="_blank" rel="noopener noreferrer">CoreWeave</a>
+          ·
+          <a href="https://www.mlcommons.org" target="_blank" rel="noopener noreferrer">MLCommons</a>.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated September 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
