@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AMD EPYC Venice vs Nvidia Vera: 2.24× SPECrate, 1.6 TB/s Stream — and the Compiler Asterisk — Anpoo Sivanadi</title>
+  <meta name="description" content="AMD EPYC Venice vs Nvidia Vera — 2.24× SPECrate, 1.6 TB/s Stream, plus the compiler asterisk." />
+  <link rel="canonical" href="https://asivanadi0.github.io/epyc-venice-vera-specrate-stream.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="AMD EPYC Venice vs Nvidia Vera: 2.24× SPECrate, 1.6 TB/s Stream — and the Compiler Asterisk — Anpoo Sivanadi" />
+  <meta property="og:description" content="AMD EPYC Venice vs Nvidia Vera — 2.24× SPECrate, 1.6 TB/s Stream, plus the compiler asterisk." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/epyc-venice-vera-specrate-stream.html" />
+  <meta property="article:published_time" content="2026-09-19T06:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>AMD EPYC Venice vs Nvidia Vera: 2.24× SPECrate, 1.6 TB/s Stream — and the Compiler Asterisk</h1>
+        <p class="article-meta">
+          <time datetime="2026-09-19">19 September 2026</time>
+          · Anpoo Sivanadi
+          · based on AMD Newsroom EPYC 9006 brief, architectural white paper, and Sep 18–19 Tom’s / WCCFTech reads
+        </p>
+        <p class="dek article-dek">
+          AMD EPYC Venice vs Nvidia Vera — 2.24× SPECrate, 1.6 TB/s Stream, plus the compiler asterisk.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          This week’s
+          <a href="/vera-rubin-nvl72-mlperf-v6-1.html">Vera Rubin NVL72 MLPerf</a>
+          note was about what the <strong>accelerator tray</strong> does on DeepSeek-R1 and Qwen3-VL. This morning is the other half of a Rubin-class rack: <strong>what the host CPU claims when AMD puts Zen 6 Venice on the same SPECrate® sheet as Nvidia’s 88-core Vera — and why the footnotes matter as much as the multipliers.</strong>
+        </p>
+        <p>
+          On <strong>September 18, 2026</strong>, AMD’s
+          <a href="https://newsroom.amd.com/news/amd-epyc-cpus-deliver-every-layer-agentic-ai-stack/" target="_blank" rel="noopener noreferrer">Newsroom</a>
+          published an “agentic AI stack” brief pointing at a new
+          <a href="https://www.amd.com/content/dam/amd/en/documents/epyc-business-docs/white-papers/amd-epyc-9006-server-cpus-architectural-leadership.pdf" target="_blank" rel="noopener noreferrer">EPYC 9006 architectural white paper</a>.
+          The headline numbers are not subtle. In <strong>SPECrate® 2026 Integer</strong>, a dual-socket <strong>EPYC 9996</strong> (256 cores per socket in the platform comparison) is estimated at <strong>~2.24×</strong> a dual-socket Vera platform, and a <strong>96-core high-frequency</strong> Venice SKU is estimated at <strong>~1.2×</strong> Vera’s <strong>per-core</strong> score. Against Intel’s <strong>Xeon 6980P</strong>, the same 9996 lands around <strong>2.37×</strong> on that SPEC sheet and <strong>2.4×–3.7×</strong> on AMD’s Redis / NGINX / MongoDB / OpenSSL / TPROC-C kit. Create-only; treat every multiplier as vendor methodology until you rerun it on your compiler and BIOS.
+        </p>
+
+        <h2>Spec sheet (what AMD put on the table)</h2>
+        <div class="table-wrap" role="region" aria-label="EPYC Venice vs Vera named numbers spec sheet" tabindex="0">
+          <table>
+            <tbody>
+              <tr>
+                <td>Family</td>
+                <td>6th Gen <strong>AMD EPYC 9006</strong> (“Venice”, Zen 6)</td>
+              </tr>
+              <tr>
+                <td>Flagship named</td>
+                <td><strong>EPYC 9996</strong> — <strong>256</strong> cores / socket</td>
+              </tr>
+              <tr>
+                <td>Per-core foil</td>
+                <td><strong>96-core</strong> high-frequency Venice vs <strong>88-core</strong> Nvidia <strong>Vera</strong></td>
+              </tr>
+              <tr>
+                <td>Power language</td>
+                <td><strong>Default CPU Power</strong> (succeeds TDP); <strong>600 W</strong> cited on several 9996 configs</td>
+              </tr>
+              <tr>
+                <td>Memory (Venice foil)</td>
+                <td>Up to <strong>16</strong> channels; <strong>12,800 MT/s</strong> MRDIMM class; vendor <strong>~1.6 TB/s</strong> STREAM</td>
+              </tr>
+              <tr>
+                <td>Memory (Vera foil)</td>
+                <td>LPDDR5X / SOCAMM2 class; vendor/Phoronix-derived <strong>~1.2 TB/s</strong> STREAM</td>
+              </tr>
+              <tr>
+                <td>SPECrate 2026 int (platform)</td>
+                <td>2P <strong>9996</strong> est. <strong>2070</strong> vs 2P Vera est. <strong>925</strong> → <strong>~2.24×</strong> (GCC <strong>15.2</strong>, AMD footnote 9xx6-050)</td>
+              </tr>
+              <tr>
+                <td>SPECrate 2026 int (per-core)</td>
+                <td>2P <strong>96c HF</strong> est. <strong>1210</strong> (<strong>6.3</strong>/core) vs Vera <strong>925</strong> (<strong>5.3</strong>/core) → <strong>~1.2×</strong> (9xx6-049)</td>
+              </tr>
+              <tr>
+                <td>Gen-on-gen</td>
+                <td><strong>~78%</strong> faster than 5th Gen <strong>EPYC 9965</strong> (192 cores) on the same SPEC slide</td>
+              </tr>
+              <tr>
+                <td>vs Xeon 6980P (enterprise kit)</td>
+                <td>Redis <strong>~2.9×</strong>, NGINX <strong>~3.7×</strong>, MongoDB <strong>~3.5×</strong>, OpenSSL <strong>~2.5×</strong>, MySQL TPROC-C <strong>~2.6×</strong></td>
+              </tr>
+              <tr>
+                <td>Modeled rack</td>
+                <td><strong>100 kW</strong> → est. <strong>~3.4×</strong> Vera throughput (geomean of six host workloads)</td>
+              </tr>
+              <tr>
+                <td>Status</td>
+                <td>Venice <strong>in production</strong>; OEM platforms launching; cloud deploy “later this year”</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Primary sources:
+          <a href="https://newsroom.amd.com/news/amd-epyc-cpus-deliver-every-layer-agentic-ai-stack/" target="_blank" rel="noopener noreferrer">AMD Newsroom</a>
+          ·
+          <a href="https://www.amd.com/content/dam/amd/en/documents/epyc-business-docs/white-papers/amd-epyc-9006-server-cpus-architectural-leadership.pdf" target="_blank" rel="noopener noreferrer">EPYC 9006 white paper PDF</a>
+          ·
+          <a href="https://www.tomshardware.com/pc-components/cpus/amd-shares-first-official-benchmarks-for-epyc-venice-cpus-targets-nvidia-company-claims-256-core-chip-is-more-than-twice-as-fast-as-nvidia-vera-96-core-model-20-percent-faster-per-core" target="_blank" rel="noopener noreferrer">Tom’s Hardware</a>
+          ·
+          <a href="https://wccftech.com/amd-targets-nvidia-vera-in-latest-epyc-venice-agentic-ai-benchmarks/" target="_blank" rel="noopener noreferrer">WCCFTech</a>.
+        </p>
+
+        <h2>Why the host CPU still matters on a Rubin tray</h2>
+        <p>
+          Agentic serving is not “GPU FLOPS, then ignore the socket.” Prefill/decode still need a host that can keep KV traffic, tool calls, retrieval, and side-car services moving without turning the CPU into the silent throttle. AMD’s brief is explicit about that framing: databases, web front ends, FAISS-class retrieval, and multi-persona agent replays share one workflow, so one SKU profile is the wrong bet.
+        </p>
+        <p>
+          The numbers that survive a capacity ticket are the boring ones. <strong>SPECrate 2026 Integer</strong> gives a named rate score and a per-core division you can recompute. <strong>STREAM Triad</strong> puts memory bandwidth on the same page as Vera — WCCFTech’s read of AMD’s chart is <strong>~1.6 TB/s</strong> on the 16-channel Venice foil versus <strong>~1.2 TB/s</strong> on Vera, with the down-cored <strong>96</strong>-vs-<strong>88</strong> comparison still <strong>~18%</strong> aggregate and <strong>~8%</strong> per-core ahead. That is host DRAM bandwidth for agent sandboxes and embedding services, not HBM next to the XPU. Keep it on a different tab from
+          <a href="/nvhbm.html">NVHBM</a>
+          and
+          <a href="/meta-mtia-450-arke-hbm-flashattention.html">MTIA 450’s 18.4 TB/s</a>.
+        </p>
+        <p>
+          The rack slide is the procurement bait: inside a modeled <strong>100 kW</strong> envelope, AMD claims <strong>~3.4×</strong> Vera on a geomean of SPECrate 2017 int, SSJ, NGINX, Redis, Memcached, and TPROC-C (<a href="https://www.amd.com/content/dam/amd/en/documents/solutions/ai/methodology-description.pdf" target="_blank" rel="noopener noreferrer">methodology PDF</a>). Useful as a density thought experiment. Useless as a substitute for <em>your</em> tokens-per-joule on the GPU side of the same rack.
+        </p>
+
+        <h2>How this sits next to Rubin, Helios, and MI355X</h2>
+        <p>
+          <a href="/vera-rubin-nvl72-mlperf-v6-1.html">Vera Rubin NVL72</a>
+          is a <strong>preview</strong> MLPerf Inference v6.1 tray story — up to <strong>3.7×</strong> GB300 on Qwen3-VL, <strong>2.5×</strong> on DeepSeek-R1. This Venice note does not reopen that accelerator column. It asks whether the <strong>Grace/Vera-class host</strong> that ships with Nvidia’s rack story still wins the <em>CPU</em> half of an agentic plant when AMD publishes Zen 6 integer and STREAM math.
+        </p>
+        <p>
+          <a href="/helios-ualoe.html">Helios UALoE</a>
+          is AMD’s open scale-up bet on the <strong>GPU</strong> side (MI455X + Ethernet bridge until native UALink silicon). Venice is the matching <strong>host</strong> story: same vendor, different socket, same “do not collapse CPU and XPU into one slide” discipline.
+          <a href="/amd-mi355x-mlperf-v6-1-512-gpu.html">MI355X 512-GPU</a>
+          remains the serving-scale Instinct row — RoCE tok/s, not SPECrate.
+        </p>
+        <p>
+          I would not read AMD’s “agentic AI” chart labels (NGINX, TPCx-AI kit, FAISS, derived TPC-H/TPC-C, multi-persona replay) as a substitute for InferenceX or AgentX. They are host-side proxies. Pin them as such.
+        </p>
+
+        <h2>Caveats I would write into any Venice vs Vera ticket</h2>
+        <ol>
+          <li>
+            <strong>Vendor estimates.</strong> AMD’s SPECrate 2026 footnotes call out <strong>preliminary internal estimates</strong> (as of <strong>July 22, 2026</strong> for the headline Vera comparisons). Not a published SPEC submission you can look up on spec.org yet.
+          </li>
+          <li>
+            <strong>Compiler hygiene.</strong> The Newsroom footnotes for 9xx6-049 / 9xx6-050 put <strong>both</strong> Venice and Vera on <strong>GCC 15.2</strong>. Tom’s Hardware flags that some white-paper <strong>subtest</strong> slides appear to use <strong>GCC 16.1</strong> on Venice against Nvidia’s published <strong>GCC 15.2</strong> Vera numbers. Until AMD aligns every chart, treat subtest rankings as directional.
+          </li>
+          <li>
+            <strong>Down-coring.</strong> The fair-looking <strong>96</strong>-vs-<strong>88</strong> per-core foil is a <strong>down-cored 9996</strong>, not necessarily the shipping high-frequency SKU’s final power envelope. Tom’s notes the HF SKU tops out nearer <strong>500 W</strong> while some foils still smell like a <strong>600 W</strong> Default CPU Power budget.
+          </li>
+          <li>
+            <strong>Different memory tech.</strong> Venice’s MRDIMM / RDIMM story is not Vera’s LPDDR5X / SOCAMM2 story. Bandwidth wins do not automatically transfer to every NUMA and CXL topology.
+          </li>
+          <li>
+            <strong>Enterprise kit is AMD-lab.</strong> Redis / NGINX / MongoDB / OpenSSL / MySQL numbers are AMD internal KVM runs (plus a public Graviton5 cloud instance in some charts). Re-benchmark on your hypervisor and NIC.
+          </li>
+          <li>
+            <strong>100 kW rack is a model.</strong> Geomean host throughput under a power cap is not tokens per megawatt on Rubin silicon.
+          </li>
+          <li>
+            <strong>CPU ≠ GPU.</strong> Do not import Venice multipliers into an MI355X or Rubin capacity model.
+          </li>
+        </ol>
+
+        <h2>How I would use this tomorrow morning</h2>
+        <p>
+          Put a <strong>Venice 9996 / 96c HF / Vera 88c</strong> row next to your
+          <a href="/vera-rubin-nvl72-mlperf-v6-1.html">Vera Rubin</a>
+          tray BOM so host SPECrate, STREAM, and Default CPU Power sit beside GPU MLPerf — not underneath it as marketing glue. If you are sizing agent sandboxes, retrieval sidecars, or tool-call fleets, start from the <strong>per-core</strong> and <strong>STREAM</strong> columns and only then look at the <strong>2.24×</strong> platform rate. If you buy Nvidia racks for the XPU fabric, read this as competitive host intelligence, not a reason to rip out NVLink. If you are already on
+          <a href="/helios-ualoe.html">Helios</a>
+          or Instinct, Venice is the obvious host candidate to validate before you standardize Zen 6 BIOS and memory SKUs.
+        </p>
+        <p>
+          Create-only. Specs and ratios from AMD’s Sep 18 Newsroom brief, the EPYC 9006 white paper, and Sep 18–19 Tom’s / WCCFTech reads of the same charts. Update when AMD or Nvidia posts matched GCC 16 SPEC submissions or third-party STREAM on shipping Venice OEM boards.
+        </p>
+        <p>
+          Sources:
+          <a href="https://newsroom.amd.com/news/amd-epyc-cpus-deliver-every-layer-agentic-ai-stack/" target="_blank" rel="noopener noreferrer">AMD Newsroom</a>
+          ·
+          <a href="https://www.amd.com/content/dam/amd/en/documents/epyc-business-docs/white-papers/amd-epyc-9006-server-cpus-architectural-leadership.pdf" target="_blank" rel="noopener noreferrer">EPYC 9006 white paper</a>
+          ·
+          <a href="https://www.amd.com/content/dam/amd/en/documents/solutions/ai/methodology-description.pdf" target="_blank" rel="noopener noreferrer">Methodology PDF</a>
+          ·
+          <a href="https://www.tomshardware.com/pc-components/cpus/amd-shares-first-official-benchmarks-for-epyc-venice-cpus-targets-nvidia-company-claims-256-core-chip-is-more-than-twice-as-fast-as-nvidia-vera-96-core-model-20-percent-faster-per-core" target="_blank" rel="noopener noreferrer">Tom’s Hardware</a>
+          ·
+          <a href="https://wccftech.com/amd-targets-nvidia-vera-in-latest-epyc-venice-agentic-ai-benchmarks/" target="_blank" rel="noopener noreferrer">WCCFTech</a>.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated September 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
