@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Meta MTIA 450 / Arke: 18.4 TB/s HBM, FlashAttention in Silicon — and the Sep 1 Bring-Up Asterisk — Anpoo Sivanadi</title>
+  <meta name="description" content="Meta MTIA 450 / Arke — 18.4 TB/s HBM, FlashAttention in silicon, plus the Sep 1 bring-up asterisk." />
+  <link rel="canonical" href="https://asivanadi0.github.io/meta-mtia-450-arke-hbm-flashattention.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Meta MTIA 450 / Arke: 18.4 TB/s HBM, FlashAttention in Silicon — and the Sep 1 Bring-Up Asterisk — Anpoo Sivanadi" />
+  <meta property="og:description" content="Meta MTIA 450 / Arke — 18.4 TB/s HBM, FlashAttention in silicon, plus the Sep 1 bring-up asterisk." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/meta-mtia-450-arke-hbm-flashattention.html" />
+  <meta property="article:published_time" content="2026-09-18T18:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Meta MTIA 450 / Arke: 18.4 TB/s HBM, FlashAttention in Silicon — and the Sep 1 Bring-Up Asterisk</h1>
+        <p class="article-meta">
+          <time datetime="2026-09-18">18 September 2026</time>
+          · Anpoo Sivanadi
+          · based on Meta MTIA roadmap post and Sep 15–16 Bloomberg bring-up reporting
+        </p>
+        <p class="dek article-dek">
+          Meta MTIA 450 / Arke — 18.4 TB/s HBM, FlashAttention in silicon, plus the Sep 1 bring-up asterisk.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          This morning’s
+          <a href="/lightmatter-passage-l20-cpx-bidi-open-cpx.html">Lightmatter Passage L20 CPX</a>
+          note was about how many fibers a <strong>512-GPU</strong> optical scale-up pod actually needs. Tonight is the other half of the hyperscale inference ticket: <strong>what a captive GenAI ASIC looks like when HBM bandwidth, Softmax, and MoE FFN FLOPS are the design center — and the first TSMC samples just lit up.</strong>
+        </p>
+        <p>
+          On <strong>September 15–16, 2026</strong>, Bloomberg (via
+          <a href="https://www.trendforce.com/news/2026/09/16/news-meta-targets-1h27-deployment-for-new-tsmc-made-ai-chip-claims-efficiency-edge-over-nvidia/" target="_blank" rel="noopener noreferrer">TrendForce</a>
+          and
+          <a href="https://www.livemint.com/ai/bid-to-cut-nvidia-dependence-inside-metas-plan-to-deploy-cheaper-in-house-ai-chips-11789488263086.html" target="_blank" rel="noopener noreferrer">Mint</a>)
+          reported Meta is testing <strong>MTIA 450</strong> (code name <strong>Arke</strong>), co-designed with <strong>Broadcom</strong> and fabbed at <strong>TSMC</strong>. Twelve dies arrived <strong>September 1</strong>; first silicon sat <strong>within 2–3%</strong> of simulation; day one they ran models from Meta, DeepSeek, and Alibaba. Mass deployment is aimed at <strong>1H27</strong>, with a stated commit of <strong>more than 1 GW</strong> of the new chips over twelve months. Named package numbers live in Meta’s
+          <a href="https://ai.meta.com/blog/meta-mtia-scale-ai-chips-for-billions/" target="_blank" rel="noopener noreferrer">MTIA roadmap post</a>
+          (tables also in
+          <a href="https://www.datacenterdynamics.com/en/news/meta-unveils-next-four-generations-of-its-mtia-chip/" target="_blank" rel="noopener noreferrer">DCD</a>
+          and
+          <a href="https://fudzilla.com/meta-doubles-down-on-mtia-asics-for-inference/" target="_blank" rel="noopener noreferrer">Fudzilla</a>).
+          Specs below are vendor/roadmap figures unless marked as Bloomberg bring-up color. Create-only; this is not a merchant SKU.
+        </p>
+
+        <h2>Spec sheet (MTIA 450 / Arke)</h2>
+        <div class="table-wrap" role="region" aria-label="MTIA 450 / Arke named numbers spec sheet" tabindex="0">
+          <table>
+            <tbody>
+              <tr>
+                <td>Role</td>
+                <td>Captive <strong>GenAI inference</strong> ASIC (R&amp;R + training as secondary)</td>
+              </tr>
+              <tr>
+                <td>Partners</td>
+                <td>Design: Meta + <strong>Broadcom</strong>; fab: <strong>TSMC</strong> (node undisclosed)</td>
+              </tr>
+              <tr>
+                <td>Module TDP</td>
+                <td><strong>1,400 W</strong></td>
+              </tr>
+              <tr>
+                <td>HBM</td>
+                <td><strong>288 GB</strong>; <strong>18.4 TB/s</strong> (<strong>2×</strong> MTIA 400’s <strong>9.2 TB/s</strong>)</td>
+              </tr>
+              <tr>
+                <td>Compute</td>
+                <td><strong>7</strong> PFLOPS FP8/MX8; <strong>~21</strong> PFLOPS MX4; <strong>3.5</strong> PFLOPS BF16</td>
+              </tr>
+              <tr>
+                <td>Precision</td>
+                <td><strong>6×</strong> MX4 vs FP16/BF16; mixed low-precision without conversion tax</td>
+              </tr>
+              <tr>
+                <td>MoE / attention</td>
+                <td><strong>+75%</strong> MX4 vs prior for MoE FFN; HW <strong>Softmax</strong> + <strong>FlashAttention</strong></td>
+              </tr>
+              <tr>
+                <td>Scale-up</td>
+                <td><strong>72</strong> devices; <strong>1.2 TB/s</strong> scale-up; <strong>100 GB/s</strong> scale-out</td>
+              </tr>
+              <tr>
+                <td>Software</td>
+                <td><strong>PyTorch</strong>-native; <strong>vLLM</strong> plugin; <code>torch.compile</code>; Triton; OCP</td>
+              </tr>
+              <tr>
+                <td>Cadence</td>
+                <td>New chip ~every <strong>six months</strong>; reusable chassis/rack/network</td>
+              </tr>
+              <tr>
+                <td>Successor</td>
+                <td><strong>MTIA 500 / Astrid</strong> — <strong>YE2027</strong> entry; +50% HBM BW, up to +80% capacity, +43% MX4</td>
+              </tr>
+              <tr>
+                <td>Availability</td>
+                <td>Internal only — <strong>not for sale</strong>; mass deploy <strong>early 2027</strong> / <strong>1H27</strong></td>
+              </tr>
+              <tr>
+                <td>Bring-up (Sep 2026)</td>
+                <td><strong>12</strong> TSMC samples (Sep 1); <strong>2–3%</strong> of sim; day-one Meta/DeepSeek/Alibaba; <strong>&gt;1 GW</strong> / 12-mo</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Primary sources:
+          <a href="https://ai.meta.com/blog/meta-mtia-scale-ai-chips-for-billions/" target="_blank" rel="noopener noreferrer">Meta</a>
+          ·
+          <a href="https://www.trendforce.com/news/2026/09/16/news-meta-targets-1h27-deployment-for-new-tsmc-made-ai-chip-claims-efficiency-edge-over-nvidia/" target="_blank" rel="noopener noreferrer">TrendForce/Bloomberg</a>
+          ·
+          <a href="https://www.livemint.com/ai/bid-to-cut-nvidia-dependence-inside-metas-plan-to-deploy-cheaper-in-house-ai-chips-11789488263086.html" target="_blank" rel="noopener noreferrer">Mint</a>
+          ·
+          <a href="https://www.datacenterdynamics.com/en/news/meta-unveils-next-four-generations-of-its-mtia-chip/" target="_blank" rel="noopener noreferrer">DCD</a>
+          ·
+          <a href="https://fudzilla.com/meta-doubles-down-on-mtia-asics-for-inference/" target="_blank" rel="noopener noreferrer">Fudzilla</a>.
+        </p>
+
+        <h2>Why the HBM doubling is the real headline</h2>
+        <p>
+          Meta’s blog is blunt: for GenAI inference, <strong>HBM bandwidth is first-order</strong>, so MTIA 450’s job one is <strong>decode throughput</strong>, not another training-peak FLOPS slide. Doubling <strong>9.2 → 18.4 TB/s</strong> at <strong>288 GB</strong> is the same “move the memory wall” pressure I keep circling on
+          <a href="/nvhbm.html">NVHBM</a>
+          — except here the buyer is Meta’s own GW plan, not a Fusion partner.
+        </p>
+        <p>
+          Three moves sit next to that bandwidth. First, a <strong>75%</strong> MX4 FLOPS bump aimed at <strong>MoE FFN</strong>, not dense pretraining. Second, <strong>Softmax / FlashAttention in hardware</strong> so attention stops competing for a general datapath — architecture intent until third-party long-context tables exist, but the right column if you care about interactive decode. Third, <strong>mixed low-precision without a conversion tax</strong>, plus custom data types; that is vendor language until you measure quality on <em>your</em> models.
+        </p>
+        <p>
+          The rack number that matters is continuity: <strong>72</strong> devices, <strong>1.2 TB/s</strong> scale-up, <strong>100 GB/s</strong> scale-out, same plant as MTIA 400 and 500. Meta’s velocity pitch is chiplet + rack reuse so a six-month silicon cadence does not force a facility rewrite. Bloomberg notes Meta canceled Olympus partly because even a <strong>~30%</strong> chip-cost adder is hard to justify at gigawatt scale (Yee Jiun Song).
+        </p>
+
+        <h2>How this sits next to Jalapeño, Qualcomm×Amazon, and Rubin</h2>
+        <p>
+          <a href="/jalapeno.html">OpenAI Jalapeño</a>
+          is Broadcom + TSMC inference silicon with a public InferenceX tokens-per-megawatt table and a <strong>not-for-sale</strong> rule.
+          <a href="/qualcomm-amazon-inference-1-6t-optical.html">Qualcomm × Amazon</a>
+          is a multi-gen inference ASIC <em>procurement</em> line plus <strong>1.6T</strong> optics. MTIA 450 is Meta’s third column: named HBM bandwidth, a <strong>72</strong>-device domain, PyTorch/vLLM native software, and a Sep 1 bring-up that claims day-one DeepSeek and Alibaba — not only Meta’s own models.
+        </p>
+        <p>
+          It is <strong>not</strong> a substitute for
+          <a href="/vera-rubin-nvl72-mlperf-v6-1.html">Vera Rubin NVL72</a>
+          or
+          <a href="/amd-mi355x-mlperf-v6-1-512-gpu.html">MI355X 512-GPU</a>
+          MLPerf rows. Those are (preview) serving results on merchant trays. MTIA 450’s public surface is still a roadmap table plus a Bloomberg bring-up anecdote. Meta’s “more efficient than whatever Nvidia is currently shipping” line does not belong in a capacity model without a matched workload, batch, and latency SLA.
+        </p>
+        <p>
+          Software is the quiet differentiator. A <strong>vLLM</strong> plugin that swaps FlashAttention and fused LayerNorm, plus a custom <code>torch.compile</code> backend, is how Meta argues frictionless adoption without a CUDA clone. The captive caveat remains: Meta’s kernels on Meta’s silicon inside Meta’s fleet — not a SKU you rack in colo tomorrow.
+        </p>
+
+        <h2>Caveats I would write into any MTIA capacity ticket</h2>
+        <ol>
+          <li>
+            <strong>Captive only.</strong> No buy path. Compare architecture lessons, not a purchase order.
+          </li>
+          <li>
+            <strong>Vendor FLOPS and bandwidth.</strong> No independent InferenceX / AgentX / MLPerf closed division for Arke yet.
+          </li>
+          <li>
+            <strong>Bring-up ≠ production.</strong> Twelve dies within <strong>2–3%</strong> of sim is silicon health — not fleet yield, thermals, or RAS. Re-ask at <strong>1H27</strong> ramp.
+          </li>
+          <li>
+            <strong>“Beats Nvidia” needs a matched column.</strong> Pin model, precision, batch, TTFT/TBT, and where the power meter sits.
+          </li>
+          <li>
+            <strong>Inference-first.</strong> Do not import pretraining FLOPS intuition from Rubin trays.
+          </li>
+          <li>
+            <strong>Same plant, new die.</strong> Scale-up stays <strong>1.2 TB/s</strong> while HBM and MX4 climb — watch whether collectives become the next cliff.
+          </li>
+          <li>
+            <strong>Astrid is still paper.</strong> MTIA 500’s higher BW/capacity/MX4 numbers are roadmap, not tape-out.
+          </li>
+        </ol>
+
+        <h2>How I would use this tomorrow morning</h2>
+        <p>
+          Put MTIA 450’s <strong>18.4 TB/s / 288 GB / 1,400 W</strong> row beside
+          <a href="/jalapeno.html">Jalapeño</a>
+          and
+          <a href="/qualcomm-amazon-inference-1-6t-optical.html">Qualcomm × Amazon</a>
+          so the three hyperscaler ASIC bets share one spreadsheet. Treat the Sep 1 <strong>2–3%</strong>-of-sim bring-up as a silicon-health signal, not a serving bench. Keep
+          <a href="/lightmatter-passage-l20-cpx-bidi-open-cpx.html">Lightmatter</a>
+          fiber math on a separate tab — Meta’s scale-up domain is still a <strong>72</strong>-device switched backplane story, not an Open CPX BiDi harness. If you buy GPUs for multi-tenant cloud, this is competitive intelligence. If you design an inference-first ASIC or a vLLM backend, the HBM-doubling + FlashAttention-in-silicon thesis is the part worth auditing against your own decode traces.
+        </p>
+        <p>
+          Create-only. Specs from Meta’s MTIA roadmap blog, DCD/Fudzilla tables, and Sep 15–16 Bloomberg bring-up reporting via TrendForce and Mint. Update when Meta publishes measured serving numbers or Astrid tapes out.
+        </p>
+        <p>
+          Sources:
+          <a href="https://ai.meta.com/blog/meta-mtia-scale-ai-chips-for-billions/" target="_blank" rel="noopener noreferrer">Meta AI blog</a>
+          ·
+          <a href="https://www.trendforce.com/news/2026/09/16/news-meta-targets-1h27-deployment-for-new-tsmc-made-ai-chip-claims-efficiency-edge-over-nvidia/" target="_blank" rel="noopener noreferrer">TrendForce</a>
+          ·
+          <a href="https://www.livemint.com/ai/bid-to-cut-nvidia-dependence-inside-metas-plan-to-deploy-cheaper-in-house-ai-chips-11789488263086.html" target="_blank" rel="noopener noreferrer">Mint</a>
+          ·
+          <a href="https://www.datacenterdynamics.com/en/news/meta-unveils-next-four-generations-of-its-mtia-chip/" target="_blank" rel="noopener noreferrer">DCD</a>
+          ·
+          <a href="https://fudzilla.com/meta-doubles-down-on-mtia-asics-for-inference/" target="_blank" rel="noopener noreferrer">Fudzilla</a>.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated September 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
