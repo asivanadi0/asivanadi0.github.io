@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cornelis Active Compute Fabric + Delos Nonstop AI: Open Scale-Up Math Beyond NVLink — Anpoo Sivanadi</title>
+  <meta name="description" content="Cornelis Active Compute Fabric + Delos Nonstop AI — open scale-up fabric compute and protocol-agnostic I/O dies beyond NVLink." />
+  <link rel="canonical" href="https://asivanadi0.github.io/cornelis-delos-open-scaleup-ualink-esun.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Cornelis Active Compute Fabric + Delos Nonstop AI: Open Scale-Up Math Beyond NVLink — Anpoo Sivanadi" />
+  <meta property="og:description" content="Cornelis Active Compute Fabric + Delos Nonstop AI — open scale-up fabric compute and protocol-agnostic I/O dies beyond NVLink." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/cornelis-delos-open-scaleup-ualink-esun.html" />
+  <meta property="article:published_time" content="2026-09-19T18:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Cornelis Active Compute Fabric + Delos Nonstop AI: Open Scale-Up Math Beyond NVLink</h1>
+        <p class="article-meta">
+          <time datetime="2026-09-19">19 September 2026</time>
+          · Anpoo Sivanadi
+          · based on Cornelis ACF / funding announcement, Delos Nonstop AI Data Interface coverage, and Sep 14–15 Network World / SiliconANGLE / Register reads
+        </p>
+        <p class="dek article-dek">
+          Cornelis Active Compute Fabric + Delos Nonstop AI — open scale-up fabric compute and protocol-agnostic I/O dies beyond NVLink.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          This morning’s
+          <a href="/epyc-venice-vera-specrate-stream.html">EPYC Venice vs Vera</a>
+          note was host-CPU SPECrate and Stream arithmetic. Last week’s
+          <a href="/lightmatter-passage-l20-cpx-bidi-open-cpx.html">Lightmatter Passage L20 CPX</a>
+          and
+          <a href="/helios-ualoe.html">Helios UALoE</a>
+          notes were the optical plant and the open Ethernet bridge when native UALink switch silicon is not volume-ready yet. This evening is the other half of that open scale-up ticket: <strong>who is sampling the fabric and the I/O chiplets that try to make “not NVLink” a real BOM line</strong>, with named Tbps, an <strong>800 Gbps</strong> multimode NIC/switch family, and protocol-agnostic dies that claim more than double today’s accelerator interconnect caps.
+        </p>
+        <p>
+          At <strong>AI Infra Summit</strong> week (<strong>September 14–15, 2026</strong>), two announcements landed in the same lane. Cornelis Networks introduced <strong>Active Compute Fabric (ACF)</strong> — programmable compute inside scale-up and scale-out networking — alongside <strong>~$205 million</strong> in funding and a Qualcomm Technologies rack-scale evaluation. Delos Data closed <strong>more than $100 million</strong> and expanded <strong>Nonstop AI</strong> with a multi-protocol <strong>Data Interface</strong> for heterogeneous agentic inference clusters. Primary sources: the
+          <a href="https://www.cornelis.com/stories/cornelis-expands-into-scaleup-networking-with-active-compute-fabric" target="_blank" rel="noopener noreferrer">Cornelis ACF press release</a>,
+          <a href="https://www.networkworld.com/article/4221872/cornelis-lands-205m-to-make-ai-networks-compute-not-just-connect.html" target="_blank" rel="noopener noreferrer">Network World’s Spelman interview</a>,
+          <a href="https://siliconangle.com/2026/09/14/cornelis-networks-raises-205m-and-scales-up-and-scales-out-with-its-new-active-compute-fabric/" target="_blank" rel="noopener noreferrer">SiliconANGLE on ACF traffic reduction</a>,
+          <a href="https://www.theregister.com/systems/2026/09/15/ai-networking-startups-race-to-replace-nvidias-nvlink/5296672" target="_blank" rel="noopener noreferrer">The Register’s Cornelis + Delos write-up</a>,
+          the
+          <a href="https://www.delosdata.com/newsroom/delos-data-closes-over-100-million-to-deliver-delos-nonstop-aitm-for-faster-stronger-more-efficient-ai-capacity" target="_blank" rel="noopener noreferrer">Delos funding PR</a>,
+          and
+          <a href="https://convergedigest.com/delos-data-nonstop-ai-data-interface-resilient-ai-clusters/" target="_blank" rel="noopener noreferrer">Converge Digest’s Data Interface table</a>.
+          Bandwidth and utilization numbers below are vendor claims or modeled projections unless a third-party pod measurement is cited.
+        </p>
+
+        <h2>Spec sheet (named numbers)</h2>
+        <div class="table-wrap" role="region" aria-label="Cornelis vs Delos named numbers spec sheet" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th></th>
+                <th>Cornelis</th>
+                <th>Delos</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Announcement</td>
+                <td><strong>Sep 14, 2026</strong> (ACF + funding + Qualcomm)</td>
+                <td><strong>Sep 15, 2026</strong> (funding + Data Interface)</td>
+              </tr>
+              <tr>
+                <td>Capital</td>
+                <td><strong>~$205M</strong> (IAG-led, per SiliconANGLE)</td>
+                <td><strong>&gt;$100M</strong> (Matrix, Playground, Socratic, Capricorn TIF, Matter, IAG, et al.)</td>
+              </tr>
+              <tr>
+                <td>Standards</td>
+                <td>Scale-up <strong>UALink</strong> / <strong>ESUN</strong>; scale-out <strong>Ultra Ethernet</strong></td>
+                <td>Protocol-agnostic: <strong>ESUN</strong>, <strong>UALink</strong>, or other</td>
+              </tr>
+              <tr>
+                <td>Availability</td>
+                <td><strong>CN5000</strong> shipping; <strong>CN6000</strong> <strong>800 Gbps</strong> multimode SuperNIC/switch <strong>sampling</strong>, broader <strong>Q4 2026</strong></td>
+                <td>Clusters on existing infra today; Nonstop AI Server samples <strong>end of 2026</strong></td>
+              </tr>
+              <tr>
+                <td>Wire modes (CN6000)</td>
+                <td>One ASIC: native <strong>Omni-Path</strong> <em>or</em> <strong>RoCEv2 Ethernet</strong> (Ethernet encapsulation keeps Omni-Path congestion/credit/spray internals)</td>
+                <td>N/A (endpoint I/O, not a switch SKU)</td>
+              </tr>
+              <tr>
+                <td>In-path work</td>
+                <td>Licensed <strong>RISC-V</strong> in NIC + switch; collectives (e.g. AllReduce), <strong>KV-cache</strong> assemble, <strong>MoE</strong> dispatch, MPI offload, checkpointing, gradient compression in transit</td>
+                <td>Hardware failure detect/recover; MoXI “Mixture of X” compose story</td>
+              </tr>
+              <tr>
+                <td>Headline BW</td>
+                <td>Product family <strong>800 Gbps</strong> CN6000</td>
+                <td>I/O die <strong>&gt;30 Tbps</strong> (~<strong>8 TB/s</strong> bidirectional); NPO <strong>10+ Tbps</strong>; card <strong>400+ Gbps</strong></td>
+              </tr>
+              <tr>
+                <td>Comparison claim</td>
+                <td>Model: ~<strong>50%</strong> GPU hours waiting in a <strong>100,000-GPU</strong> system → ~<strong>$1.68B</strong>/yr idle @ <strong>$4</strong>/GPU-hour, <strong>8,400</strong> hrs/yr; pre-prod sims up to <strong>~50%</strong> network traffic cut</td>
+                <td>Register: <strong>&gt;30 Tbps</strong> die “more than double” Nvidia/AMD interconnect caps (~<strong>3.6 TB/s</strong> bidirectional)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h2>What “active” means when the fabric stops being a pipe</h2>
+        <p>
+          Cornelis’ argument is familiar if you have lived through SHARP-class collectives: <strong>a passive pipe makes every AllReduce, cache fetch, and expert dispatch cost accelerator time at both ends</strong>. SiliconANGLE quotes CMO Brandon Draeger: <em>“The payload does not arrive the way it left.”</em> Partial results combine inside the fabric; compressed gradients move as a fraction of original size; the work happens once on the path the bytes were already taking.
+        </p>
+        <p>
+          ACF packages that idea as an <strong>open</strong> baseline over <strong>UALink / ESUN</strong> and <strong>Ultra Ethernet</strong>, not a Cornelis-only proprietary scale-up link — the political sentence for accelerators outside NVLink Fusion. Network World adds the silicon detail for a BOM review: Cornelis licenses third-party <strong>RISC-V</strong> cores into NIC and switch ASICs rather than equating smart-NIC offload with KV-cache and MoE compute. Spelman’s utilization pitch is the economic twin of the Lightmatter fiber model — reclaim idle GPU hours — with the same caveat: <strong>vendor model until your workload is on the meter</strong>.
+        </p>
+        <p>
+          CN6000 is the near-term SKU you can ask about in a QBR. <strong>800 Gbps</strong> multimode silicon that speaks <strong>Omni-Path</strong> or <strong>RoCEv2 Ethernet</strong>, with Ethernet mode still running Omni-Path-style congestion management inside the chip before retranslation. In Ethernet mode it can sit next to third-party switches (Broadcom Tomahawk called out). CN5000 ships today; CN6000 samples now with broader availability aimed at <strong>Q4 2026</strong>. Keep ACF roadmap features separate from the multimode NIC/switch you can actually PO.
+        </p>
+
+        <h2>What Delos adds that Cornelis does not</h2>
+        <p>
+          Delos attacks the <strong>endpoint ↔ network boundary</strong>, not a Cornelis-class switch line. Converge Digest’s three form factors:
+        </p>
+        <ol>
+          <li>
+            <strong>&gt;30 Tbps</strong> multi-protocol <strong>I/O chiplet</strong> for GPUs / XPUs / accelerators (~<strong>8 TB/s</strong> bidirectional).
+          </li>
+          <li>
+            <strong>10+ Tbps</strong> <strong>near-packaged optics</strong> module pairing the interface with optical engines.
+          </li>
+          <li>
+            <strong>400+ Gbps</strong> card for CPUs, flash, and memory endpoints.
+          </li>
+        </ol>
+        <p>
+          The Register’s comparison to <strong>~3.6 TB/s</strong> bidirectional on current Nvidia/AMD accelerator interconnects is why this is a systems note: if those I/O dies land <em>inside</em> accelerator packages, the scale-up physical layer stops being “whatever the GPU vendor soldered.” Protocol agnosticism is the deliberate contrast to NVLink Fusion’s NVSwitch dependency — the same open-vs-walled tension
+          <a href="/helios-ualoe.html">Helios UALoE</a>
+          and
+          <a href="/dmatrix-raptor-nvlink-fusion-nvl144.html">d-Matrix Raptor on NVLink Fusion</a>
+          keep circling from opposite sides.
+        </p>
+        <p>
+          “Nonstop” is about <strong>agentic inference that keeps running through failures</strong> — link loss, missing accelerator, software-update disruption — with hardware-side detect/recover. Clusters run on existing infrastructure today; the Server samples late 2026; the Data Interface silicon remains co-design-bound (package integration is the long pole).
+        </p>
+
+        <h2>How this sits next to Lightmatter, Helios, Raptor, and Venice</h2>
+        <ul>
+          <li>
+            <a href="/lightmatter-passage-l20-cpx-bidi-open-cpx.html">Lightmatter L20 CPX</a> — <strong>fiber plant CapEx</strong> once scale-up is optical.
+          </li>
+          <li>
+            <a href="/helios-ualoe.html">Helios UALoE</a> — <strong>open Ethernet bridging</strong> while purpose-built UALink switches are scarce.
+          </li>
+          <li>
+            <a href="/dmatrix-raptor-nvlink-fusion-nvl144.html">Raptor × NVLink Fusion</a> — <strong>decode silicon inside Nvidia’s garden</strong>.
+          </li>
+          <li>
+            <a href="/epyc-venice-vera-specrate-stream.html">EPYC Venice vs Vera</a> — <strong>host-CPU SPECrate / Stream / rack</strong>.
+          </li>
+          <li>
+            Cornelis + Delos — <strong>open fabric compute and protocol-agnostic I/O dies</strong> with named <strong>800G</strong> and <strong>&gt;30 Tbps</strong> figures.
+          </li>
+        </ul>
+        <p>
+          Do not collapse them into one “networking is hot” slide. Optics plant, Ethernet bridge, Fusion decode, host CPU, and open fabric/I/O are five purchase and failure domains.
+        </p>
+
+        <h2>Caveats I would write into any open scale-up ticket</h2>
+        <ol>
+          <li>
+            <strong>Pre-production math.</strong> Cornelis’ 50% wait / $1.68B idle / ~50% traffic-cut figures are modeling and pre-prod sims. Re-run on <em>your</em> collective profile.
+          </li>
+          <li>
+            <strong>Delos Tbps are design targets.</strong> &gt;30 / 10+ / 400+ Gbps and “10× latency / efficiency” need a measured customer pod.
+          </li>
+          <li>
+            <strong>I/O die = co-design.</strong> Delos wins only if a GPU/XPU vendor integrates the chiplet — not a faceplate SKU next quarter.
+          </li>
+          <li>
+            <strong>CN6000 Ethernet is still Omni-Path inside.</strong> Verify congestion behavior under <em>your</em> leaf and ECMP.
+          </li>
+          <li>
+            <strong>Open standards ≠ shipping UALink switches.</strong> Purpose-built UALink switches remain scarce; Helios’ bridge caveats still apply.
+          </li>
+          <li>
+            <strong>Not a substitute for MLPerf rows.</strong> Does not change
+            <a href="/vera-rubin-nvl72-mlperf-v6-1.html">Vera Rubin</a>
+            or
+            <a href="/amd-mi355x-mlperf-v6-1-512-gpu.html">MI355X</a>
+            tokens/s — only what you wire between tokens.
+          </li>
+          <li>
+            <strong>Funding ≠ availability.</strong> CN6000 <strong>Q4 2026</strong> and Delos Server <strong>end-2026</strong> are the calendar lines for a purchase plan.
+          </li>
+        </ol>
+
+        <h2>How I would use this tomorrow morning</h2>
+        <p>
+          If you are quoting a non-NVLink (or mixed) rack-scale inference domain: (a) put CN6000 <strong>800G</strong> sampling / <strong>Q4 2026</strong> next to your RoCE vs Omni-Path leaf strategy before freezing a SuperNIC SKU, (b) ask which accelerator vendors are in Delos I/O-die co-design rather than treating &gt;30 Tbps as a catalog part, and (c) keep this column beside
+          <a href="/lightmatter-passage-l20-cpx-bidi-open-cpx.html">Lightmatter CPX</a>,
+          <a href="/helios-ualoe.html">Helios UALoE</a>,
+          and
+          <a href="/dmatrix-raptor-nvlink-fusion-nvl144.html">Raptor Fusion</a>.
+          If your fleet is pure NVL72 copper inside the tray, this note is early; if UALink/ESUN is already in a 2027 rack RFP, the named <strong>800G</strong> and <strong>&gt;30 Tbps</strong> figures are the parts worth auditing first.
+        </p>
+        <p>
+          Create-only. Specs from Cornelis’ Sep 14 ACF / funding announcement and Network World / SiliconANGLE / Register coverage, plus Delos’ Sep 15 funding PR and Converge Digest’s Data Interface table. Update when CN6000 GA ships or a third-party board publishes a measured Delos I/O-die bring-up.
+        </p>
+        <p>
+          Sources:
+          <a href="https://www.cornelis.com/stories/cornelis-expands-into-scaleup-networking-with-active-compute-fabric" target="_blank" rel="noopener noreferrer">Cornelis PR</a>
+          ·
+          <a href="https://www.networkworld.com/article/4221872/cornelis-lands-205m-to-make-ai-networks-compute-not-just-connect.html" target="_blank" rel="noopener noreferrer">Network World</a>
+          ·
+          <a href="https://siliconangle.com/2026/09/14/cornelis-networks-raises-205m-and-scales-up-and-scales-out-with-its-new-active-compute-fabric/" target="_blank" rel="noopener noreferrer">SiliconANGLE</a>
+          ·
+          <a href="https://www.theregister.com/systems/2026/09/15/ai-networking-startups-race-to-replace-nvidias-nvlink/5296672" target="_blank" rel="noopener noreferrer">The Register</a>
+          ·
+          <a href="https://www.delosdata.com/newsroom/delos-data-closes-over-100-million-to-deliver-delos-nonstop-aitm-for-faster-stronger-more-efficient-ai-capacity" target="_blank" rel="noopener noreferrer">Delos PR</a>
+          ·
+          <a href="https://convergedigest.com/delos-data-nonstop-ai-data-interface-resilient-ai-clusters/" target="_blank" rel="noopener noreferrer">Converge Digest</a>.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated September 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
