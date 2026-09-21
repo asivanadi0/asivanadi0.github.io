@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Astera Leo X: Fabric-Attached DDR for KV Cache — 62% Faster Warm TTFT on H200 Math — Anpoo Sivanadi</title>
+  <meta name="description" content="Astera Leo X — fabric-attached DDR for KV cache, with 62% faster warm TTFT on H200 math." />
+  <link rel="canonical" href="https://asivanadi0.github.io/astera-leo-x-fabric-kv-cache.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Astera Leo X: Fabric-Attached DDR for KV Cache — 62% Faster Warm TTFT on H200 Math — Anpoo Sivanadi" />
+  <meta property="og:description" content="Astera Leo X — fabric-attached DDR for KV cache, with 62% faster warm TTFT on H200 math." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/astera-leo-x-fabric-kv-cache.html" />
+  <meta property="article:published_time" content="2026-09-20T18:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Astera Leo X: Fabric-Attached DDR for KV Cache — 62% Faster Warm TTFT on H200 Math</h1>
+        <p class="article-meta">
+          <time datetime="2026-09-20">20 September 2026</time>
+          · Anpoo Sivanadi
+          · based on Astera Labs Leo X / Leo 2 announcement and Sep 15 Converge Digest / ServeTheHome reads
+        </p>
+        <p class="dek article-dek">
+          Astera Leo X — fabric-attached DDR for KV cache, with 62% faster warm TTFT on H200 math.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          This morning’s
+          <a href="/newphotonics-tower-npg102-ph18da-cpx.html">NewPhotonics NPG102</a>
+          note was <em>who ships the laser-integrated engines</em> for Open CPX. Last night’s
+          <a href="/cornelis-delos-open-scaleup-ualink-esun.html">Cornelis + Delos</a>
+          note was <em>who samples open fabric and I/O chiplets</em> when scale-up is not NVLink. This evening is the memory path under both: <strong>where KV cache goes when HBM fills</strong>, and what changes if that tier attaches to the accelerator fabric instead of fighting CPU DDR5 or falling through to NVMe.
+        </p>
+        <p>
+          On <strong>September 15, 2026</strong>, Astera Labs announced three additions to its Leo Smart Memory Controller family: <strong>Leo X-Series</strong> (fabric-attached memory for accelerator-side KV-cache and agent-context offload) plus <strong>Leo 2 E-Series</strong> and <strong>Leo 2 P-Series</strong> (CPU-attached and pooled CXL memory on <strong>PCIe 6</strong> / <strong>CXL 3.2</strong>). Primary sources: the
+          <a href="https://www.asteralabs.com/news/astera-labs-bolsters-leo-smart-memory-controller-family-for-agentic-ai-and-general-purpose-cloud-workloads/" target="_blank" rel="noopener noreferrer">Astera Labs press release</a>,
+          Astera’s
+          <a href="https://www.asteralabs.com/resources/blog/supercharging-agentic-ai-how-leo-x-series-smart-memory-controllers-accelerate-inference-with-kv-cache-offload/" target="_blank" rel="noopener noreferrer">KV-cache offload engineering blog</a>,
+          <a href="https://convergedigest.com/astera-labs-leo-fabric-attached-memory-agentic-ai/" target="_blank" rel="noopener noreferrer">Converge Digest’s Sep 15 table</a>,
+          and
+          <a href="https://www.servethehome.com/astera-labs-releases-leo-2-cxl-memory-controllers-and-leo-x-controller-for-rackscale-fabric-attached-memory/" target="_blank" rel="noopener noreferrer">ServeTheHome’s controller deep dive</a>.
+          Specs and TTFT/TPS deltas below are <strong>vendor claims</strong> from Astera’s internal test config unless a third-party pod result is cited.
+        </p>
+
+        <h2>Spec sheet (named numbers)</h2>
+        <div class="table-wrap" role="region" aria-label="Astera Leo X / Leo 2 named numbers spec sheet" tabindex="0">
+          <table>
+            <tbody>
+              <tr>
+                <td>Announcement</td>
+                <td><strong>Sep 15, 2026</strong> — Leo X + Leo 2 E/P; AI Infra Summit Santa Clara demos <strong>Sep 15–17</strong></td>
+              </tr>
+              <tr>
+                <td>Fabric-attached SKU</td>
+                <td><strong>Leo X-Series</strong> Smart Memory Controller</td>
+              </tr>
+              <tr>
+                <td>Fabric companion</td>
+                <td>Astera <strong>Scorpio</strong> Smart Fabric Switches (<strong>320-lane</strong> X- and P-Series called out in the blog)</td>
+              </tr>
+              <tr>
+                <td>Fabric protocols named</td>
+                <td><strong>PCIe</strong> plus <strong>platform-specific</strong> scale-up protocols (hyperscaler-custom; not a single public MSA name in the PR)</td>
+              </tr>
+              <tr>
+                <td>Demo expander</td>
+                <td>Four onboard DIMM slots; <strong>DDR4</strong> and <strong>DDR5</strong>; blog config uses <strong>256 GB</strong> per Leo X</td>
+              </tr>
+              <tr>
+                <td>Capacity claim (Leo X)</td>
+                <td>Up to <strong>2 TB</strong> expanded memory <strong>per device</strong></td>
+              </tr>
+              <tr>
+                <td>CPU-attached SKU</td>
+                <td><strong>Leo 2 E-Series</strong> — <strong>CXL 3.2</strong> over <strong>PCIe 6 x16</strong>; four DDR4/DDR5 controllers</td>
+              </tr>
+              <tr>
+                <td>Pooled SKU</td>
+                <td><strong>Leo 2 P-Series</strong> — dual <strong>PCIe 6 x8</strong>; pooling/sharing across hosts</td>
+              </tr>
+              <tr>
+                <td>Capacity claim (Leo 2, per ServeTheHome)</td>
+                <td>Up to <strong>768 GB DDR4</strong> or <strong>4 TB DDR5</strong> behind each expander; channels <strong>2 → 4</strong> vs prior Leo gen</td>
+              </tr>
+              <tr>
+                <td>Bandwidth claim (Leo 2)</td>
+                <td>Doubles memory bandwidth and capacity vs previous Leo generation (PCIe 6 lane rate + doubled channels)</td>
+              </tr>
+              <tr>
+                <td>Workload foil (Astera internal)</td>
+                <td><strong>4× NVIDIA H200 143 GB</strong> (TP=4), <strong>1 TB</strong> host DDR5, <strong>Qwen2.5-32B</strong>, vLLM v1 + LMCache, Scorpio P-Series <strong>320L</strong></td>
+              </tr>
+              <tr>
+                <td>Headline deltas</td>
+                <td>Up to <strong>62%</strong> faster warm <strong>TTFT</strong>; up to <strong>22%</strong> more <strong>TPS</strong> vs CPU-DRAM KV offload under CPU memory stress</td>
+              </tr>
+              <tr>
+                <td>Availability</td>
+                <td><strong>Sampling</strong> with hyperscaler customers; ecosystem quotes from AMD, Arm, Intel, Samsung</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Leo X is the architectural sentence. Leo 2 E/P are the CXL 3.2 / PCIe 6 refresh that keep CPU-side expansion and rack pooling on the same family — useful on a BOM, secondary to the fabric-attach story for this note.
+        </p>
+
+        <h2>What “fabric-attached” changes on the KV path</h2>
+        <p>
+          The usual KV-offload ladder after GPU HBM fills: spill to <strong>host DDR5</strong>, then <strong>NVMe</strong>, or chase remote pools over RDMA/TCP. Astera’s blog walks the failure modes:
+        </p>
+        <ol>
+          <li>
+            <strong>Host DDR5</strong> is fine until multi-GPU nodes plus tokenization/RAG/orchestration contend for the same channels — restores that should be memory-bound become arbitration-bound.
+          </li>
+          <li>
+            <strong>NVMe</strong> scales capacity and kills TTFT / decode TPS when restores are slower than recomputing tokens.
+          </li>
+          <li>
+            <strong>Network pools</strong> move gigabytes of KV across NICs and add congestion you did not budget in a single-node decode model.
+          </li>
+        </ol>
+        <p>
+          Leo X’s claim is a <strong>dedicated memory tier on the accelerator (or host PCIe) fabric</strong>, reached through Scorpio peer-to-peer paths that <strong>bypass the CPU root complex</strong>. That is a different purchase than “add another CXL expander behind the host” — KV capacity as a <strong>scale-up fabric citizen</strong>, the way Cornelis/Delos treat collectives and I/O dies.
+        </p>
+        <p>
+          ServeTheHome’s color: Scorpio is primarily a PCIe switch family; high-end <strong>Scorpio X-Series</strong> can also speak proprietary hyperscaler fabrics. Astera does not name which fabrics are in the Leo X win set. Read “platform-specific protocols” as <strong>co-design with a specific accelerator or CSP</strong>, not drop-in UALink/NVLink silicon.
+        </p>
+
+        <h2>The published H200 / Qwen2.5-32B table (and what it is not)</h2>
+        <p>
+          Astera’s engineering blog puts numbers on one topology. Hardware: <strong>1S</strong> server, <strong>64</strong> physical cores / <strong>128</strong> logical CPUs, <strong>4× H200 143 GB</strong>, <strong>1 TB</strong> DDR5 on NUMA0 (~<strong>200 GB/s</strong> peak), one <strong>Leo X</strong> with <strong>256 GB</strong>, Scorpio P-Series <strong>320L</strong>. Software: <strong>vLLM</strong> v1 TP=4, <strong>LMCache</strong> v0.4.2 + patch registering Leo as I/O memory. Workload: <strong>Qwen2.5-32B</strong>, <strong>10</strong> sessions with growing <strong>32k</strong>-token contexts, warm turns restoring KV from the offload pool; optional CPU stressors (threads with <strong>2× 4 GB</strong> buffers) to simulate agentic host traffic.
+        </p>
+        <p>
+          Reported warm TTFT:
+        </p>
+        <ul>
+          <li>CPU-DRAM baseline: <strong>246 ms</strong> average warm turn → Leo path: <strong>127 ms</strong></li>
+          <li>With <strong>32</strong> stressor threads: CPU-DRAM <strong>413 ms</strong> → Leo <strong>158 ms</strong> → the cited <strong>62%</strong> faster TTFT</li>
+          <li>Throughput: up to <strong>22%</strong> more tokens/sec on the 10-session / cold+warm-turn mix (Astera says the <strong>22%</strong> held for deeper 20–50 warm-turn sessions in their runs)</li>
+        </ul>
+        <p>
+          Three caveats belong on any capacity ticket before this becomes a CapEx assumption:
+        </p>
+        <ol>
+          <li>
+            <strong>Gen-5 foil, not Rubin/Blackwell.</strong> The published accelerator is <strong>H200</strong>. ServeTheHome notes the same. Do not transpose <strong>62% / 22%</strong> onto a Vera Rubin NVL72 or MI355X pod without re-measuring.
+          </li>
+          <li>
+            <strong>Vendor internal, LMCache-patched.</strong> The PR footnote and blog both attribute the deltas to Astera’s own lab. The LMCache change is “allocator-level” (register Leo as I/O memory); still not a stock vLLM config you can paste from docs today.
+          </li>
+          <li>
+            <strong>256 GB demo ≠ 2 TB claim.</strong> The measured config is <strong>256 GB per Leo X</strong> (one per GPU in their narrative). The <strong>2 TB per device</strong> figure is a product capacity claim — keep them on separate rows.
+          </li>
+        </ol>
+
+        <h2>How Leo 2 E/P sit next to Leo X</h2>
+        <p>
+          Do not collapse the family into one “CXL memory” slide.
+        </p>
+        <ul>
+          <li>
+            <strong>Leo 2 E</strong> is classic <strong>CPU-attached expansion</strong>: <strong>CXL 3.2</strong> on <strong>PCIe 6 x16</strong>, four memory controllers, DDR4/DDR5 — add capacity without another CPU socket, reuse pulled DDR4 with Astera’s RAS / test / soft-ECC story.
+          </li>
+          <li>
+            <strong>Leo 2 P</strong> is <strong>pooled/shared</strong> memory across hosts: dual <strong>PCIe 6 x8</strong>, dynamic capacity management — the stranded-DIMM utilization argument under DDR5 shortage.
+          </li>
+          <li>
+            <strong>Leo X</strong> is the <strong>accelerator-fabric</strong> attach for KV/agent state.
+          </li>
+        </ul>
+        <p>
+          ServeTheHome’s capacity table — <strong>768 GB DDR4</strong> or <strong>4 TB DDR5</strong> per expander, including aggressive <strong>3DPC</strong> DDR4 boards — is the BOM detail if you are chasing reused DDR4 economics rather than fabric TTFT.
+        </p>
+
+        <h2>How this sits next to NVHBM, Cornelis/Delos, and NewPhotonics</h2>
+        <ul>
+          <li>
+            <a href="/nvhbm.html">NVHBM</a> — <strong>custom HBM / package memory</strong> inside the accelerator envelope.
+          </li>
+          <li>
+            Leo X — <strong>DDR4/DDR5 fabric tier</strong> for KV that should not burn HBM.
+          </li>
+          <li>
+            <a href="/cornelis-delos-open-scaleup-ualink-esun.html">Cornelis + Delos</a> — <strong>open scale-up fabric compute and &gt;30 Tbps I/O dies</strong>; Scorpio/Leo can ride PCIe-class fabrics without being those products.
+          </li>
+          <li>
+            <a href="/newphotonics-tower-npg102-ph18da-cpx.html">NewPhotonics NPG102</a>
+            /
+            <a href="/lightmatter-passage-l20-cpx-bidi-open-cpx.html">Lightmatter Passage L20 CPX</a>
+            — <strong>optical engine and BiDi plant</strong> once scale-up goes NPO/CPO.
+          </li>
+        </ul>
+        <p>
+          Four purchase domains — do not write “memory wall solved” on one slide.
+        </p>
+
+        <h2>Caveats I would write into any fabric-KV ticket</h2>
+        <ol>
+          <li>
+            <strong>Sampling ≠ fleet.</strong> Hyperscaler sampling and AI Infra Summit demos are not a published CSP SKU with FITs and firmware rev.
+          </li>
+          <li>
+            <strong>Protocol opacity.</strong> “Platform-specific” fabric support is a design-win sentence. Ask which Scorpio mode (PCIe P2P vs proprietary) the win uses before modeling radix and hop count.
+          </li>
+          <li>
+            <strong>DDR4 reuse RAS is half the product.</strong> Astera leans hard on test engines, soft-ECC, scrubbing, and COSMOS telemetry for aged DIMMs. Budget qualification time; do not assume pulled DDR4 is free capacity.
+          </li>
+          <li>
+            <strong>No pJ/bit or fabric RTT table in the PR.</strong> Compare Leo X restores to your measured HBM and DDR5 paths on <em>your</em> model and concurrent session count.
+          </li>
+          <li>
+            <strong>Do not mix Leo X TTFT with OceanStor / Ascend SuperPoD KV numbers.</strong> Different vendors and media — and the Ascend 960 SuperPoD lane stays closed on this desk.
+          </li>
+        </ol>
+
+        <h2>How I would use this tomorrow morning</h2>
+        <p>
+          Put a <strong>Leo X (fabric KV) / Leo 2 E (CXL expand) / Leo 2 P (pool)</strong> row next to your HBM and host-DDR5 model so <strong>offload topology</strong> is an explicit choice, not an LMCache default. If you are already sizing
+          <a href="/cornelis-delos-open-scaleup-ualink-esun.html">Cornelis CN6000</a>
+          or Scorpio-class PCIe fabrics, ask whether a fabric-attached DDR tier collapses TTFT variance under multi-tenant host stress the way Astera’s <strong>413 → 158 ms</strong> case suggests — then re-run on <em>your</em> accelerator generation. On
+          <a href="/dmatrix-raptor-nvlink-fusion-nvl144.html">NVLink Fusion</a>
+          or
+          <a href="/helios-ualoe.html">UALoE</a>,
+          read Leo as <strong>memory companion silicon</strong>, not a fabric change.
+        </p>
+        <p>
+          Create-only. Specs and dates from Astera’s Sep 15 release, the KV-offload blog’s H200 / Qwen2.5-32B config, Converge Digest’s portfolio table, and ServeTheHome’s Leo 2 capacity notes. Update when a CSP publishes a production Leo X topology, or when Astera posts Blackwell/Rubin-class foils with the same TTFT methodology.
+        </p>
+        <p>
+          Sources:
+          <a href="https://www.asteralabs.com/news/astera-labs-bolsters-leo-smart-memory-controller-family-for-agentic-ai-and-general-purpose-cloud-workloads/" target="_blank" rel="noopener noreferrer">Astera Labs PR</a>
+          ·
+          <a href="https://www.asteralabs.com/resources/blog/supercharging-agentic-ai-how-leo-x-series-smart-memory-controllers-accelerate-inference-with-kv-cache-offload/" target="_blank" rel="noopener noreferrer">Astera KV-cache blog</a>
+          ·
+          <a href="https://convergedigest.com/astera-labs-leo-fabric-attached-memory-agentic-ai/" target="_blank" rel="noopener noreferrer">Converge Digest</a>
+          ·
+          <a href="https://www.servethehome.com/astera-labs-releases-leo-2-cxl-memory-controllers-and-leo-x-controller-for-rackscale-fabric-attached-memory/" target="_blank" rel="noopener noreferrer">ServeTheHome</a>.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated September 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
