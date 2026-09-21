@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lightbits Inferra: KV Cache Prefetch Beyond HBM — Named TTFT Tables on L40S Math — Anpoo Sivanadi</title>
+  <meta name="description" content="Lightbits Inferra — KV cache prefetch beyond HBM, with named TTFT tables on L40S math." />
+  <link rel="canonical" href="https://asivanadi0.github.io/lightbits-inferra-kv-cache-prefetch.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Lightbits Inferra: KV Cache Prefetch Beyond HBM — Named TTFT Tables on L40S Math — Anpoo Sivanadi" />
+  <meta property="og:description" content="Lightbits Inferra — KV cache prefetch beyond HBM, with named TTFT tables on L40S math." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/lightbits-inferra-kv-cache-prefetch.html" />
+  <meta property="article:published_time" content="2026-09-21T06:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Lightbits Inferra: KV Cache Prefetch Beyond HBM — Named TTFT Tables on L40S Math</h1>
+        <p class="article-meta">
+          <time datetime="2026-09-21">21 September 2026</time>
+          · Anpoo Sivanadi
+          · based on Lightbits Inferra AI Infra Summit debut and Sep 9–10 Blocks &amp; Files / StorageNewsletter reads
+        </p>
+        <p class="dek article-dek">
+          Lightbits Inferra — KV cache prefetch beyond HBM, with named TTFT tables on L40S math.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          Last night’s
+          <a href="/astera-leo-x-fabric-kv-cache.html">Astera Leo X</a>
+          note was the <em>fabric-attached DDR</em> path for KV when HBM fills: a Scorpio peer-to-peer memory tier that tries to keep warm TTFT off the CPU root complex. This morning is the other half of that ladder: <strong>what happens when the next needed attention blocks still live in host DRAM or NVMe</strong>, and whether a purpose-built prefetch engine can make restores cheaper than recomputing tokens.
+        </p>
+        <p>
+          Lightbits Labs — the company that invented <strong>NVMe over TCP</strong> — put <strong>Inferra</strong> on the AI Infra Summit floor in Santa Clara (<strong>September 15–17, 2026</strong>) as a KV-cache orchestration engine, not a general-purpose all-flash array with an inference sticker. Primary sources: the
+          <a href="https://www.ai-infra-summit.com/press-releases/lightbits-rewrites-tokenomics-inferra-the-world-s-first-kv-cache-management-engine-debuts-at-ai-infra-summit" target="_blank" rel="noopener noreferrer">AI Infra Summit press release</a>,
+          <a href="https://www.blocksandfiles.com/ai-ml/2026/09/09/inferra-is-lightbits-inferencing-memory-wall-buster/5295282" target="_blank" rel="noopener noreferrer">Blocks &amp; Files’ Sep 9 write-up</a>,
+          Lightbits’
+          <a href="https://www.lightbitslabs.com/wp-content/uploads/2026/03/SB-Inferra-multi-pager-1.pdf" target="_blank" rel="noopener noreferrer">Inferra solution brief</a>,
+          and
+          <a href="https://www.storagenewsletter.com/2026/09/10/ai-infra-summit-2026-lightbits-rewrites-tokenomics-with-inferra-the-worlds-first-kv-cache-orchestration-engine/" target="_blank" rel="noopener noreferrer">StorageNewsletter’s Sep 10 summary</a>.
+          Specs and TTFT multiples below are <strong>vendor claims</strong> unless a named customer quote is attached.
+        </p>
+
+        <h2>Spec sheet (named numbers)</h2>
+        <div class="table-wrap" role="region" aria-label="Lightbits Inferra named numbers spec sheet" tabindex="0">
+          <table>
+            <tbody>
+              <tr>
+                <td>Product</td>
+                <td><strong>Inferra</strong> — KV cache orchestration / acceleration engine</td>
+              </tr>
+              <tr>
+                <td>Vendor</td>
+                <td><strong>Lightbits Labs</strong> (NVMe over TCP inventors)</td>
+              </tr>
+              <tr>
+                <td>Public debut window</td>
+                <td><strong>Sep 9–15, 2026</strong> (Blocks &amp; Files + AI Infra Summit booth <strong>219</strong> / Product Spotlight Theatre <strong>Sep 15</strong>)</td>
+              </tr>
+              <tr>
+                <td>Problem statement</td>
+                <td>Long-context KV grows past GPU <strong>HBM</strong>; reactive eviction → recompute or cold restore stalls the GPU</td>
+              </tr>
+              <tr>
+                <td>Tier model</td>
+                <td>Virtualize KV across <strong>GPU HBM → host DRAM → local NVMe → networked NVMe</strong></td>
+              </tr>
+              <tr>
+                <td>Prefetch engine</td>
+                <td><strong>SLSAP</strong> (Sub-Linear Sparse Attention Prefetch): locality-sensitive hashing + statistical reuse patterns to rank next-needed KV blocks</td>
+              </tr>
+              <tr>
+                <td>Headline concurrency claim</td>
+                <td>Up to <strong>16×</strong> more concurrent inference sessions on existing GPUs (vendor)</td>
+              </tr>
+              <tr>
+                <td>Headline context claim</td>
+                <td><strong>10M</strong>-token context windows demonstrated</td>
+              </tr>
+              <tr>
+                <td>Headline latency marketing</td>
+                <td><strong>&gt;300×</strong> latency improvement (Summit PR); Blocks &amp; Files publishes the per-model TTFT table below</td>
+              </tr>
+              <tr>
+                <td>Serving integrations</td>
+                <td>Plugins for <strong>vLLM</strong>, <strong>LMCache</strong>, <strong>Dynamo</strong></td>
+              </tr>
+              <tr>
+                <td>Hardware stance</td>
+                <td>Vendor: works on open GPU + storage stacks; <strong>10M</strong>-token demo called out on commodity <strong>L40S</strong></td>
+              </tr>
+              <tr>
+                <td>Customer signal</td>
+                <td><strong>OVH</strong> CPTO Yaniv Fdida: Inferra KV tiering showed “substantial GPU utilization gains” for agent and RAG workloads (Blocks &amp; Files)</td>
+              </tr>
+              <tr>
+                <td>Operator tool</td>
+                <td>Pod Efficiency Analyzer (vendor ROI calculator)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Inferra is not “faster NVMe.” It is a claim that <strong>timing</strong> — prefetch before attention touches the block — beats reactive paging and beats recompute on the models they published.
+        </p>
+
+        <h2>The published TTFT table (and what it is not)</h2>
+        <p>
+          Blocks &amp; Files reprints three public warm-path TTFT comparisons. Treat them as <strong>vendor benches</strong> until you reproduce them on your serving stack:
+        </p>
+        <div class="table-wrap" role="region" aria-label="Published Inferra warm-path TTFT comparisons" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Model / context</th>
+                <th>Baseline TTFT</th>
+                <th>With Inferra</th>
+                <th>Approx. speedup</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Qwen 2.5-7B</strong> @ <strong>410K</strong></td>
+                <td><strong>72.6 s</strong></td>
+                <td><strong>711 ms</strong></td>
+                <td>~<strong>102×</strong></td>
+              </tr>
+              <tr>
+                <td><strong>DeepSeek-R1-70B</strong> @ <strong>141k</strong></td>
+                <td><strong>70.8 s</strong></td>
+                <td><strong>465 ms</strong></td>
+                <td>~<strong>152×</strong></td>
+              </tr>
+              <tr>
+                <td><strong>Llama-4-Scout</strong> @ <strong>10M</strong></td>
+                <td><strong>1.5 h</strong></td>
+                <td><strong>13 s</strong></td>
+                <td>~<strong>380×</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Summit marketing rounds the family of results to <strong>&gt;300×</strong> latency improvement and pairs it with <strong>16×</strong> session density. The useful sentence is narrower: on these long-context restores, <strong>prefetch beat recompute by two to three orders of magnitude in the published configs</strong>. That is a different claim from “tokens/s on a saturated decode loop,” and you should keep those metrics on separate rows.
+        </p>
+        <p>
+          The <strong>10M</strong>-token / <strong>L40S</strong> demo is the fleet-relevant footnote. Lightbits positions Inferra as the way to keep low-HBM or older GPUs useful for ultra-long sessions instead of buying another HBM generation just to hold KV. That is adjacent to
+          <a href="/groq-3-lpx.html">Groq 3 LPX</a>
+          and
+          <a href="/jalapeno.html">Jalapeño</a>
+          tokenomics conversations, but it is a <em>memory readiness</em> product, not an XPU datasheet.
+        </p>
+
+        <h2>How the path is supposed to work</h2>
+        <p>
+          Blocks &amp; Files’ mechanism sketch matches the solution brief:
+        </p>
+        <ol>
+          <li>
+            Inferra runs on the GPU server’s <strong>x86 host</strong> and watches KV block activity.
+          </li>
+          <li>
+            <strong>SLSAP</strong> scores blocks likely needed next (recent tokens, semantic neighbors, RAG / multi-turn structure).
+          </li>
+          <li>
+            Ranked blocks are pulled from <strong>host DRAM</strong> or <strong>NVMe</strong> and preloaded into <strong>GPU HBM</strong> over <strong>RDMA</strong> before attention misses.
+          </li>
+          <li>
+            The serving layer keeps its usual shape — <strong>vLLM / LMCache / Dynamo</strong> plugins rather than a forked model runtime.
+          </li>
+        </ol>
+        <p>
+          That is the opposite timing model from “wait for a miss, then stall while storage catches up.” It is also the opposite purchase from
+          <a href="/astera-leo-x-fabric-kv-cache.html">Astera Leo X</a>:
+          Leo X tries to put a <strong>DDR tier on the accelerator fabric</strong>; Inferra tries to make <strong>DRAM/NVMe restores</strong> land early enough that HBM still looks infinite to the scheduler. You can imagine both on one BOM. You should not collapse them into one “KV offload” line item.
+        </p>
+
+        <h2>Where it sits next to Leo X, NVHBM, and the optics notes</h2>
+        <div class="table-wrap" role="region" aria-label="Where Inferra sits next to Leo X, NVHBM, and optics notes" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Rung</th>
+                <th>Product</th>
+                <th>What it buys</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Package HBM</td>
+                <td><a href="/nvhbm.html">NVHBM</a></td>
+                <td>Memory controller / stack economics inside the accelerator envelope</td>
+              </tr>
+              <tr>
+                <td>Fabric DDR</td>
+                <td><a href="/astera-leo-x-fabric-kv-cache.html">Astera Leo X</a></td>
+                <td>KV / agent state as a scale-up fabric citizen (vendor H200 / Qwen2.5-32B TTFT table)</td>
+              </tr>
+              <tr>
+                <td>Prefetch + NVMe tiers</td>
+                <td><strong>Inferra</strong></td>
+                <td>Proactive KV readiness across host DRAM and NVMe; published long-context TTFT ladder</td>
+              </tr>
+              <tr>
+                <td>Optical plant</td>
+                <td>
+                  <a href="/lightmatter-passage-l20-cpx-bidi-open-cpx.html">Lightmatter Passage L20 CPX</a>
+                  /
+                  <a href="/newphotonics-tower-npg102-ph18da-cpx.html">NewPhotonics NPG102</a>
+                </td>
+                <td>Fiber / NPO engine supply once scale-up leaves the copper tray</td>
+              </tr>
+              <tr>
+                <td>Merchant rack foil</td>
+                <td><a href="/vera-rubin-nvl72-mlperf-v6-1.html">Vera Rubin NVL72 MLPerf</a></td>
+                <td>What the GPU island does when HBM <em>is</em> enough</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Four purchase domains. Inferra does not move photons and does not invent a new CXL controller. It argues that <strong>attention scheduling + storage path</strong> is where long-context margin goes after you already bought the GPUs.
+        </p>
+
+        <h2>Caveats I would write into any Inferra ticket</h2>
+        <ol>
+          <li>
+            <strong>Vendor TTFT tables, mostly.</strong> The three-model ladder is published through trade press and Lightbits. Reproduce on <em>your</em> vLLM/Dynamo build, tokenizer, and concurrency before you price a NeoCloud SKU.
+          </li>
+          <li>
+            <strong>L40S demo ≠ H200 / Rubin / MI355X fleet.</strong> The 10M-token existence proof is on commodity L40S. Do not transpose <strong>102× / 152× / 380×</strong> onto a Vera Rubin NVL72 or an H200 TP=4 pod without re-measuring — same discipline as the Leo X <strong>62%</strong> warm TTFT caveat.
+          </li>
+          <li>
+            <strong>Do not confuse with Leo X.</strong> Fabric-attached DDR and NVMe prefetch solve adjacent failures. Ask which miss path your traces actually hit (CPU-DDR contention vs storage RTT vs recompute) before picking a CapEx line.
+          </li>
+          <li>
+            <strong>Storage RTT still exists.</strong> Prefetch only wins if the predictor is right early enough. Wrong ranks still burn bandwidth; cold tails still look like storage.
+          </li>
+          <li>
+            <strong>Beta / customer programs, not a universal CSP SKU.</strong> OVH’s utilization quote is a signal, not a published multi-tenant SLA sheet.
+          </li>
+          <li>
+            <strong>Do not mix with killed Huawei OceanStor / Ascend SuperPoD KV numbers.</strong> Different vendors, media, and this desk keeps that lane closed.
+          </li>
+        </ol>
+
+        <h2>How I would evaluate the claim if I ran clusters</h2>
+        <ol>
+          <li>
+            <strong>TTFT and p99 TTFT at fixed context lengths</strong> your customers actually buy (128k, 410k, 1M, 10M if you sell it) — with and without Inferra, same model and quant.
+          </li>
+          <li>
+            <strong>Sessions per GPU under a hard TBT / TTFT SLA</strong> — the <strong>16×</strong> claim only matters if the SLA holds.
+          </li>
+          <li>
+            <strong>GPU busy fraction and tokens per watt</strong> while long-context restores are in flight — stalled GPUs still draw power.
+          </li>
+          <li>
+            <strong>Hit rate of SLSAP ranks</strong> vs a naive LRU / LMCache baseline on your RAG and multi-turn traces.
+          </li>
+          <li>
+            <strong>Side-by-side with a Leo X or CXL DDR tier</strong> if you are already sampling fabric memory — measure which path wins on <em>your</em> miss histogram, not on a slide that merges them.
+          </li>
+        </ol>
+
+        <h2>Bottom line</h2>
+        <p>
+          Inferra’s public debut is the strongest <em>KV readiness</em> software story I have seen next to last night’s Leo X fabric-DDR note: named long-context TTFT tables, a 10M-token / L40S existence proof, and plugins aimed at the serving stacks people already run. The honest read is <strong>prefetch-vs-recompute on published configs, plus a session-density claim you must re-prove under SLA</strong>. The dishonest read is “infinite HBM” or “storage vendors fixed attention.” Until your own pod reproduces the ladder, I treat Inferra as a serious <strong>NeoCloud / managed-inference POC candidate</strong> for ultra-long context — and as the software foil every fabric-KV ticket should be measured against.
+        </p>
+        <p>
+          Create-only. Specs and dates from Lightbits’ AI Infra Summit debut, the Inferra solution brief, Blocks &amp; Files’ Sep 9 TTFT table, and StorageNewsletter’s Sep 10 summary. Update when a named customer publishes a reproduced ladder, or when Lightbits posts H200/Rubin-class foils with the same TTFT methodology.
+        </p>
+        <p>
+          Sources:
+          <a href="https://www.ai-infra-summit.com/press-releases/lightbits-rewrites-tokenomics-inferra-the-world-s-first-kv-cache-management-engine-debuts-at-ai-infra-summit" target="_blank" rel="noopener noreferrer">AI Infra Summit PR</a>
+          ·
+          <a href="https://www.blocksandfiles.com/ai-ml/2026/09/09/inferra-is-lightbits-inferencing-memory-wall-buster/5295282" target="_blank" rel="noopener noreferrer">Blocks &amp; Files</a>
+          ·
+          <a href="https://www.lightbitslabs.com/wp-content/uploads/2026/03/SB-Inferra-multi-pager-1.pdf" target="_blank" rel="noopener noreferrer">Inferra solution brief</a>
+          ·
+          <a href="https://www.storagenewsletter.com/2026/09/10/ai-infra-summit-2026-lightbits-rewrites-tokenomics-with-inferra-the-worlds-first-kv-cache-orchestration-engine/" target="_blank" rel="noopener noreferrer">StorageNewsletter</a>.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated September 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>

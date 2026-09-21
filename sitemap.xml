@@ -2,7 +2,7 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://asivanadi0.github.io/</loc>
-    <lastmod>2026-09-20</lastmod>
+    <lastmod>2026-09-21</lastmod>
   </url>
   <url>
     <loc>https://asivanadi0.github.io/cv.html</loc>
@@ -10,7 +10,11 @@
   </url>
   <url>
     <loc>https://asivanadi0.github.io/writing.html</loc>
-    <lastmod>2026-09-20</lastmod>
+    <lastmod>2026-09-21</lastmod>
+  </url>
+  <url>
+    <loc>https://asivanadi0.github.io/lightbits-inferra-kv-cache-prefetch.html</loc>
+    <lastmod>2026-09-21</lastmod>
   </url>
   <url>
     <loc>https://asivanadi0.github.io/astera-leo-x-fabric-kv-cache.html</loc>
