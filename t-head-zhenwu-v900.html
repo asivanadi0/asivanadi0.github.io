@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>T-Head Zhenwu V900: 216 GB, 1,200 GB/s Chip-to-Chip, and a 500,000-Card Cluster Story — Anpoo Sivanadi</title>
+  <meta name="description" content="T-Head Zhenwu V900 — 216 GB, 1,200 GB/s chip-to-chip, and a 500,000-card cluster story." />
+  <link rel="canonical" href="https://asivanadi0.github.io/t-head-zhenwu-v900.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="T-Head Zhenwu V900: 216 GB, 1,200 GB/s Chip-to-Chip, and a 500,000-Card Cluster Story — Anpoo Sivanadi" />
+  <meta property="og:description" content="T-Head Zhenwu V900 — 216 GB, 1,200 GB/s chip-to-chip, and a 500,000-card cluster story." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/t-head-zhenwu-v900.html" />
+  <meta property="article:published_time" content="2026-09-22T08:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>T-Head Zhenwu V900: 216 GB, 1,200 GB/s Chip-to-Chip, and a 500,000-Card Cluster Story</h1>
+        <p class="article-meta">
+          <time datetime="2026-09-22">22 September 2026</time>
+          · Anpoo Sivanadi
+          · based on T-Head Zhenwu V900 Apsara Conference unveil and Sep 22 TechNode / The Register / TrendForce reads
+        </p>
+        <p class="dek article-dek">
+          T-Head Zhenwu V900 — 216 GB, 1,200 GB/s chip-to-chip, and a 500,000-card cluster story.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          Last night’s
+          <a href="/axelera-europa-629-tops-edge-232p.html">Axelera Europa</a>
+          note was a <em>shipping PCIe AIPU</em>: 629 TOPS at 45 W with Dell/Supermicro validation. This morning is a different CapEx sentence. At <strong>Apsara Conference 2026</strong> in Hangzhou on <strong>September 22, 2026</strong>, Alibaba’s chip unit <strong>T-Head</strong> unveiled <strong>Zhenwu V900</strong> — training-and-inference silicon with named memory, named inter-chip bandwidth, an ICN Switch supernode story, and <strong>Q1 2027</strong> mass production.
+        </p>
+        <p>
+          Primary sources: Alibaba Cloud’s
+          <a href="https://www.alibabacloud.com/en/press-room/alibaba-unveils-roadmap-on-full-stack-ai-strategy?_p_lc=1" target="_blank" rel="noopener noreferrer">full-stack AI roadmap press room</a>,
+          <a href="https://technode.com/2026/09/22/t-head-unveils-zhenwu-v900-ai-chip-in-alibabas-push-to-expand-its-ai-infrastructure-stack/" target="_blank" rel="noopener noreferrer">TechNode’s same-day write-up</a>,
+          <a href="https://www.theregister.com/off-prem/2026/09/22/alibaba-cloud-plans-six-year-stroll-to-20gw-of-datacenters-reveals-chip-to-power-them/5298062" target="_blank" rel="noopener noreferrer">The Register</a>,
+          <a href="https://yangtzeer.com/news/heavy-hitters/alibaba-unveils-zhenwu-v900/" target="_blank" rel="noopener noreferrer">Yangtzeer</a>,
+          and
+          <a href="https://www.trendforce.com/news/2026/09/22/news-alibaba-unveils-ai-chip-zhenwu-v900-for-1q27-mass-production-maps-out-new-server-cpus-for-3q27/" target="_blank" rel="noopener noreferrer">TrendForce</a>.
+          Specs below are <strong>vendor claims</strong>. English materials did <strong>not</strong> publish absolute TOPS, watts, or a process node — I am not inventing those rows.
+        </p>
+
+        <h2>Spec sheet (named numbers)</h2>
+        <div class="table-wrap" role="region" aria-label="T-Head Zhenwu V900 named numbers spec sheet" tabindex="0">
+          <table>
+            <tbody>
+              <tr>
+                <td>Product</td>
+                <td><strong>Zhenwu V900</strong> — T-Head AI training + inference accelerator</td>
+              </tr>
+              <tr>
+                <td>Vendor</td>
+                <td><strong>T-Head</strong> (Alibaba chip design unit)</td>
+              </tr>
+              <tr>
+                <td>Public unveil</td>
+                <td><strong>Sep 22, 2026</strong> — Apsara Conference, Hangzhou</td>
+              </tr>
+              <tr>
+                <td>Performance claim</td>
+                <td><strong>3×</strong> vs predecessor <strong>Zhenwu M890</strong> (vendor; absolute FLOPS not published in English PR)</td>
+              </tr>
+              <tr>
+                <td>Predecessor context</td>
+                <td><strong>M890</strong> launched <strong>May 2026</strong>: <strong>144 GB</strong> memory, <strong>800 GB/s</strong> inter-chip bandwidth, itself <strong>3×</strong> vs <strong>Zhenwu 810E</strong></td>
+              </tr>
+              <tr>
+                <td>Memory</td>
+                <td><strong>216 GB</strong> on-package / GPU memory (vendor wording)</td>
+              </tr>
+              <tr>
+                <td>Inter-chip bandwidth</td>
+                <td><strong>1,200 GB/s</strong> chip-to-chip</td>
+              </tr>
+              <tr>
+                <td>Precision</td>
+                <td>Native <strong>FP32 → FP4</strong>; press materials call out <strong>FP8 / FP4</strong> plus <strong>MXFP8 / MXFP4</strong> with richer scaling-factor formats and block-size configs; improved Tensor Core arithmetic for FP8/FP4 instruction precision</td>
+              </tr>
+              <tr>
+                <td>Fabric</td>
+                <td>Proprietary <strong>ICN Switch</strong> interconnect; native memory semantics / unified addressing narrative</td>
+              </tr>
+              <tr>
+                <td>Supernode scale</td>
+                <td><strong>&gt;1,000</strong> V900 chips as a single system (TechNode); Alibaba Cloud cluster narrative up to <strong>500,000</strong> accelerators / cards</td>
+              </tr>
+              <tr>
+                <td>Server SKU</td>
+                <td>Upgraded <strong>Panjiu</strong> supernode server: <strong>V900 + ICN Switch + Panmai SmartNIC + Zhenyue SSD controller</strong></td>
+              </tr>
+              <tr>
+                <td>Software</td>
+                <td><strong>T-Head SAIL</strong> stack (training / inference workshops at Apsara)</td>
+              </tr>
+              <tr>
+                <td>Availability</td>
+                <td><strong>Mass production and commercial release: Q1 2027</strong></td>
+              </tr>
+              <tr>
+                <td>Installed base (family)</td>
+                <td>Zhenwu series: <strong>&gt;650</strong> enterprise customers (auto, finance, LLMs, embodied AI, energy, manufacturing)</td>
+              </tr>
+              <tr>
+                <td>Prior supernode signal</td>
+                <td><strong>Lingjun Zhenwu M890</strong> supernode (<strong>GP9A</strong>) commercially available; vendor: first China supernode platform to run <strong>&gt;2 trillion</strong>-parameter models (<strong>Qwen3.8</strong>, <strong>Kimi K3</strong>)</td>
+              </tr>
+              <tr>
+                <td>Host CPU roadmap (same day)</td>
+                <td><strong>Yitian 720 / 730</strong> scheduled <strong>Q3 2027</strong>; <strong>730</strong> = first T-Head in-house microarchitecture, up to <strong>~40% / 1.4×</strong> SPECint2017/GHz vs <strong>Yitian 710</strong>; later <strong>Yitian 750</strong> intended to speak <strong>ICN</strong> directly to Zhenwu</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          V900 is not “another China AI chip sticker.” It is a claim that <strong>memory capacity + chip-to-chip bandwidth + a house interconnect</strong> matter more than a lone accelerator datasheet once you are training and serving multi-trillion-parameter models inside a captive cloud.
+        </p>
+
+        <h2>What the silicon is supposed to change</h2>
+        <p>
+          Relative to M890, the public delta is concrete even without a FLOPS row: memory <strong>144 GB → 216 GB</strong>, inter-chip bandwidth <strong>800 GB/s → 1,200 GB/s</strong>, and a marketed <strong>3×</strong> generation lift with native <strong>FP4 / MXFP4</strong> paths. The Register’s translated spec notes also flag richer MXFP8/MXFP4 scaling-factor and block-size options — treat as a precision-toolchain claim, not a third-party accuracy certificate.
+        </p>
+        <p>
+          The system story is deliberate. T-Head is not selling a lonely NeoCloud PCIe card. It is selling <strong>V900 + ICN Switch</strong> so that more than a thousand chips present as one memory-semantic supernode, then stacking into Alibaba Cloud’s AI-center network with a <strong>500,000</strong>-accelerator cluster ceiling. Panjiu is the BOM sentence: accelerator, interconnect, SmartNIC, and SSD controller as one stack rather than four RFQs.
+        </p>
+        <p>
+          That sits next to — not instead of —
+          <a href="/vera-rubin-nvl72-mlperf-v6-1.html">Vera Rubin NVL72 MLPerf</a>,
+          <a href="/amd-mi355x-mlperf-v6-1-512-gpu.html">AMD MI355X 512-GPU</a>,
+          <a href="/cornelis-delos-open-scaleup-ualink-esun.html">Cornelis / Delos</a>,
+          and
+          <a href="/dmatrix-raptor-nvlink-fusion-nvl144.html">d-Matrix Raptor</a>.
+          Those are open pods, open fabrics, or NVLink Fusion decode. V900 argues for a <strong>captive full-stack island</strong>: proprietary accelerator, switch, NIC, SSD controller, and SAIL — aimed at Alibaba Cloud and the 650+ Zhenwu customers already on M890.
+        </p>
+
+        <h2>M890 is the existence proof (and the asterisk)</h2>
+        <p>
+          M890 is not vapor. Alibaba says M890 supernodes are in large-scale commercial deployment, that Lingjun <strong>GP9A</strong> has run <strong>&gt;2T</strong>-parameter models including <strong>Qwen3.8</strong> and <strong>Kimi K3</strong>, and that those capabilities reach Bailian / Model Studio. If you believe V900’s <strong>3× / 216 GB / 1,200 GB/s</strong> marketing, you are extending a stack that already trains and serves multi-trillion-parameter models inside Alibaba’s wall — not a greenfield slide.
+        </p>
+        <p>
+          Three caveats belong on any capacity ticket before this becomes a fleet assumption outside that wall:
+        </p>
+        <ol>
+          <li>
+            <strong>Relative FLOPS, not absolute.</strong> English PR leads with <strong>3× vs M890</strong>. There is no published TFLOPS/PFLOPS or TDP row in the sources above. Do not invent one for a comparison chart against B200 / MI355X / Europa.
+          </li>
+          <li>
+            <strong>Q1 2027 mass production.</strong> Announce day is <strong>Sep 22, 2026</strong>; ship day is next year’s first quarter. Treat today’s unveil as a roadmap lock plus a Panjiu reference design, not a CSP SKU you can RFQ this week.
+          </li>
+          <li>
+            <strong>Captive fabric semantics.</strong> ICN Switch “native memory semantics” and “unified memory addressing” are vendor architecture claims. Reproduce latency, congestion, and failure domains on <em>your</em> collective before you price a 1,000-chip supernode.
+          </li>
+        </ol>
+        <p>
+          Same-day Apsara also put <strong>Qwen 4</strong> in training and sketched <strong>Qwen 4.5 / Qwen 5</strong> toward <strong>5–10 trillion</strong> parameters, plus a long-horizon <strong>20 GW</strong> Alibaba Cloud capacity target by <strong>2032</strong>. Useful color for <em>why</em> they want denser memory and wider chip-to-chip — not a substitute for V900 silicon numbers.
+        </p>
+
+        <h2>Where it sits next to Europa, Inferra, and the GPU island notes</h2>
+        <div class="table-wrap" role="region" aria-label="Where Zhenwu V900 sits next to Europa, Inferra, and GPU island notes" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Purchase</th>
+                <th>Product</th>
+                <th>What it buys</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Efficient PCIe AIPU</td>
+                <td><a href="/axelera-europa-629-tops-edge-232p.html">Axelera Europa</a></td>
+                <td>629 TOPS / 45 W inference cards for agent / VLM / vision lanes</td>
+              </tr>
+              <tr>
+                <td>Prefetch + NVMe tiers</td>
+                <td><a href="/lightbits-inferra-kv-cache-prefetch.html">Lightbits Inferra</a></td>
+                <td>KV readiness across DRAM/NVMe so attention does not wait on recompute</td>
+              </tr>
+              <tr>
+                <td>Fabric DDR</td>
+                <td><a href="/astera-leo-x-fabric-kv-cache.html">Astera Leo X</a></td>
+                <td>KV / agent state as a scale-up fabric citizen</td>
+              </tr>
+              <tr>
+                <td>Merchant GPU island</td>
+                <td>
+                  <a href="/vera-rubin-nvl72-mlperf-v6-1.html">Vera Rubin NVL72 MLPerf</a>
+                  /
+                  <a href="/amd-mi355x-mlperf-v6-1-512-gpu.html">MI355X 512-GPU</a>
+                </td>
+                <td>Published pod scores when you buy the open HBM island</td>
+              </tr>
+              <tr>
+                <td>Captive hyperscaler accelerator + fabric</td>
+                <td><strong>Zhenwu V900 + ICN / Panjiu</strong></td>
+                <td>216 GB / 1,200 GB/s generation with house interconnect and Q1’27 production</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Five purchase domains. V900 does not move your PCIe inference cards and does not invent an open RoCE fabric. It argues that for Alibaba-scale training and agentic inference, the next bottleneck after raw cores is <strong>per-chip memory, chip-to-chip bandwidth, and a switch that speaks the accelerator’s memory model</strong> — shipped on their silicon calendar.
+        </p>
+        <p>
+          Same-day <strong>Yitian 720 / 730</strong> (Q3 2027) is the host half: denser host cores, first in-house microarchitecture on 730, later <strong>Yitian 750</strong> speaking <strong>ICN</strong> to Zhenwu. Keep SPECint off the accelerator table; keep it on the supernode BOM.
+        </p>
+
+        <h2>Caveats I would write into any V900 ticket</h2>
+        <ol>
+          <li>
+            <strong>Demand absolute FLOPS, TDP, and process</strong> under NDA before you compare to merchant GPUs — English public materials omit them.
+          </li>
+          <li>
+            <strong>Reproduce MXFP8 / MXFP4 training stability</strong> on your model family; richer block-size configs are a claim, not a free lunch.
+          </li>
+          <li>
+            <strong>Qualify Q1 2027 lead time</strong> for Panjiu + ICN Switch firmware rev — announce ≠ drop-in Bailian SKU today.
+          </li>
+          <li>
+            <strong>Do not collapse with M890 144 GB / 800 GB/s.</strong> Same family; different memory and interconnect envelope.
+          </li>
+          <li>
+            <strong>Do not mix with killed Huawei Ascend / Atlas SuperPoD numbers.</strong> That lane stays closed on this desk.
+          </li>
+          <li>
+            <strong>Export / geography.</strong> This is a China hyperscaler stack. Plan for where the silicon can actually land before you put it on a US NeoCloud BOM.
+          </li>
+        </ol>
+
+        <h2>How I would evaluate the claim if I ran clusters</h2>
+        <ol>
+          <li>
+            <strong>Tokens/s and MFU</strong> on models you care about (70B → multi-trillion sparse) at fixed batch / concurrency — V900 vs M890 vs a same-rack merchant GPU baseline, once you have absolute FLOPS.
+          </li>
+          <li>
+            <strong>Chip-to-chip effective bandwidth</strong> under MoE / all-to-all patterns — marketed <strong>1,200 GB/s</strong> vs measured bisection with ICN Switch.
+          </li>
+          <li>
+            <strong>Supernode failure domain</strong> at <strong>&gt;1,000</strong> chips: how a single card / switch / SmartNIC fault shows up to the scheduler.
+          </li>
+          <li>
+            <strong>SAIL compile coverage</strong> for your model zoo — proprietary stacks die on day-two model support, not day-one FLOPS slides.
+          </li>
+          <li>
+            <strong>Q1 2027 production proof</strong>: first customer FITs, Panjiu SKU path, and Bailian exposure before you assume 500,000-card headroom is more than architecture math.
+          </li>
+        </ol>
+
+        <h2>Bottom line</h2>
+        <p>
+          Zhenwu V900 is the strongest <em>same-day hyperscaler accelerator</em> story next to last night’s Europa note: <strong>216 GB</strong>, <strong>1,200 GB/s</strong> chip-to-chip, <strong>3× vs M890</strong>, native <strong>FP8/FP4 (+ MXFP)</strong>, an <strong>ICN Switch</strong> path past <strong>1,000</strong> chips toward <strong>500,000</strong> cluster cards, and a <strong>Panjiu</strong> BOM naming SmartNIC and SSD controller silicon — <strong>Q1 2027</strong> mass production. The honest read is a <strong>captive full-stack generation lock on a commercial M890 predecessor</strong>, not an open MLPerf pod and not a watts-per-TOPS merchant card. The dishonest read is “China closed the GPU gap with one relative multiplier.” Until absolute FLOPS, TDP, and independent collectives exist, I treat V900 as a serious <strong>Alibaba Cloud / Zhenwu-customer supernode roadmap</strong> — and as the memory-and-fabric foil every merchant GPU ticket should face when the workload is multi-trillion-parameter training and agentic inference inside a house stack.
+        </p>
+        <p>
+          Create-only. Specs and dates from Alibaba Cloud’s Apsara 2026 full-stack AI roadmap, TechNode’s same-day Zhenwu V900 write-up, The Register, Yangtzeer, and TrendForce. Update when T-Head publishes absolute FLOPS/TDP, or when a named customer reproduces supernode collectives outside Alibaba’s wall.
+        </p>
+        <p>
+          Sources:
+          <a href="https://www.alibabacloud.com/en/press-room/alibaba-unveils-roadmap-on-full-stack-ai-strategy?_p_lc=1" target="_blank" rel="noopener noreferrer">Alibaba Cloud press room</a>
+          ·
+          <a href="https://technode.com/2026/09/22/t-head-unveils-zhenwu-v900-ai-chip-in-alibabas-push-to-expand-its-ai-infrastructure-stack/" target="_blank" rel="noopener noreferrer">TechNode</a>
+          ·
+          <a href="https://www.theregister.com/off-prem/2026/09/22/alibaba-cloud-plans-six-year-stroll-to-20gw-of-datacenters-reveals-chip-to-power-them/5298062" target="_blank" rel="noopener noreferrer">The Register</a>
+          ·
+          <a href="https://yangtzeer.com/news/heavy-hitters/alibaba-unveils-zhenwu-v900/" target="_blank" rel="noopener noreferrer">Yangtzeer</a>
+          ·
+          <a href="https://www.trendforce.com/news/2026/09/22/news-alibaba-unveils-ai-chip-zhenwu-v900-for-1q27-mass-production-maps-out-new-server-cpus-for-3q27/" target="_blank" rel="noopener noreferrer">TrendForce</a>.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated September 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
