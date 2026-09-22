@@ -4,12 +4,12 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>A first look at NVIDIA Cluster Readiness Engine — Anpoo Sivanadi</title>
-  <meta name="description" content="What NVIDIA Cluster Readiness Engine (NVCRE) v0.3.0 is, how its certification catalog and APIs compose, and how to run your first certification from the official docs." />
+  <meta name="description" content="What NVIDIA Cluster Readiness Engine (NVCRE) v0.4.0 is, how its certification catalog and APIs compose, and how to run your first certification from the official docs." />
   <link rel="canonical" href="https://asivanadi0.github.io/nvcre.html" />
   <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
   <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
   <meta property="og:title" content="A first look at NVIDIA Cluster Readiness Engine — Anpoo Sivanadi" />
-  <meta property="og:description" content="Node Ready is not GPU-cluster ready. How NVCRE v0.3.0 certifies GPU clusters with real NCCL and training workloads." />
+  <meta property="og:description" content="Node Ready is not GPU-cluster ready. How NVCRE v0.4.0 certifies GPU clusters with real NCCL and training workloads." />
   <meta property="og:type" content="article" />
   <meta property="og:url" content="https://asivanadi0.github.io/nvcre.html" />
   <meta property="article:published_time" content="2026-09-02T12:00:00-07:00" />
@@ -38,7 +38,7 @@
         <p class="article-meta">
           <time datetime="2026-09-02">2 September 2026</time>
           · Anpoo Sivanadi
-          · based on <a href="https://github.com/NVIDIA/cluster-readiness-engine/releases/tag/v0.3.0" target="_blank" rel="noopener noreferrer">v0.3.0</a> (14 Sep 2026)
+          · based on <a href="https://github.com/NVIDIA/cluster-readiness-engine/releases/tag/v0.4.0" target="_blank" rel="noopener noreferrer">v0.4.0</a> (21 Sep 2026)
         </p>
         <p class="dek article-dek">
           Node Ready is not the same as GPU-cluster ready. NVCRE runs real
@@ -66,7 +66,7 @@
         </p>
         <p>
           This note is a practitioner reading of the product from the official
-          v0.3.0 README, first-certification guide, certify-a-cluster docs,
+          v0.4.0 README, first-certification guide, certify-a-cluster docs,
           and deployment guide. It is not a lab write-up of a cluster I ran,
           and it is not a contribution recap.
         </p>
@@ -86,7 +86,7 @@
           The audience is platform and infrastructure teams that bring up,
           validate, or resell GPU clusters.
         </p>
-        <p>From the v0.3.0 feature list:</p>
+        <p>From the v0.4.0 feature list:</p>
         <ul>
           <li>A certification catalog with NCCL tests and multi-node training</li>
           <li>Platform and GPU architecture detection</li>
@@ -101,13 +101,15 @@
           <li>The <code>nvcrectl</code> CLI for setup, render, run, report, and cleanup</li>
         </ul>
 
-        <h2>What v0.3.0 actually runs</h2>
+        <h2>What v0.4.0 actually runs</h2>
         <p>
-          The first-certification catalog has eight categories. You can list them
+          The first-certification catalog still has eight categories. The
+          v0.4.0 release notes are explicit: nothing changed in the catalog,
+          the controllers, or the CRD schemas. You can list the categories
           with <code>kubectl nvcre certification list-categories</code>.
         </p>
 
-        <div class="table-wrap" role="region" aria-label="v0.3.0 certification catalog" tabindex="0">
+        <div class="table-wrap" role="region" aria-label="v0.4.0 certification catalog" tabindex="0">
           <table>
             <thead>
               <tr>
@@ -167,8 +169,8 @@
           GB300, H100, H200, B200, A100, L40S, and L40. NVCRE tunes workloads
           from the <code>nvidia.com/gpu.product</code> label and the Node
           <code>providerID</code>. On-prem is the fallback when
-          <code>providerID</code> is empty. v0.3.0 adds an on-prem override for
-          GB200/GB300: arm64 and GPU-present taint tolerations, portable
+          <code>providerID</code> is empty. On-prem GB200/GB300 still get the
+          override from v0.3.0: arm64 and GPU-present taint tolerations, portable
           InfiniBand NCCL env without HCA pinning, and a NIC resource request
           that is auto-detected when exactly one candidate
           (<code>rdma/*</code> or <code>nvidia.com/mlnxnics</code>) is
@@ -186,7 +188,7 @@
             <thead>
               <tr>
                 <th>Detection</th>
-                <th>Values in v0.3.0</th>
+                <th>Values in v0.4.0</th>
               </tr>
             </thead>
             <tbody>
@@ -290,7 +292,7 @@ spec:
           <code>nvcrectl certification render</code> applies the same rewrite,
           so the rendered manifests show what the controller will create. Full
           detail is in the
-          <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.3.0/docs/how-to-guides/certify-a-cluster.md" target="_blank" rel="noopener noreferrer">certify-a-cluster</a>
+          <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.4.0/docs/how-to-guides/certify-a-cluster.md" target="_blank" rel="noopener noreferrer">certify-a-cluster</a>
           guide.
         </p>
 
@@ -307,7 +309,7 @@ spec:
         <pre><code>kubectl nvcre setup init \
   --chart-ref oci://registry.example.com/mirror/cluster-readiness-engine \
   --trainer-chart-ref oci://registry.example.com/mirror/kubeflow-trainer \
-  --image registry.example.com/mirror/manager:v0.3.0</code></pre>
+  --image registry.example.com/mirror/manager:v0.4.0</code></pre>
         <p>
           <code>--chart-ref</code> is used for the release install and for
           CRD extraction (<code>helm show crds</code>). The mirror must still
@@ -369,7 +371,7 @@ spec:
         <h2>How to run it</h2>
         <p>
           The steps below follow the official README quickstart and
-          <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.3.0/docs/getting-started/first-certification.md" target="_blank" rel="noopener noreferrer">Your first certification</a>.
+          <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.4.0/docs/getting-started/first-certification.md" target="_blank" rel="noopener noreferrer">Your first certification</a>.
           Plan for roughly 30 to 60 minutes; most of that is the workload.
         </p>
 
@@ -417,13 +419,13 @@ spec:
 
         <h3>1. Install the CLI</h3>
         <p>
-          v0.3.0 artifacts are signed with Sigstore and carry SLSA provenance.
+          v0.4.0 artifacts are signed with Sigstore and carry SLSA provenance.
           Preferred path: download the installer with its Sigstore bundle,
           verify with cosign, then run it pinned to the tag. Digests and exact
           cosign identity strings live on the
-          <a href="https://github.com/NVIDIA/cluster-readiness-engine/releases/tag/v0.3.0" target="_blank" rel="noopener noreferrer">v0.3.0 release</a>.
+          <a href="https://github.com/NVIDIA/cluster-readiness-engine/releases/tag/v0.4.0" target="_blank" rel="noopener noreferrer">v0.4.0 release</a>.
         </p>
-        <pre><code>REL=https://github.com/NVIDIA/cluster-readiness-engine/releases/download/v0.3.0
+        <pre><code>REL=https://github.com/NVIDIA/cluster-readiness-engine/releases/download/v0.4.0
 
 curl -fsSLO "${REL}/installer"
 curl -fsSLO "${REL}/installer.sigstore.json"
@@ -431,11 +433,11 @@ curl -fsSLO "${REL}/installer.sigstore.json"
 cosign verify-blob-attestation \
   --bundle installer.sigstore.json \
   --type https://slsa.dev/provenance/v1 \
-  --certificate-identity "https://github.com/NVIDIA/cluster-readiness-engine/.github/workflows/attest.yml@refs/tags/v0.3.0" \
+  --certificate-identity "https://github.com/NVIDIA/cluster-readiness-engine/.github/workflows/attest.yml@refs/tags/v0.4.0" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
   installer
 
-bash installer -v v0.3.0</code></pre>
+bash installer -v v0.4.0</code></pre>
         <p>
           Piping <code>releases/latest</code> or a pin-by-tag installer into
           bash still works, but it is weaker: the script runs before anything
@@ -446,7 +448,7 @@ bash installer -v v0.3.0</code></pre>
 curl -fsSL https://github.com/NVIDIA/cluster-readiness-engine/releases/latest/download/installer | bash
 
 # weaker: pin by tag, still pipes into bash
-curl -fsSL https://github.com/NVIDIA/cluster-readiness-engine/releases/download/v0.3.0/installer | bash -s -- -v v0.3.0</code></pre>
+curl -fsSL https://github.com/NVIDIA/cluster-readiness-engine/releases/download/v0.4.0/installer | bash -s -- -v v0.4.0</code></pre>
         <p>
           The installer puts <code>nvcrectl</code> on your <code>$PATH</code> and
           creates a <code>kubectl-nvcre</code> symlink, so both
@@ -477,16 +479,16 @@ kubectl nvcre setup status</code></pre>
         </p>
         <p>
           Prefer Helm and want an explicit pin to this release’s chart digest.
-          The v0.3.0 signature covers digest
-          <code>sha256:fc54b189399b7e9fb56dc41735f58ae4c2a65cd580827bc3e76a3886128d67e9</code>
+          The v0.4.0 signature covers digest
+          <code>sha256:f55f49639834922ce4721b3905b65ce5706c0f0276c2d1c5babc77103c0cf01f</code>
           at <code>ghcr.io/nvidia/cluster-readiness-engine</code>. The version
           tag is mutable, so verify and install the same digest:
         </p>
         <pre><code>CHART=ghcr.io/nvidia/cluster-readiness-engine
-DIGEST=sha256:fc54b189399b7e9fb56dc41735f58ae4c2a65cd580827bc3e76a3886128d67e9
+DIGEST=sha256:f55f49639834922ce4721b3905b65ce5706c0f0276c2d1c5babc77103c0cf01f
 
 cosign verify \
-  --certificate-identity "https://github.com/NVIDIA/cluster-readiness-engine/.github/workflows/attest.yml@refs/tags/v0.3.0" \
+  --certificate-identity "https://github.com/NVIDIA/cluster-readiness-engine/.github/workflows/attest.yml@refs/tags/v0.4.0" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
   "${CHART}@${DIGEST}"
 
@@ -494,18 +496,18 @@ helm pull "oci://${CHART}@${DIGEST}"
 helm install nvcre ./cluster-readiness-engine@${DIGEST/:/-}.tgz \
   --namespace nvcre --create-namespace</code></pre>
         <p>
-          <code>helm install --version v0.3.0</code> resolves the tag at
+          <code>helm install --version v0.4.0</code> resolves the tag at
           install time, which is not provably the digest you verified.
           <code>helm install --verify</code> looks for a PGP
           <code>.prov</code> file; this project publishes none.
         </p>
         <p>
           The controller image is
-          <code>ghcr.io/nvidia/cluster-readiness-engine/manager:v0.3.0</code>.
+          <code>ghcr.io/nvidia/cluster-readiness-engine/manager:v0.4.0</code>.
           This release signed these exact digests; pin the index rather than
           the tag:
         </p>
-        <div class="table-wrap" role="region" aria-label="v0.3.0 controller image digests" tabindex="0">
+        <div class="table-wrap" role="region" aria-label="v0.4.0 controller image digests" tabindex="0">
           <table>
             <thead>
               <tr>
@@ -516,26 +518,67 @@ helm install nvcre ./cluster-readiness-engine@${DIGEST/:/-}.tgz \
             <tbody>
               <tr>
                 <td>index (multi-platform)</td>
-                <td><code>sha256:d29816b5bc7a240917d26f5e35498be7456aaa905298f1332c413b48cc746675</code></td>
+                <td><code>sha256:9edcb0dcac225bd66daafb8af6e0038ab5fad950222ca5fa34ccb2c81dfd74a6</code></td>
               </tr>
               <tr>
                 <td><code>linux/amd64</code></td>
-                <td><code>sha256:9ce9e6f5e4ef820cd619441f2245f13854c2b8c7100d85465c4cfe473f24b557</code></td>
+                <td><code>sha256:2997ef1d8564185b09f85a06994ecc833c2aab0add20bd72c6fc2789d95e73e8</code></td>
               </tr>
               <tr>
                 <td><code>linux/arm64</code></td>
-                <td><code>sha256:7badad49606d566ceafbf13d5fe022906b785eba3bb70c6514bc5148160399c3</code></td>
+                <td><code>sha256:480a4914690f217ad81c6b0fc9e85e7ba65df4af2db390c71576367d8f6366d0</code></td>
               </tr>
             </tbody>
           </table>
         </div>
         <pre><code>IMAGE=ghcr.io/nvidia/cluster-readiness-engine/manager
-INDEX=sha256:d29816b5bc7a240917d26f5e35498be7456aaa905298f1332c413b48cc746675
+INDEX=sha256:9edcb0dcac225bd66daafb8af6e0038ab5fad950222ca5fa34ccb2c81dfd74a6
 
 cosign verify \
-  --certificate-identity "https://github.com/NVIDIA/cluster-readiness-engine/.github/workflows/attest.yml@refs/tags/v0.3.0" \
+  --certificate-identity "https://github.com/NVIDIA/cluster-readiness-engine/.github/workflows/attest.yml@refs/tags/v0.4.0" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
   "${IMAGE}@${INDEX}"</code></pre>
+        <p>
+          To require that same signature and SLSA provenance at admit time,
+          v0.4.0 ships two samples under
+          <a href="https://github.com/NVIDIA/cluster-readiness-engine/tree/v0.4.0/config/samples/policy" target="_blank" rel="noopener noreferrer"><code>config/samples/policy/</code></a>:
+          a Kyverno <code>ImageValidatingPolicy</code> and a Sigstore
+          policy-controller <code>ClusterImagePolicy</code>. Both check the
+          controller image before a Pod is admitted. From this tag, the
+          attest self-test is gated to <code>main</code>, and
+          <code>attest.yml</code> refuses <code>allow_untagged</code> on a
+          release tag. The signed <code>THIRD_PARTY_NOTICES.md</code> asset
+          matches the modules compiled into <code>nvcrectl</code>.
+        </p>
+
+        <h3>Setup next to an existing JobSet</h3>
+        <p>
+          <code>nvcrectl setup init</code> and <code>setup reset</code> now
+          coexist with an existing JobSet installation.
+        </p>
+        <p>
+          <code>setup init</code> detects who owns the JobSet CRD before it
+          touches Kubeflow Trainer. A verified external JobSet controller is
+          reused: Trainer installs without the bundled one. A retained CRD
+          with no controller gets the bundled controller without a schema
+          refresh. Anything ambiguous stops before Helm mutation and prints
+          the manual Trainer path with <code>--skip-phases=deps</code>.
+        </p>
+        <p>
+          <code>setup reset</code> keeps the shared JobSet CRD in every
+          ownership mode, so JobSets that belong to other workloads survive.
+          If Trainer uninstall fails, reset stops and exits non-zero instead
+          of continuing into CRD cleanup. <code>--skip-phases=helm</code> is
+          honored on both init and reset.
+        </p>
+        <p>
+          Breaking: both commands reject unknown <code>--skip-phases</code>
+          values. <code>init</code> accepts <code>deps</code> and
+          <code>helm</code>. <code>reset</code> accepts <code>cr</code>,
+          <code>helm</code>, and <code>deps</code>. A script that passed any
+          other name used to be ignored; it now exits with an error that
+          names the accepted phases.
+        </p>
 
         <h3>4. Certify one category</h3>
         <p>
@@ -637,13 +680,20 @@ spec:
           four 4-node jobs.
         </p>
         <pre><code>kubectl nvcre workloadrun run nccl-all-reduce.yaml --wait</code></pre>
+        <p>
+          The same NCCL WorkloadRun, plus a multi-category Certification, also
+          live as runnable files under
+          <a href="https://github.com/NVIDIA/cluster-readiness-engine/tree/v0.4.0/examples" target="_blank" rel="noopener noreferrer"><code>examples/</code></a>.
+        </p>
 
         <h3>Cleanup</h3>
         <pre><code>kubectl delete namespace &lt;namespace&gt;
 kubectl nvcre setup reset</code></pre>
         <p>
           <code>setup reset</code> also removes Kubeflow Trainer. Pass
-          <code>--skip-phases=deps</code> to keep it.
+          <code>--skip-phases=deps</code> to keep it. The shared JobSet CRD
+          stays in every ownership mode. If Trainer uninstall fails, reset
+          stops and exits non-zero instead of continuing into CRD cleanup.
         </p>
 
         <h2>Related reading</h2>
@@ -663,38 +713,47 @@ kubectl nvcre setup reset</code></pre>
             <a href="https://github.com/NVIDIA/cluster-readiness-engine" target="_blank" rel="noopener noreferrer">NVIDIA/cluster-readiness-engine</a>
           </li>
           <li>
-            <a href="https://github.com/NVIDIA/cluster-readiness-engine/releases/tag/v0.3.0" target="_blank" rel="noopener noreferrer">v0.3.0 release</a>
-            (14 September 2026)
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/releases/tag/v0.4.0" target="_blank" rel="noopener noreferrer">v0.4.0 release</a>
+            (21 September 2026)
           </li>
           <li>
-            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.3.0/README.md" target="_blank" rel="noopener noreferrer">README (v0.3.0)</a>
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.4.0/README.md" target="_blank" rel="noopener noreferrer">README (v0.4.0)</a>
           </li>
           <li>
-            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.3.0/docs/getting-started/first-certification.md" target="_blank" rel="noopener noreferrer">Your first certification</a>
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.4.0/CHANGELOG.md" target="_blank" rel="noopener noreferrer">CHANGELOG.md</a>
           </li>
           <li>
-            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.3.0/docs/how-to-guides/certify-a-cluster.md" target="_blank" rel="noopener noreferrer">Certify a cluster (incl. gang scheduling)</a>
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/tree/v0.4.0/examples" target="_blank" rel="noopener noreferrer">examples/ (runnable Certification and WorkloadRun)</a>
           </li>
           <li>
-            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.3.0/docs/operations/deployment.md" target="_blank" rel="noopener noreferrer">Deployment (air-gapped installs, sourceRepo)</a>
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/tree/v0.4.0/config/samples/policy" target="_blank" rel="noopener noreferrer">Admission-policy samples (Kyverno, Sigstore policy-controller)</a>
           </li>
           <li>
-            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.3.0/docs/api-reference/certification.md" target="_blank" rel="noopener noreferrer">Certification API (image, sourceRepo, gangScheduler)</a>
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.4.0/docs/getting-started/first-certification.md" target="_blank" rel="noopener noreferrer">Your first certification</a>
           </li>
           <li>
-            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.3.0/docs/operations/faq.md" target="_blank" rel="noopener noreferrer">FAQ (air-gapped MPI / sshd)</a>
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.4.0/docs/how-to-guides/certify-a-cluster.md" target="_blank" rel="noopener noreferrer">Certify a cluster (incl. gang scheduling)</a>
           </li>
           <li>
-            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.3.0/docs/how-to-guides/interpret-results.md" target="_blank" rel="noopener noreferrer">Interpret results (incl. captured failure logs)</a>
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.4.0/docs/operations/deployment.md" target="_blank" rel="noopener noreferrer">Deployment (air-gapped installs, sourceRepo)</a>
           </li>
           <li>
-            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.3.0/docs/concepts/platform-detection.md" target="_blank" rel="noopener noreferrer">Platform detection (incl. on-prem GB200/GB300)</a>
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.4.0/docs/api-reference/certification.md" target="_blank" rel="noopener noreferrer">Certification API (image, sourceRepo, gangScheduler)</a>
           </li>
           <li>
-            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.3.0/docs/how-to-guides/nccl-benchmarks.md" target="_blank" rel="noopener noreferrer">Run NCCL Benchmarks</a>
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.4.0/docs/operations/faq.md" target="_blank" rel="noopener noreferrer">FAQ (air-gapped MPI / sshd)</a>
           </li>
           <li>
-            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.3.0/docs/how-to-guides/workloadrun-nemotron5.md" target="_blank" rel="noopener noreferrer">Nemotron 5 WorkloadRun guide</a>
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.4.0/docs/how-to-guides/interpret-results.md" target="_blank" rel="noopener noreferrer">Interpret results (incl. captured failure logs)</a>
+          </li>
+          <li>
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.4.0/docs/concepts/platform-detection.md" target="_blank" rel="noopener noreferrer">Platform detection (incl. on-prem GB200/GB300)</a>
+          </li>
+          <li>
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.4.0/docs/how-to-guides/nccl-benchmarks.md" target="_blank" rel="noopener noreferrer">Run NCCL Benchmarks</a>
+          </li>
+          <li>
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.4.0/docs/how-to-guides/workloadrun-nemotron5.md" target="_blank" rel="noopener noreferrer">Nemotron 5 WorkloadRun guide</a>
           </li>
           <li>
             <a href="https://www.vcluster.com/blog/nvidia-cluster-readiness-engine-vcluster-private-nodes" target="_blank" rel="noopener noreferrer">Saiyam Pathak: NVCRE on vCluster Private Nodes</a>
