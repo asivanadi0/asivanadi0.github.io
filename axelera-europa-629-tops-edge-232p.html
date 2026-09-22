@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Axelera Europa: 629 TOPS at 45 W — Shipping Edge 232p Math With a Dell/Supermicro Asterisk — Anpoo Sivanadi</title>
+  <meta name="description" content="Axelera Europa — 629 TOPS at 45 W, shipping Edge 232p math with a Dell/Supermicro asterisk." />
+  <link rel="canonical" href="https://asivanadi0.github.io/axelera-europa-629-tops-edge-232p.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Axelera Europa: 629 TOPS at 45 W — Shipping Edge 232p Math With a Dell/Supermicro Asterisk — Anpoo Sivanadi" />
+  <meta property="og:description" content="Axelera Europa — 629 TOPS at 45 W, shipping Edge 232p math with a Dell/Supermicro asterisk." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/axelera-europa-629-tops-edge-232p.html" />
+  <meta property="article:published_time" content="2026-09-21T18:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Axelera Europa: 629 TOPS at 45 W — Shipping Edge 232p Math With a Dell/Supermicro Asterisk</h1>
+        <p class="article-meta">
+          <time datetime="2026-09-21">21 September 2026</time>
+          · Anpoo Sivanadi
+          · based on Axelera Europa AI Infra Summit launch and Sep 15–21 StorageReview / New-TechEurope reads
+        </p>
+        <p class="dek article-dek">
+          Axelera Europa — 629 TOPS at 45 W, shipping Edge 232p math with a Dell/Supermicro asterisk.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          This morning’s
+          <a href="/lightbits-inferra-kv-cache-prefetch.html">Lightbits Inferra</a>
+          note was the <em>prefetch</em> half of the KV ladder after HBM fills. Last night’s
+          <a href="/astera-leo-x-fabric-kv-cache.html">Astera Leo X</a>
+          note was the <em>fabric-attached DDR</em> half. Tonight is a different purchase: <strong>a shipping inference AIPU</strong> with named watts, TOPS, PCIe SKUs, and OEM server validation — not another optics booth and not another memory-tier slide.
+        </p>
+        <p>
+          On <strong>September 15, 2026</strong>, Eindhoven-based Axelera AI put <strong>Europa</strong> on the AI Infra Summit floor as its second-generation AI Processing Unit, extending the Metis edge architecture into enterprise and Physical AI inference. Primary sources: Axelera’s
+          <a href="https://axelera.ai/news/axelera-ai-launches-europa-delivers-physical-and-enterprise-ai-through-growing-partner-ecosystem-including-dell-and-supermicro" target="_blank" rel="noopener noreferrer">launch press release</a>,
+          <a href="https://www.storagereview.com/news/axelera-europa-ships-629-tops-at-45w-per-aipu-in-validated-dell-xe5-and-supermicro-servers" target="_blank" rel="noopener noreferrer">StorageReview’s Sep 15 ship write-up</a>,
+          <a href="https://www.new-techeurope.com/2026/09/21/axelera-ai-launches-629-tops-europa-processor-for-enterprise-and-physical-ai/" target="_blank" rel="noopener noreferrer">New-TechEurope’s Sep 21 product brief</a>,
+          and Axelera’s
+          <a href="https://axelera.ai/ai-accelerators/aipu/europa" target="_blank" rel="noopener noreferrer">Europa</a>
+          /
+          <a href="https://axelera.ai/axelera-products/edge#232p" target="_blank" rel="noopener noreferrer">Edge 232p</a>
+          product pages. Specs and tok/s deltas below are <strong>vendor claims</strong> unless a named third-party pod result is cited.
+        </p>
+
+        <h2>Spec sheet (named numbers)</h2>
+        <div class="table-wrap" role="region" aria-label="Axelera Europa named numbers spec sheet" tabindex="0">
+          <table>
+            <tbody>
+              <tr>
+                <td>Product</td>
+                <td><strong>Europa</strong> — second-generation AI Processing Unit (AIPU)</td>
+              </tr>
+              <tr>
+                <td>Vendor</td>
+                <td><strong>Axelera AI</strong> (Eindhoven; Metis gen-1 edge AIPU)</td>
+              </tr>
+              <tr>
+                <td>Public launch</td>
+                <td><strong>Sep 15, 2026</strong> — AI Infra Summit Santa Clara (booth <strong>930</strong>; CEO keynote same day)</td>
+              </tr>
+              <tr>
+                <td>Process</td>
+                <td><strong>Samsung 5 nm</strong>; Digital In-Memory Compute (<strong>D-IMC</strong>) cores</td>
+              </tr>
+              <tr>
+                <td>Compute</td>
+                <td><strong>8</strong> second-generation AI cores → claimed <strong>629 TOPS</strong> at <strong>INT4 / INT8 / INT16</strong></td>
+              </tr>
+              <tr>
+                <td>Host offload</td>
+                <td><strong>16</strong> RISC-V vector cores for on-chip pre-/post-processing</td>
+              </tr>
+              <tr>
+                <td>On-chip memory</td>
+                <td><strong>128 MB</strong> L2 SRAM</td>
+              </tr>
+              <tr>
+                <td>External memory BW</td>
+                <td><strong>200 GB/s</strong> DRAM bandwidth</td>
+              </tr>
+              <tr>
+                <td>Power</td>
+                <td><strong>45 W</strong> TDP on the product page; FAQ also cites ~<strong>30 W</strong> average — keep both rows</td>
+              </tr>
+              <tr>
+                <td>Video path</td>
+                <td>Integrated <strong>HEVC</strong> decoder (keep frames off host DRAM for vision pipelines)</td>
+              </tr>
+              <tr>
+                <td>Card SKU (1 chip)</td>
+                <td><strong>Axelera Edge 232p</strong> — HHHL PCIe; <strong>32 GB or 64 GB LPDDR5</strong>; <strong>PCIe Gen 4 x4</strong>; active or passive cooling</td>
+              </tr>
+              <tr>
+                <td>Card SKU (4 chips)</td>
+                <td><strong>Axelera Server 250p</strong> — FHFL PCIe; four Europas → <strong>2500+ TOPS</strong> narrative</td>
+              </tr>
+              <tr>
+                <td>Bare die</td>
+                <td>Standalone Europa for customers designing their own boards</td>
+              </tr>
+              <tr>
+                <td>OEM validation called out</td>
+                <td><strong>Dell XE5</strong> and <strong>Supermicro 111AD</strong> with Edge 232p; broader Metis-era OEM list includes Advantech, Axiomtek, HPE, Lenovo, Seco, 2CRSi</td>
+              </tr>
+              <tr>
+                <td>Software</td>
+                <td><strong>Voyager</strong> SDK (YAML pipelines) across Metis + Europa; <strong>Voyager Wingman</strong>; <strong>AxScript</strong> model compilation</td>
+              </tr>
+              <tr>
+                <td>Named language bench (vendor)</td>
+                <td>Edge 232p: <strong>83.4 tokens/s</strong> on <strong>QWEN 30B</strong> (product page)</td>
+              </tr>
+              <tr>
+                <td>Efficiency marketing</td>
+                <td>Up to <strong>6×</strong> tokens/s per watt vs “GPU-based solutions”; <strong>3–5×</strong> perf/$ and <strong>2–3×</strong> perf/W vs unnamed competitors on Llama 3 family charts (Axelera internal + published competitor NIM data)</td>
+              </tr>
+              <tr>
+                <td>Availability language</td>
+                <td>Launch PR: <strong>“Shipping now”</strong>; Edge 232p brief directs orders; main Europa page still invites <strong>early access</strong> — treat as qualified early ship, not a commodity CSP SKU</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Europa is not “another edge NPU sticker.” It is a claim that <strong>inference watts and host-CPU offload</strong> matter once you stop buying frontier GPUs for every agent and vision lane that can run on a 45 W card.
+        </p>
+
+        <h2>What the silicon is supposed to change</h2>
+        <p>
+          Metis was the sub-10 W / vision-first story. Europa doubles the AI core count to <strong>eight</strong> second-generation D-IMC cores and keeps the RISC-V vector ring for pre- and post-processing so the host CPU stays on application logic. The HEVC decoder is the vision footnote: multi-camera and robotics pipelines stop bouncing decoded frames through system memory just to feed the model.
+        </p>
+        <p>
+          Form factor is deliberate. <strong>Edge 232p</strong> drops one Europa into an existing HHHL slot (Dell XE5 / Supermicro 111AD called out). <strong>Server 250p</strong> lines four Europas on a full-length board for the “Europa 4Chip” column in Axelera’s comparison charts. Same <strong>Voyager</strong> compile path as Metis — YAML pipelines, not a forked runtime per generation.
+        </p>
+        <p>
+          That is a different CapEx sentence from
+          <a href="/groq-3-lpx.html">Groq 3 LPX</a>
+          LPU interactivity,
+          <a href="/jalapeno.html">Jalapeño</a>
+          captive InferenceX, or
+          <a href="/dmatrix-raptor-nvlink-fusion-nvl144.html">d-Matrix Raptor</a>
+          decode silicon on NVLink Fusion. Europa is arguing for <strong>PCIe cards you add to servers you already own</strong>, aimed at agentic, VLM, and computer-vision workloads that do not need an HBM island.
+        </p>
+
+        <h2>The published efficiency claims (and what they are not)</h2>
+        <p>
+          Axelera’s Edge 232p page puts a named figure on language serving: <strong>83.4 tokens/s</strong> for <strong>QWEN 30B</strong>. The broader charts claim <strong>3–5×</strong> performance per dollar and <strong>2–3×</strong> performance per watt against unnamed competitors on Llama 3 8B / 70B and Llama 3.2 11B Vision, with the four-chip Server 250p doing most of the winning. The launch PR rounds the family to <strong>up to 6×</strong> tokens per second per watt versus GPU-based solutions.
+        </p>
+        <p>
+          Three caveats belong on any capacity ticket before this becomes a fleet assumption:
+        </p>
+        <ol>
+          <li>
+            <strong>Vendor benches, mixed sources.</strong> Comparisons combine Axelera internal runs with published competitor NIM data. New-TechEurope flags incomplete test-condition disclosure — treat as marketing until you reproduce on <em>your</em> model, quant, and concurrency.
+          </li>
+          <li>
+            <strong>45 W TDP ≠ 30 W average.</strong> Product marketing leads with <strong>45 W</strong>; the Edge FAQ also cites ~<strong>30 W</strong> average. Budget the TDP for power/cooling; use measured average for tokens-per-watt math.
+          </li>
+          <li>
+            <strong>“Shipping now” vs early-access wording.</strong> Launch PR and StorageReview say shipping with Dell/Supermicro validation. The main Europa page still invites early access, and several ecosystem quotes read as eval / future integrate. Ask for lead time, firmware rev, and FITs before you treat Edge 232p as a drop-in NeoCloud SKU.
+          </li>
+        </ol>
+
+        <h2>Where it sits next to Inferra, Leo X, and the GPU island notes</h2>
+        <div class="table-wrap" role="region" aria-label="Where Europa sits next to Inferra, Leo X, and GPU island notes" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Purchase</th>
+                <th>Product</th>
+                <th>What it buys</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Prefetch + NVMe tiers</td>
+                <td><a href="/lightbits-inferra-kv-cache-prefetch.html">Lightbits Inferra</a></td>
+                <td>KV readiness across DRAM/NVMe so attention does not wait on recompute</td>
+              </tr>
+              <tr>
+                <td>Fabric DDR</td>
+                <td><a href="/astera-leo-x-fabric-kv-cache.html">Astera Leo X</a></td>
+                <td>KV / agent state as a scale-up fabric citizen</td>
+              </tr>
+              <tr>
+                <td>Package HBM</td>
+                <td><a href="/nvhbm.html">NVHBM</a></td>
+                <td>Memory controller / stack economics inside the accelerator envelope</td>
+              </tr>
+              <tr>
+                <td>Merchant GPU island</td>
+                <td>
+                  <a href="/vera-rubin-nvl72-mlperf-v6-1.html">Vera Rubin NVL72 MLPerf</a>
+                  /
+                  <a href="/amd-mi355x-mlperf-v6-1-512-gpu.html">MI355X 512-GPU</a>
+                </td>
+                <td>What the HBM island does when you <em>do</em> buy the big box</td>
+              </tr>
+              <tr>
+                <td>Efficient PCIe AIPU</td>
+                <td><strong>Europa</strong></td>
+                <td>629 TOPS / 45 W inference cards for agent / VLM / vision lanes that should not burn HBM GPUs</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Five purchase domains. Europa does not move KV blocks and does not invent a fabric. It argues that <strong>many inference lanes are still over-provisioned on GPUs</strong>, and that a European 5 nm AIPU with onboard RISC-V pre/post and a standard PCIe card is how you reclaim those watts.
+        </p>
+        <p>
+          Dell + E4 quotes on EU AI Factory work in Italy and Luxembourg are a sovereignty / on-prem signal, not a published multi-tenant SLA — same discipline as the OVH sentence on Inferra.
+        </p>
+
+        <h2>Caveats I would write into any Europa ticket</h2>
+        <ol>
+          <li>
+            <strong>Reproduce the QWEN 30B 83.4 tok/s and Llama charts</strong> on your Voyager build, batch, and concurrency before you price a SKU.
+          </li>
+          <li>
+            <strong>PCIe Gen 4 x4 on Edge 232p</strong> is fine for many inference cards; wrong if host↔card bandwidth is the multi-stream vision bottleneck.
+          </li>
+          <li>
+            <strong>LPDDR5 32/64 GB</strong> is the Edge memory envelope — do not confuse it with GPU HBM planning for 70B+ multi-user serving until you measure.
+          </li>
+          <li>
+            <strong>Do not collapse with Metis 214 TOPS.</strong> Edge 130p and Edge 232p share Voyager; different TOPS / power / memory envelopes.
+          </li>
+          <li>
+            <strong>Do not mix with killed Huawei Ascend / Atlas SuperPoD numbers.</strong> That lane stays closed on this desk.
+          </li>
+          <li>
+            <strong>Availability asterisk.</strong> “Shipping” + Dell/Supermicro validation is real; early-access page language means you still qualify lead time.
+          </li>
+        </ol>
+
+        <h2>How I would evaluate the claim if I ran clusters</h2>
+        <ol>
+          <li>
+            <strong>Tokens/s and tokens/s/W</strong> on models you sell (8B–70B + VLMs) at fixed batch/concurrency — Edge 232p vs Server 250p vs a same-rack GPU baseline.
+          </li>
+          <li>
+            <strong>Sustained power</strong> under your SLA — TDP vs average, passive vs active cooling.
+          </li>
+          <li>
+            <strong>Host CPU busy fraction</strong> with RISC-V pre/post and HEVC on vs off.
+          </li>
+          <li>
+            <strong>Voyager compile coverage</strong> for your model zoo — model support is the silent kill for many AIPUs.
+          </li>
+          <li>
+            <strong>Lead time and OEM SKU path</strong> through Dell XE5 / Supermicro 111AD before you assume drop-in PCIe.
+          </li>
+        </ol>
+
+        <h2>Bottom line</h2>
+        <p>
+          Europa’s public launch is the strongest <em>shipping inference ASIC</em> story next to this week’s KV and optics notes: <strong>629 TOPS at a 45 W TDP</strong>, <strong>128 MB L2 / 200 GB/s DRAM</strong>, named <strong>Edge 232p / Server 250p</strong> cards, <strong>Dell XE5 + Supermicro 111AD</strong> validation, and a Voyager path shared with Metis. The honest read is <strong>vendor tok/s and tok/s/W charts plus early-ship OEM validation you must re-prove under your SLA</strong>. The dishonest read is “GPUs are obsolete” or “European silicon closed the efficiency gap forever.” Until your own rack reproduces the QWEN / Llama tables at sustained power, I treat Europa as a serious <strong>on-prem / AI-factory / NeoCloud inference-card POC</strong> — and as the watts foil every HBM-GPU ticket should be measured against when the workload is agent, VLM, or multi-camera vision rather than a frontier training island.
+        </p>
+        <p>
+          Create-only. Specs and dates from Axelera’s Sep 15 Europa launch, the Edge 232p / Europa product pages, StorageReview’s Sep 15 ship write-up, and New-TechEurope’s Sep 21 product brief. Update when a named customer publishes a reproduced QWEN / Llama ladder, or when Axelera posts same-methodology tok/s on a named third-party pod.
+        </p>
+        <p>
+          Sources:
+          <a href="https://axelera.ai/news/axelera-ai-launches-europa-delivers-physical-and-enterprise-ai-through-growing-partner-ecosystem-including-dell-and-supermicro" target="_blank" rel="noopener noreferrer">Axelera launch PR</a>
+          ·
+          <a href="https://www.storagereview.com/news/axelera-europa-ships-629-tops-at-45w-per-aipu-in-validated-dell-xe5-and-supermicro-servers" target="_blank" rel="noopener noreferrer">StorageReview</a>
+          ·
+          <a href="https://www.new-techeurope.com/2026/09/21/axelera-ai-launches-629-tops-europa-processor-for-enterprise-and-physical-ai/" target="_blank" rel="noopener noreferrer">New-TechEurope</a>
+          ·
+          <a href="https://axelera.ai/ai-accelerators/aipu/europa" target="_blank" rel="noopener noreferrer">Europa product page</a>
+          ·
+          <a href="https://axelera.ai/axelera-products/edge#232p" target="_blank" rel="noopener noreferrer">Edge 232p</a>.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated September 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
