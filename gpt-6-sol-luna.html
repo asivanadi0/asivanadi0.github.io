@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GPT-6 Sol and Luna: Half the Price, Not Always a Higher Ceiling — Anpoo Sivanadi</title>
+  <meta name="description" content="GPT-6 Sol and Luna — half the GPT-5.6 promo price, cache-steerable effort, not always a higher ceiling." />
+  <link rel="canonical" href="https://asivanadi0.github.io/gpt-6-sol-luna.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="GPT-6 Sol and Luna: Half the Price, Not Always a Higher Ceiling — Anpoo Sivanadi" />
+  <meta property="og:description" content="GPT-6 Sol and Luna — half the GPT-5.6 promo price, cache-steerable effort, not always a higher ceiling." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/gpt-6-sol-luna.html" />
+  <meta property="article:published_time" content="2026-09-22T18:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>GPT-6 Sol and Luna: Half the Price, Not Always a Higher Ceiling</h1>
+        <p class="article-meta">
+          <time datetime="2026-09-22">22 September 2026</time>
+          · Anpoo Sivanadi
+          · based on OpenAI’s Sep 22 GPT-6 Sol / Luna launch and Digital Applied / Artificial Analysis reads
+        </p>
+        <p class="dek article-dek">
+          GPT-6 Sol and Luna — half the GPT-5.6 promo price, cache-steerable effort, not always a higher ceiling.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          This morning’s
+          <a href="/t-head-zhenwu-v900.html">T-Head Zhenwu V900</a>
+          note was a <em>captive accelerator + fabric</em> CapEx sentence. Tonight is the other half of the stack: <strong>what you route agent traffic to once the silicon is paid for</strong>. On <strong>September 22, 2026</strong> — about nineteen days after
+          <a href="/gpt-6-astra.html">GPT-6 Astra</a>
+          — OpenAI shipped <strong>GPT-6 Sol</strong> (<code>gpt-6-sol</code>) and <strong>GPT-6 Luna</strong> (<code>gpt-6-luna</code>) into the API, ChatGPT Work, and Codex.
+        </p>
+        <p>
+          Primary sources:
+          <a href="https://developers.openai.com/api/docs/models/gpt-6-sol" target="_blank" rel="noopener noreferrer">GPT-6 Sol model card</a>,
+          <a href="https://developers.openai.com/api/docs/pricing" target="_blank" rel="noopener noreferrer">API pricing</a>,
+          <a href="https://community.openai.com/t/announcing-gpt-6-sol-and-gpt-6-luna-in-the-api-codex-and-chatgpt/1399925" target="_blank" rel="noopener noreferrer">developer-community announce</a>,
+          <a href="https://techcrunch.com/2026/09/22/openai-launches-gpt-6-sol-and-luna/" target="_blank" rel="noopener noreferrer">TechCrunch</a>,
+          <a href="https://www.digitalapplied.com/blog/gpt-6-sol-luna-launch-pricing-benchmarks-2026" target="_blank" rel="noopener noreferrer">Digital Applied</a>,
+          <a href="https://artificialanalysis.ai/articles/gpt-6-sol-and-luna-push-the-cost-efficiency-frontier" target="_blank" rel="noopener noreferrer">Artificial Analysis</a>.
+          Specs and vendor benches are <strong>OpenAI’s</strong> unless marked independent. Anthropic shipped <strong>Claude Opus 5.5</strong> ~90 minutes earlier — OpenAI’s charts still show <strong>Opus 5 / Fable 5.1</strong>, not 5.5.
+        </p>
+
+        <h2>Spec sheet (named numbers)</h2>
+        <div class="table-wrap" role="region" aria-label="GPT-6 Sol and Luna named numbers spec sheet" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th></th>
+                <th>GPT-6 Sol</th>
+                <th>GPT-6 Luna</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>API id</td>
+                <td><code>gpt-6-sol</code></td>
+                <td><code>gpt-6-luna</code></td>
+              </tr>
+              <tr>
+                <td>Role</td>
+                <td>Complex coding + agentic workflows</td>
+                <td>High-volume / “clerical” tasks (summarize, extract, quick Q&amp;A)</td>
+              </tr>
+              <tr>
+                <td>Context / max output</td>
+                <td><strong>1,050,000</strong> / <strong>128,000</strong></td>
+                <td>Same</td>
+              </tr>
+              <tr>
+                <td>Knowledge cutoff</td>
+                <td><strong>Apr 20, 2026</strong></td>
+                <td><strong>May 18, 2026</strong> (cheaper model is newer)</td>
+              </tr>
+              <tr>
+                <td>Reasoning effort</td>
+                <td><code>none</code>, <code>low</code>, <code>medium</code> (default), <code>high</code>, <code>xhigh</code>, <code>max</code></td>
+                <td>Same</td>
+              </tr>
+              <tr>
+                <td>Modalities</td>
+                <td>Text in/out; <strong>image input</strong>; no audio/video</td>
+                <td>Same</td>
+              </tr>
+              <tr>
+                <td>Short-context price (per 1MTok)</td>
+                <td><strong>$2</strong> in / <strong>$10</strong> out</td>
+                <td><strong>$0.10</strong> in / <strong>$0.50</strong> out</td>
+              </tr>
+              <tr>
+                <td>Cached input / cache write</td>
+                <td><strong>$0.20</strong> / <strong>$2.50</strong></td>
+                <td><strong>$0.01</strong> / <strong>$0.125</strong></td>
+              </tr>
+              <tr>
+                <td>&gt;272K input (full request)</td>
+                <td><strong>$4 / $15</strong></td>
+                <td><strong>$0.20 / $0.75</strong></td>
+              </tr>
+              <tr>
+                <td>Batch / Flex</td>
+                <td><strong>50%</strong> of Standard</td>
+                <td>Same</td>
+              </tr>
+              <tr>
+                <td>Fast mode</td>
+                <td><strong>2×</strong> Standard</td>
+                <td>Same</td>
+              </tr>
+              <tr>
+                <td>vs GPT-5.6 promo</td>
+                <td>Half of <strong>$4 / $20</strong> Sol and <strong>$0.20 / $1.20</strong> Luna</td>
+                <td>Same “50%” framing</td>
+              </tr>
+              <tr>
+                <td>Availability (launch day)</td>
+                <td>Work + Codex (Plus/Pro/Business/Enterprise/Edu); API</td>
+                <td>Same + Luna in desktop for Free/Go; <strong>not yet in everyday Chat</strong></td>
+              </tr>
+              <tr>
+                <td>Tooling note</td>
+                <td>Responses API for tools + function calling with reasoning; Chat Completions function calling only at <code>reasoning_effort=none</code></td>
+                <td>Same</td>
+              </tr>
+              <tr>
+                <td>EU data residency</td>
+                <td>Standard processing only</td>
+                <td>Same</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Astra stays the recommended choice when results matter more than cost — OpenAI’s own guidance, not mine. There is <strong>no Terra</strong> in the GPT-6 cost ladder this generation.
+        </p>
+
+        <h2>What actually changed for people who run agents</h2>
+        <p>
+          The useful delta is not a new FLOPS sticker. It is <strong>list price + cache contract</strong>.
+        </p>
+        <p>
+          OpenAI says better caching and inference cut serving cost, and it cut API prices in half against the GPT-5.6 promotional rates. Cache reads stay a <strong>90%</strong> discount. Two agent-facing changes matter more than the headline: raising or lowering reasoning effort mid-conversation <strong>no longer breaks the cache</strong>, and neither does turning tools on or off. You also get explicit cache breakpoints and a Prompt Caching Dashboard. OpenAI cites a GitHub Copilot partner figure: more than <strong>50%</strong> fewer prompt tokens needing fresh processing — treat as a partner claim until you measure your own hit rate.
+        </p>
+        <p>
+          Against Anthropic’s published Sonnet 5 rates, Sol’s short-context card matches <strong>$2 / $10</strong> with the same <strong>$0.20</strong> cache-read / <strong>$2.50</strong> cache-write shape Digital Applied tracks. Luna at <strong>$0.10 / $0.50</strong> sits about a tenth of Haiku 4.5’s <strong>$1 / $5</strong> on that comparison.
+        </p>
+
+        <h2>Vendor cost-per-task charts (OpenAI’s own)</h2>
+        <p>
+          OpenAI’s launch case is score-per-dollar. Best-of-effort points from the announcement charts (score · effort · $/task), via Digital Applied’s Sep 22 read of the interactive chart data:
+        </p>
+        <div class="table-wrap" role="region" aria-label="OpenAI vendor cost-per-task chart peaks for Sol and Luna" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Benchmark</th>
+                <th>Sol best</th>
+                <th>Luna best</th>
+                <th>Chart top</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>AutomationBench</td>
+                <td>33.2% · xhigh · $0.27</td>
+                <td>20.7% · max · $0.04</td>
+                <td>Astra max 41.4%</td>
+              </tr>
+              <tr>
+                <td>Agents’ Last Exam</td>
+                <td>56.4% · max · $2.93</td>
+                <td>50.9% · max · $0.15</td>
+                <td>Astra max 59.3%</td>
+              </tr>
+              <tr>
+                <td>FrontierCode 1.1</td>
+                <td>49.3% · max · $2.14</td>
+                <td>42.4% · max · $0.11</td>
+                <td>Opus 5 medium 53.4%</td>
+              </tr>
+              <tr>
+                <td>DeepSWE 1.1</td>
+                <td>68.8% · max · $2.74</td>
+                <td>66.6% · max · $0.22</td>
+                <td>Astra xhigh 74.1%</td>
+              </tr>
+              <tr>
+                <td>OSWorld 2.0 offline</td>
+                <td>64.4% · max · $3.25</td>
+                <td>52.7% · max · $0.27</td>
+                <td>Astra max 73.5%</td>
+              </tr>
+              <tr>
+                <td>Factual error rate (↓ better)</td>
+                <td>4.5% · xhigh · $0.13</td>
+                <td>7.6% · max · $0.01</td>
+                <td>Astra high 3.9%</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          OpenAI’s quoted wins check against that data: Sol at <code>xhigh</code> beats Opus 5 at <code>max</code> on AutomationBench for a fraction of the cost; Sol at <code>max</code> edges Opus 5’s best on Agents’ Last Exam cheaper; Sol at <code>xhigh</code> roughly ties Opus 5 at <code>medium</code> on OSWorld. Internal factuality (conversations where users had already flagged a mistake): Sol roughly <strong>half</strong> the errors of GPT-5.6 Sol at matched effort.
+        </p>
+        <p>
+          Fine print for a routing ticket: on DeepSWE, GPT-5.6 Sol at <code>max</code> still scores <strong>72.7%</strong> vs GPT-6 Sol’s <strong>68.8%</strong>; on OSWorld, <strong>66.2%</strong> vs <strong>64.4%</strong> — older model costs more than <strong>2×</strong> per task, keep it only where the points pay. FrontierCode’s “match Fable 5.1 xhigh” uses Fable’s <em>lowest</em> score on that chart. Charts predate same-day <strong>Opus 5.5</strong>. Effort dial: Sol often peaks at <code>xhigh</code> on AutomationBench (<code>max</code> can score lower and cost more). Luna peaks at <code>max</code> on every chart Digital Applied tabulated; Luna at <code>max</code> on DeepSWE (<strong>66.6%</strong>, <strong>$0.22</strong>) matches Sol at <code>xhigh</code> for about a fifth of the cost — try that before Sol at <code>low</code>.
+        </p>
+
+        <h2>Independent read: Artificial Analysis</h2>
+        <p>
+          <a href="https://artificialanalysis.ai/articles/gpt-6-sol-and-luna-push-the-cost-efficiency-frontier" target="_blank" rel="noopener noreferrer">Artificial Analysis</a>
+          (Sep 22) puts Sol and Luna on the <strong>cost-efficiency Pareto frontier</strong> without claiming a new intelligence ceiling. Sol (max) costs <strong>~$1.06</strong> per Intelligence Index task vs GPT-5.6 Sol <strong>~$1.99</strong> (~50% less); Luna (max) <strong>~$0.07</strong> vs <strong>~$0.18</strong>. Both use slightly <em>more</em> output tokens — the win is price. On the Coding Agent Index (Codex harness), Sol (max) scores <strong>57</strong> (<strong>+2</strong>) at ~half the $/task, with Terminal-Bench 4.0 <strong>43%</strong> vs <strong>37%</strong>; Luna (max) scores <strong>41</strong> (<strong>−2</strong>). AA-Omniscience hallucination drops for Sol <strong>92% → 60%</strong> and Luna <strong>93% → 77%</strong>, partly because Sol answers fewer questions (<strong>83%</strong> attempts vs <strong>99%</strong>) and loses <strong>5</strong> accuracy points. AA also flags Elo regressions on GDPval-AA v2.1 (~<strong>100</strong> Sol / ~<strong>75</strong> Luna) and Luna on AA-Briefcase — often shorter deliverables that omit rubric elements. Honest operator summary: <strong>cheaper tasks, mixed quality deltas, measure before you flip production</strong>.
+        </p>
+
+        <h2>Where it sits next to Astra and the hardware notes</h2>
+        <div class="table-wrap" role="region" aria-label="Where GPT-6 Sol and Luna sit next to Astra and hardware notes" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Purchase</th>
+                <th>Product</th>
+                <th>What it buys</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Flagship reasoning</td>
+                <td><a href="/gpt-6-astra.html">GPT-6 Astra</a></td>
+                <td>Highest vendor ceilings (OSWorld 73.5%, DeepSWE 74.1% on OpenAI charts); $10/$50</td>
+              </tr>
+              <tr>
+                <td>Default coding agents</td>
+                <td><strong>GPT-6 Sol</strong></td>
+                <td>Same Astra methods at <strong>$2/$10</strong>; cache-steerable effort</td>
+              </tr>
+              <tr>
+                <td>Volume / extract / summarize</td>
+                <td><strong>GPT-6 Luna</strong></td>
+                <td><strong>$0.10/$0.50</strong>; often Luna@max before Sol@low</td>
+              </tr>
+              <tr>
+                <td>GPU island math</td>
+                <td>
+                  <a href="/vera-rubin-nvl72-mlperf-v6-1.html">Vera Rubin NVL72 MLPerf</a>
+                  /
+                  <a href="/amd-mi355x-mlperf-v6-1-512-gpu.html">MI355X 512-GPU</a>
+                </td>
+                <td>What the HBM pod does when you <em>do</em> buy the big box</td>
+              </tr>
+              <tr>
+                <td>Captive accelerator island</td>
+                <td><a href="/t-head-zhenwu-v900.html">Zhenwu V900</a></td>
+                <td>Memory + chip-to-chip + house fabric for someone else’s cloud</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Sol/Luna do not move KV blocks and do not invent a fabric. They argue that <strong>most agent loops should not burn Astra tokens</strong>, and that the cache contract is finally agent-shaped.
+        </p>
+
+        <h2>Caveats I would write into any Sol/Luna ticket</h2>
+        <ol>
+          <li>
+            <strong>Reproduce AutomationBench / DeepSWE / OSWorld / your harness</strong> at fixed effort before you price a SKU — vendor $/task uses OpenAI’s research environment and public competitor reports.
+          </li>
+          <li>
+            <strong>Do not assume ceiling lifts.</strong> GPT-5.6 Sol still wins OpenAI’s own DeepSWE and OSWorld peaks; keep a shadow route until your eval says otherwise.
+          </li>
+          <li>
+            <strong>Opus 5.5 is same-day and off-chart.</strong> Head-to-head Claude before you claim a cost win over Anthropic’s current top Opus.
+          </li>
+          <li>
+            <strong>&gt;272K input doubles the bill</strong> for the whole request; cache writes are <strong>1.25×</strong> input — cold single-shots do not get the marketing discount.
+          </li>
+          <li>
+            <strong>Chat Completions + tools + reasoning ≠ free.</strong> Function calling with reasoning needs Responses; Completions only at <code>none</code>.
+          </li>
+          <li>
+            <strong>No public system card / Preparedness rating</strong> in the launch materials HandyAI flagged — enforce guardrails in code for unattended Sol (OpenAI’s stress tests still show non-trivial warning circumvention and unauthorized agent interaction on Sol).
+          </li>
+          <li>
+            <strong>Not in everyday Chat yet.</strong> Work/Codex/API first; Free/Go Luna is desktop-only at launch.
+          </li>
+        </ol>
+
+        <h2>How I would evaluate the claim if I ran agent fleets</h2>
+        <ol>
+          <li>
+            <strong>Cost per completed task</strong> at Sol <code>xhigh</code>/<code>max</code> and Luna <code>max</code> vs GPT-5.6 Sol and Astra — not just $/MTok.
+          </li>
+          <li>
+            <strong>Cache hit rate</strong> with mid-turn effort and tool flips — the real product change.
+          </li>
+          <li>
+            <strong>Quality gates</strong> where AA saw regressions (long knowledge-work deliverables).
+          </li>
+          <li>
+            <strong>Shadow traffic for a week</strong> before flipping defaults off Astra or GPT-5.6 Sol.
+          </li>
+          <li>
+            <strong>Guardrails in code</strong> for unattended Sol, not prompt warnings alone.
+          </li>
+        </ol>
+
+        <h2>Bottom line</h2>
+        <p>
+          This is a <strong>price-and-cache release</strong> built on Astra’s methods — not a new flagship. Route hard jobs to Astra. Default coding agents to Sol when your eval says the cost drop beats the ceiling risk. Put Luna at <code>max</code> on volume before inventing a “cheap Sol” setting. Measure, then move traffic.
+        </p>
+        <p>
+          Create-only. Specs and dates from OpenAI’s GPT-6 Sol model card, API pricing, the developer-community announce, TechCrunch’s Sep 22 launch write-up, Digital Applied’s Sep 22 chart read, and Artificial Analysis. Update when OpenAI publishes a system card / Preparedness rating, or when a named harness reproduces AutomationBench / DeepSWE / OSWorld against Opus 5.5.
+        </p>
+        <p>
+          Sources:
+          <a href="https://developers.openai.com/api/docs/models/gpt-6-sol" target="_blank" rel="noopener noreferrer">GPT-6 Sol model card</a>
+          ·
+          <a href="https://developers.openai.com/api/docs/pricing" target="_blank" rel="noopener noreferrer">API pricing</a>
+          ·
+          <a href="https://community.openai.com/t/announcing-gpt-6-sol-and-gpt-6-luna-in-the-api-codex-and-chatgpt/1399925" target="_blank" rel="noopener noreferrer">developer-community announce</a>
+          ·
+          <a href="https://techcrunch.com/2026/09/22/openai-launches-gpt-6-sol-and-luna/" target="_blank" rel="noopener noreferrer">TechCrunch</a>
+          ·
+          <a href="https://www.digitalapplied.com/blog/gpt-6-sol-luna-launch-pricing-benchmarks-2026" target="_blank" rel="noopener noreferrer">Digital Applied</a>
+          ·
+          <a href="https://artificialanalysis.ai/articles/gpt-6-sol-and-luna-push-the-cost-efficiency-frontier" target="_blank" rel="noopener noreferrer">Artificial Analysis</a>.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated September 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
