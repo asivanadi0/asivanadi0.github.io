@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WhiteFiber Continuum: 136 Tbps Across 83 km — Scale-Across When One Campus Hits the Power Wall — Anpoo Sivanadi</title>
+  <meta name="description" content="WhiteFiber Continuum — 136 Tbps / 0.9 ms RTT across 83 km of metro fiber so two campuses can act as one GPU supercluster when one site hits the power wall." />
+  <link rel="canonical" href="https://asivanadi0.github.io/whitefiber-continuum-scale-across.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="WhiteFiber Continuum: 136 Tbps Across 83 km — Scale-Across When One Campus Hits the Power Wall — Anpoo Sivanadi" />
+  <meta property="og:description" content="WhiteFiber Continuum — 136 Tbps / 0.9 ms RTT across 83 km of metro fiber so two campuses can act as one GPU supercluster when one site hits the power wall." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/whitefiber-continuum-scale-across.html" />
+  <meta property="article:published_time" content="2026-09-24T07:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>WhiteFiber Continuum: 136 Tbps Across 83 km — Scale-Across When One Campus Hits the Power Wall</h1>
+        <p class="article-meta">
+          <time datetime="2026-09-24">24 September 2026</time>
+          · Anpoo Sivanadi
+          · based on WhiteFiber’s Sep 23 Continuum launch and DriveNets / product-page reads
+        </p>
+        <p class="dek article-dek">
+          WhiteFiber Continuum — 136 Tbps / 0.9 ms RTT across 83 km of metro fiber so two campuses can act as one GPU supercluster when one site hits the power wall.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          Last night’s
+          <a href="/claude-opus-5-5.html">Claude Opus 5.5</a>
+          note was a <em>model</em> purchase: list price, shared benches, safeguard asterisks. This morning is a different CapEx sentence: <strong>what you do when the GPUs you already bought cannot all live under one roof</strong> because the campus ran out of power, cooling, or floor space first.
+        </p>
+        <p>
+          On <strong>September 23, 2026</strong>, WhiteFiber, Inc. (NASDAQ: WYFI) put <strong>WhiteFiber Continuum</strong> into commercial availability as a cross-data-center networking product that treats two geographically separated sites as <strong>one logical GPU supercluster</strong>. Primary sources: WhiteFiber’s
+          <a href="https://www.prnewswire.com/news-releases/whitefiber-launches-whitefiber-continuum-the-highest-performing-distributed-gpu-supercluster-architecture-302886976.html" target="_blank" rel="noopener noreferrer">PR Newswire launch</a>,
+          DriveNets’ same-day write-up
+          <a href="https://drivenets.com/blog/inside-whitefibers-long-distance-scale-across-deployment/" target="_blank" rel="noopener noreferrer">Inside WhiteFiber’s long-distance scale-across deployment</a>,
+          and WhiteFiber’s
+          <a href="https://www.whitefiber.com/whitefiber-continuum" target="_blank" rel="noopener noreferrer">Continuum product page</a>.
+          Bandwidth, latency, and “near same-site training” claims below are <strong>vendor / partner claims</strong> unless you reproduce them on your own job mix.
+        </p>
+
+        <h2>Spec sheet (named numbers)</h2>
+        <div class="table-wrap" role="region" aria-label="WhiteFiber Continuum named numbers spec sheet" tabindex="0">
+          <table>
+            <tbody>
+              <tr>
+                <td>Product</td>
+                <td><strong>WhiteFiber Continuum</strong> — commercial <em>scale-across</em> distributed GPU supercluster</td>
+              </tr>
+              <tr>
+                <td>Vendor</td>
+                <td><strong>WhiteFiber, Inc.</strong> (NASDAQ: WYFI)</td>
+              </tr>
+              <tr>
+                <td>Commercial date</td>
+                <td><strong>Sep 23, 2026</strong></td>
+              </tr>
+              <tr>
+                <td>Reference topology</td>
+                <td>Two <strong>HITRUST-certified QTS</strong> facilities <strong>83 km</strong> apart</td>
+              </tr>
+              <tr>
+                <td>Metro fiber</td>
+                <td><strong>12 Zayo</strong> dark fiber strands</td>
+              </tr>
+              <tr>
+                <td>Network fabric</td>
+                <td><strong>DriveNets AI Fabric</strong> (Ethernet; cell-based scheduled fabric <em>inside</em> each site)</td>
+              </tr>
+              <tr>
+                <td>Storage / memory</td>
+                <td><strong>WEKA NeuralMesh</strong> across the logical cluster</td>
+              </tr>
+              <tr>
+                <td>Cross-site BW (claimed / partner-validated)</td>
+                <td><strong>136 Tbps</strong> aggregate <strong>unidirectional</strong></td>
+              </tr>
+              <tr>
+                <td>Guaranteed RTT (claimed)</td>
+                <td><strong>0.9 ms</strong></td>
+              </tr>
+              <tr>
+                <td>Physics floor (DriveNets)</td>
+                <td>~<strong>0.83 ms</strong> RTT over 83 km in fiber (~200,000 km/s) before equipment</td>
+              </tr>
+              <tr>
+                <td>Edge switches</td>
+                <td>DriveNets <strong>5301R</strong> with <strong>deep HBM buffers</strong></td>
+              </tr>
+              <tr>
+                <td>Congestion / LB</td>
+                <td><strong>ECN</strong> + <strong>PFC</strong>; granular <strong>per-queue-pair</strong> load balancing on the long-haul links</td>
+              </tr>
+              <tr>
+                <td>Intra vs inter</td>
+                <td>Scheduled fabric does <strong>not</strong> extend over WAN — different features bridge sites</td>
+              </tr>
+              <tr>
+                <td>Availability</td>
+                <td><strong>Commercially available</strong> Sep 23, 2026 (not a 2027 sample roadmap)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Continuum is not another accelerator SKU and not another CXL memory expander. It is a claim that <strong>distance is an engineering constraint you can budget</strong>, not a hard rule that every synchronized training job must sit in one building.
+        </p>
+
+        <h2>What “scale-across” is supposed to change</h2>
+        <p>
+          The usual AI cluster story still ends at the campus fence. You fill a hall with GPUs until the utility interconnection, chillers, or slab say stop. Then you either wait years for more power, or you stand up a second site that behaves like a <em>different</em> cluster — separate queues, separate storage namespaces, and a DCI link that was never designed for the synchronized, bursty collectives that stall GPUs when a packet drops.
+        </p>
+        <p>
+          WhiteFiber’s pitch is the third option: <strong>pool two sites as one non-blocking logical supercluster</strong> so overflow training, ranking-model retrains, and last-mile inference can borrow capacity from the second campus without a greenfield rebuild. Telecom and metro facilities that already sit on fiber and stranded power show up as contributors to that pool rather than isolated islands.
+        </p>
+        <p>
+          DriveNets’ write-up is the engineering half I care about. They separate <strong>intra-DC</strong> networking (cell-based scheduled fabric) from <strong>inter-DC</strong> connectivity on purpose: you cannot stretch the scheduled fabric across 83 km of WAN physics. Instead, <strong>5301R</strong> switches with deep <strong>HBM</strong> buffers sit at the edge, absorb AI traffic bursts that would overwhelm shallow buffers, and give <strong>ECN/PFC</strong> time to react over the longer RTT. <strong>Per-queue-pair</strong> load balancing spreads the burst across the multi-path dark-fiber set instead of hashing a few elephant flows onto one strand.
+        </p>
+        <p>
+          That is a different purchase domain from
+          <a href="/cornelis-delos-open-scaleup-ualink-esun.html">Cornelis/Delos open scale-up</a>,
+          <a href="/astera-leo-x-fabric-kv-cache.html">Astera Leo X</a>,
+          or
+          <a href="/lightbits-inferra-kv-cache-prefetch.html">Lightbits Inferra</a>.
+          Continuum is arguing about <strong>where the GPUs are allowed to live</strong> once one site’s power envelope is exhausted.
+        </p>
+
+        <h2>The latency math</h2>
+        <p>
+          DriveNets puts the physics on the page: over <strong>83 km</strong>, a round trip in fiber is already about <strong>0.83 ms</strong>. Continuum’s claimed <strong>0.9 ms</strong> guaranteed RTT is therefore “equipment overhead nearly at the floor,” not “magically faster than light.” If that number holds under your collective pattern, the interesting question is whether <strong>step time and GPU utilization</strong> stay close enough to same-site that you would rather pay fiber + fabric than wait on a substation.
+        </p>
+        <p>
+          DriveNets says they benchmarked training across the two locations against same-site baselines across pretraining, fine-tuning, and communication-heavy parallelism, and that throughput stayed close to same-site. The public blog does <strong>not</strong> publish per-strategy percent deltas or collective configs — treat “near parity” as a partner claim until you see the table for <em>your</em> NCCL/RCCL pattern.
+        </p>
+        <p>
+          WhiteFiber’s PR rounds the architecture to <strong>136 Tbps</strong> at <strong>0.9 ms</strong>. Older partner material mentioned <strong>111.2 Tbps</strong> on the path to that target; the Sep 23 DriveNets post states <strong>136 Tbps</strong> validated unidirectional aggregate. Ask which number is on the contract, and whether it is unidirectional, bidirectional, or a marketing sum, before you size the ticket.
+        </p>
+
+        <h2>Where it sits next to posts already live</h2>
+        <div class="table-wrap" role="region" aria-label="Where WhiteFiber Continuum sits next to GPU island, scale-up, and KV-cache notes" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Purchase</th>
+                <th>Product</th>
+                <th>What it buys</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Merchant GPU island</td>
+                <td>
+                  <a href="/vera-rubin-nvl72-mlperf-v6-1.html">Vera Rubin NVL72</a>
+                  /
+                  <a href="/amd-mi355x-mlperf-v6-1-512-gpu.html">MI355X 512-GPU</a>
+                </td>
+                <td>What one powered campus does when you fill it</td>
+              </tr>
+              <tr>
+                <td>Open scale-up</td>
+                <td><a href="/cornelis-delos-open-scaleup-ualink-esun.html">Cornelis/Delos</a></td>
+                <td>Pod/rack scale-up without a proprietary island lock-in</td>
+              </tr>
+              <tr>
+                <td>Fabric DDR / KV</td>
+                <td><a href="/astera-leo-x-fabric-kv-cache.html">Astera Leo X</a></td>
+                <td>KV / agent state as a fabric citizen</td>
+              </tr>
+              <tr>
+                <td>Prefetch + NVMe</td>
+                <td><a href="/lightbits-inferra-kv-cache-prefetch.html">Lightbits Inferra</a></td>
+                <td>KV readiness so attention does not wait on recompute</td>
+              </tr>
+              <tr>
+                <td>Cross-campus scale-across</td>
+                <td><strong>Continuum</strong></td>
+                <td>Second site as capacity + resilience on a named metro fabric</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Continuum does not make HBM denser and does not replace NVLink/UALink inside the rack. It answers the facilities question the silicon posts leave open: <strong>when the utility says no, do the GPUs stop, or can another building 83 km away join the same job?</strong>
+        </p>
+        <p>
+          WEKA NeuralMesh is the data half. A distributed supercluster is only as unified as its storage/memory plane — GPUs kilometers apart still need a coherent high-performance data path or you reinvent a slow multi-cluster workflow with better marketing. Continuum binds <strong>DriveNets + WEKA + QTS HITRUST + Zayo dark fiber</strong> into one SKU language rather than four RFPs.
+        </p>
+
+        <h2>Caveats for a Continuum ticket</h2>
+        <ol>
+          <li>
+            <strong>Reproduce step time</strong> on your mix before believing “near same-site.”
+          </li>
+          <li>
+            <strong>Clarify 136 Tbps</strong> — unidirectional vs bidirectional usable; oversubscription; how many of 12 strands are lit; partial fiber cut.
+          </li>
+          <li>
+            <strong>0.9 ms is not free</strong> — interactive inference and tightly coupled collectives will feel it differently than coarse data-parallel steps.
+          </li>
+          <li>
+            <strong>Scheduled fabric stops at the building edge</strong> — deep-buffer / ECN/PFC / per-QP is the inter-site truth.
+          </li>
+          <li>
+            <strong>Partner concentration</strong> — DriveNets, WEKA, Zayo, QTS. Price as a system.
+          </li>
+          <li>
+            <strong>Sovereignty / HITRUST language is intent, not a free compliance stamp</strong> — verify residency and audit evidence for <em>your</em> regulator.
+          </li>
+          <li>
+            <strong>Do not confuse with killed Huawei Atlas / Ascend SuperPoD numbers.</strong> That lane stays closed here.
+          </li>
+          <li>
+            <strong>Patents pending ≠ moat proven.</strong>
+          </li>
+        </ol>
+
+        <h2>How I would evaluate if I ran clusters</h2>
+        <ol>
+          <li>
+            Step-time delta vs same-site on one production-shaped job (pretrain slice + fine-tune + one communication-heavy parallelism mode).
+          </li>
+          <li>
+            Loss / pause / straggler rate under synchronized bursts.
+          </li>
+          <li>
+            Effective bidirectional BW and tail latency under your collective schedule.
+          </li>
+          <li>
+            Storage locality with NeuralMesh under degraded-site conditions.
+          </li>
+          <li>
+            Failure drill: kill one site mid-run — continue, or multi-hour restart?
+          </li>
+          <li>
+            Power math: $/token waiting 18–36 months for a substation vs lighting 83 km of dark fiber now.
+          </li>
+        </ol>
+
+        <h2>Capacity-ticket read</h2>
+        <p>
+          Continuum is the cleanest <em>shipping</em> answer I have seen this week to a facilities problem every NeoCloud and enterprise AI builder already has: <strong>GPUs are gated by campus power long before they are gated by SKU availability.</strong> Named distance (<strong>83 km</strong>), fiber (<strong>12× Zayo</strong>), fabric (<strong>DriveNets</strong>), memory/storage plane (<strong>WEKA NeuralMesh</strong>), RTT (<strong>0.9 ms</strong> against a <strong>~0.83 ms</strong> physics floor), and claimed <strong>136 Tbps</strong> unidirectional cross-site pipe are enough to open a serious evaluation — not enough to skip the step-time and failure drills.
+        </p>
+        <p>
+          If partner parity holds on your job graph, the interesting roadmap is treating metro fiber + deep-buffered Ethernet AI fabric as a first-class way to grow past one utility feed. If it does not, you still learned where your collectives break — cheaper than discovering that after you poured another building.
+        </p>
+        <p>
+          Create-only. Specs and dates from WhiteFiber’s Sep 23 Continuum launch, DriveNets’ same-day scale-across write-up, and WhiteFiber’s Continuum product page. Bandwidth, latency, and “near same-site” training results are vendor / partner claims until a named job mix reproduces them. Update when a contract clarifies unidirectional vs bidirectional 136 Tbps, or when a public table shows per-strategy step-time deltas.
+        </p>
+        <p>
+          Sources:
+          <a href="https://www.prnewswire.com/news-releases/whitefiber-launches-whitefiber-continuum-the-highest-performing-distributed-gpu-supercluster-architecture-302886976.html" target="_blank" rel="noopener noreferrer">PR Newswire</a>
+          ·
+          <a href="https://drivenets.com/blog/inside-whitefibers-long-distance-scale-across-deployment/" target="_blank" rel="noopener noreferrer">DriveNets</a>
+          ·
+          <a href="https://www.whitefiber.com/whitefiber-continuum" target="_blank" rel="noopener noreferrer">WhiteFiber Continuum</a>.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated September 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
