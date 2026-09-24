@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Claude Opus 5.5: Fable-Class Work at Opus Prices — and the Safeguard Asterisk — Anpoo Sivanadi</title>
+  <meta name="description" content="Claude Opus 5.5 — Fable-class work at $4/$20, and the fallback-safeguard asterisk." />
+  <link rel="canonical" href="https://asivanadi0.github.io/claude-opus-5-5.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Claude Opus 5.5: Fable-Class Work at Opus Prices — and the Safeguard Asterisk — Anpoo Sivanadi" />
+  <meta property="og:description" content="Claude Opus 5.5 — Fable-class work at $4/$20, and the fallback-safeguard asterisk." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/claude-opus-5-5.html" />
+  <meta property="article:published_time" content="2026-09-23T18:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Claude Opus 5.5: Fable-Class Work at Opus Prices — and the Safeguard Asterisk</h1>
+        <p class="article-meta">
+          <time datetime="2026-09-23">23 September 2026</time>
+          · Anpoo Sivanadi
+          · based on Anthropic’s Sep 22 Claude Opus 5.5 launch and Digital Applied / Vals AI reads
+        </p>
+        <p class="dek article-dek">
+          Claude Opus 5.5 — Fable-class work at $4/$20, and the fallback-safeguard asterisk.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          Last night’s
+          <a href="/gpt-6-sol-luna.html">GPT-6 Sol and Luna</a>
+          note ended with an explicit asterisk: Anthropic shipped <strong>Claude Opus 5.5</strong> about ninety minutes earlier, and OpenAI’s cost charts still showed <strong>Opus 5 / Fable 5.1</strong>. Tonight is that rematch — what you actually route against
+          <a href="/gpt-6-astra.html">GPT-6 Astra</a>
+          and Sol once the Claude 5.5 family is on the invoice.
+        </p>
+        <p>
+          Primary sources:
+          <a href="https://www.anthropic.com/claude-opus-5-5" target="_blank" rel="noopener noreferrer">Anthropic launch</a>
+          (Sep 22, 2026),
+          <a href="https://platform.claude.com/docs/en/models/opus-5-5/overview" target="_blank" rel="noopener noreferrer">Opus 5.5 overview docs</a>,
+          <a href="https://www.digitalapplied.com/blog/claude-opus-5-5-vs-gpt-6-astra-comparison" target="_blank" rel="noopener noreferrer">Digital Applied’s Opus 5.5 vs Astra comparison</a>.
+          Specs and vendor benches are <strong>Anthropic’s</strong> unless marked independent (Vals AI / Zapier / Digital Applied’s read of both tables).
+        </p>
+
+        <h2>Spec sheet (named numbers)</h2>
+        <div class="table-wrap" role="region" aria-label="Claude Opus 5.5 named numbers spec sheet" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th></th>
+                <th>Claude Opus 5.5</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>API id</td>
+                <td><code>claude-opus-5-5</code></td>
+              </tr>
+              <tr>
+                <td>Family</td>
+                <td>First Claude <strong>5.5</strong> ship; Sonnet 5.5 / Haiku 5.5 “coming weeks”</td>
+              </tr>
+              <tr>
+                <td>Context / max output</td>
+                <td><strong>1,000,000</strong> / <strong>128,000</strong></td>
+              </tr>
+              <tr>
+                <td>Knowledge cutoff</td>
+                <td><strong>June 2026</strong></td>
+              </tr>
+              <tr>
+                <td>Modalities</td>
+                <td>Text + <strong>image</strong> input; text out</td>
+              </tr>
+              <tr>
+                <td>Effort</td>
+                <td><code>low</code> → <code>max</code>; <strong>default medium</strong>; adaptive thinking; thinking <strong>always on</strong></td>
+              </tr>
+              <tr>
+                <td>List price (per 1MTok)</td>
+                <td><strong>$4</strong> in / <strong>$20</strong> out</td>
+              </tr>
+              <tr>
+                <td>Cache read / write</td>
+                <td><strong>$0.20</strong> / <strong>$5</strong> (5-min write; Digital Applied also lists <strong>$8</strong> 1-hr write)</td>
+              </tr>
+              <tr>
+                <td>vs Opus 5 list</td>
+                <td>Opus 5 was <strong>$5 / $25</strong>, cache <strong>$0.50 / $6.25</strong></td>
+              </tr>
+              <tr>
+                <td>Vendor efficiency claim</td>
+                <td>~<strong>40%</strong> lower cost than Opus 5 on typical workloads; output <strong>&gt;30%</strong> faster; in/out <strong>20%</strong> cheaper; cache reads <strong>60%</strong> cheaper</td>
+              </tr>
+              <tr>
+                <td>Fast mode</td>
+                <td><strong>$8 / $40</strong>, up to <strong>2.5×</strong> speed (Claude API)</td>
+              </tr>
+              <tr>
+                <td>Availability</td>
+                <td>Claude Platform + <strong>AWS / Google Cloud / Azure</strong></td>
+              </tr>
+              <tr>
+                <td>Pre-release external eval</td>
+                <td>Frontier Design, METR</td>
+              </tr>
+              <tr>
+                <td>Safeguards (launch shape)</td>
+                <td>Fable-class cyber / biology / distillation; cyber often re-routes to <strong>Opus 4.8</strong>; Life Sciences Verification Program; preserved thinking</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Astra stays <strong>$10 / $50</strong>, and prompts with <strong>&gt;272K</strong> input bill the <strong>whole request</strong> at <strong>$20 / $75</strong>. Opus 5.5 keeps <strong>$4 / $20</strong> across its full <strong>1M</strong> window — that line alone is why last night’s Sol/Luna post said to re-check Claude before claiming an Anthropic cost win.
+        </p>
+
+        <h2>What changed for people who run agents</h2>
+        <p>
+          The durable product change is not a new FLOPS sticker. It is <strong>list price + token efficiency + safeguard semantics</strong>.
+        </p>
+        <p>
+          Anthropic’s case is Fable-class work cheaper than Opus 5: fewer tokens per task at a lower rate card, with clearer writing that early testers said cut rework. Mid-conversation effort changes can keep the prompt cache (per-message effort beta) — the same agent-shaped cache question as Sol/Luna, different SDK: <strong>cost per completed task</strong>.
+        </p>
+        <p>
+          The unattended-loop asterisk: when a cyber or biology safeguard fires, the request <strong>falls back to another Claude model</strong> and continues. Digital Applied contrasts that with Astra’s API, where monitoring can <strong>stop the task</strong>. Fallback keeps work moving and changes which model wrote the diff; a hard stop audits cleanly and breaks the run. Plan for the behavior you chose.
+        </p>
+
+        <h2>Vendor benches (Anthropic’s table)</h2>
+        <p>
+          Anthropic’s published comparison (adaptive thinking at max effort unless noted; Terminal-Bench 4.0 at <strong>xhigh</strong> for Opus 5.5):
+        </p>
+        <div class="table-wrap" role="region" aria-label="Anthropic vendor benchmark comparison for Opus 5.5" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Benchmark</th>
+                <th>Opus 5.5</th>
+                <th>Fable 5.1</th>
+                <th>Opus 5</th>
+                <th>GPT-6 Astra</th>
+                <th>GPT-5.6 Sol</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Terminal-Bench 4.0</td>
+                <td><strong>66.4%</strong></td>
+                <td>55.8%</td>
+                <td>52.3%</td>
+                <td>57.9%</td>
+                <td>37.3%</td>
+              </tr>
+              <tr>
+                <td>FrontierCode v1.1 Main</td>
+                <td><strong>54.4%</strong></td>
+                <td>50.3%</td>
+                <td>48.0%</td>
+                <td>53.3%</td>
+                <td>47.5%</td>
+              </tr>
+              <tr>
+                <td>CursorBench 4.0</td>
+                <td><strong>57.8%</strong></td>
+                <td>51.8%</td>
+                <td>46.6%</td>
+                <td>—</td>
+                <td>41.7%</td>
+              </tr>
+              <tr>
+                <td>GDPval-AA v2.1 (Elo)</td>
+                <td><strong>1846</strong></td>
+                <td>1735</td>
+                <td>1708</td>
+                <td>1542</td>
+                <td>1588</td>
+              </tr>
+              <tr>
+                <td>AutomationBench</td>
+                <td>40.0%</td>
+                <td>31.4%</td>
+                <td>26.9%</td>
+                <td><strong>41.4%</strong></td>
+                <td>28.8%</td>
+              </tr>
+              <tr>
+                <td>HLE with tools</td>
+                <td><strong>67.7%</strong></td>
+                <td>65.6%</td>
+                <td>63.6%</td>
+                <td>57.2%</td>
+                <td>—</td>
+              </tr>
+              <tr>
+                <td>Terminal-Bench-Science 0.1</td>
+                <td>58.7%</td>
+                <td>52.6%</td>
+                <td>29.0%</td>
+                <td><strong>64.6%</strong></td>
+                <td>22.4%</td>
+              </tr>
+              <tr>
+                <td>OSWorld 2.0 partial</td>
+                <td><strong>81.8%</strong></td>
+                <td>80.7%</td>
+                <td>74.0%</td>
+                <td>—</td>
+                <td>—</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Anthropic’s own cost-efficiency claims on that table: at default effort, Opus 5.5 beats Astra on FrontierCode at roughly <strong>20%</strong> of the cost per task and matches Astra on Terminal-Bench 4.0 for about <strong>40%</strong> of the cost. Treat those as <strong>vendor $/task</strong> until you reproduce them.
+        </p>
+        <p>
+          Fine print that belongs in a routing ticket:
+        </p>
+        <ol>
+          <li>
+            <strong>AutomationBench</strong> was run by Zapier <strong>without</strong> fallback models, so safeguard interventions counted as failures — Anthropic says that lowers the score versus production.
+          </li>
+          <li>
+            On Terminal-Bench / science benches, cybersecurity and biology tasks that hit safeguards completed on <strong>Opus 4.8</strong> / <strong>Opus 5</strong> respectively in Anthropic’s setup — that can cut Opus 5.5’s printed score.
+          </li>
+          <li>
+            Standard errors are material: Terminal-Bench ±<strong>2.6</strong> pts for Opus 5.5; Terminal-Bench-Science ±<strong>3.5–5</strong> pts.
+          </li>
+          <li>
+            Digital Applied’s cross-read: Opus leads Terminal-Bench / GDPval / HLE by margins larger than harness noise; Astra leads AutomationBench and Terminal-Bench-Science; FrontierCode is within noise. Vendor harnesses disagree by up to <strong>5.4</strong> points on the <strong>same</strong> Claude model (Opus 5 on FrontierCode: Anthropic <strong>48.0%</strong> vs OpenAI <strong>53.4%</strong>). Gaps under ~five points are unresolved until <em>your</em> harness says otherwise.
+          </li>
+        </ol>
+
+        <h2>Independent read: Vals AI (launch day)</h2>
+        <p>
+          <a href="https://www.digitalapplied.com/blog/claude-opus-5-5-vs-gpt-6-astra-comparison" target="_blank" rel="noopener noreferrer">Digital Applied</a>
+          summarizes Vals AI’s Sep 22 runs:
+        </p>
+        <div class="table-wrap" role="region" aria-label="Vals AI launch-day comparison of Opus 5.5 and GPT-6 Astra" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Vals benchmark</th>
+                <th>Opus 5.5</th>
+                <th>GPT-6 Astra</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Vals Index (broad)</td>
+                <td><strong>66.16%</strong> (#4)</td>
+                <td><strong>66.61%</strong> (#3)</td>
+              </tr>
+              <tr>
+                <td>Vals RSI Index (24h research)</td>
+                <td><strong>37.13%</strong> (#1)</td>
+                <td>29.03% (#4)</td>
+              </tr>
+              <tr>
+                <td>ProgramBench fully resolved (of 200)</td>
+                <td><strong>37</strong></td>
+                <td>11</td>
+              </tr>
+              <tr>
+                <td>Terminal-Bench 2.1</td>
+                <td><strong>87.64%</strong> (#1)</td>
+                <td>87.27%</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Nearly level on the broad index; Opus’s clearest independent leads are the <strong>long</strong> tasks. RSI ran each model in its vendor coding agent (Claude Code vs Codex). Vals also used Opus 5 / Opus 4.8 fallbacks for refusals — on SRE Bench, <strong>83%</strong> of tasks used them, so treat that slice carefully.
+        </p>
+
+        <h2>Where it sits next to Astra, Sol/Luna, and the hardware notes</h2>
+        <div class="table-wrap" role="region" aria-label="Where Claude Opus 5.5 sits next to Astra, Sol/Luna, and hardware notes" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Purchase</th>
+                <th>Product</th>
+                <th>What it buys</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Flagship reasoning (OpenAI)</td>
+                <td><a href="/gpt-6-astra.html">GPT-6 Astra</a></td>
+                <td>Highest OpenAI ceilings; <strong>$10/$50</strong>; &gt;272K surcharge</td>
+              </tr>
+              <tr>
+                <td>Default coding agents (OpenAI cost ladder)</td>
+                <td><a href="/gpt-6-sol-luna.html">GPT-6 Sol</a></td>
+                <td>Same methods at <strong>$2/$10</strong>; cache-steerable effort</td>
+              </tr>
+              <tr>
+                <td>Volume / extract</td>
+                <td><a href="/gpt-6-sol-luna.html">GPT-6 Luna</a></td>
+                <td><strong>$0.10/$0.50</strong></td>
+              </tr>
+              <tr>
+                <td>Flagship / agentic coding (Anthropic)</td>
+                <td><strong>Claude Opus 5.5</strong></td>
+                <td>Fable-class work at <strong>$4/$20</strong>; <strong>$0.20</strong> cache reads; fallback safeguards</td>
+              </tr>
+              <tr>
+                <td>Prior Claude default</td>
+                <td><a href="/claude-fable-5-1.html">Claude Fable 5.1</a></td>
+                <td>Still the named prior default on this site until you re-bake</td>
+              </tr>
+              <tr>
+                <td>GPU island math</td>
+                <td><a href="/vera-rubin-nvl72-mlperf-v6-1.html">Vera Rubin NVL72 MLPerf</a></td>
+                <td>What the HBM pod does when you <em>do</em> buy the big box</td>
+              </tr>
+              <tr>
+                <td>Captive accelerator island</td>
+                <td><a href="/t-head-zhenwu-v900.html">Zhenwu V900</a></td>
+                <td>Memory + chip-to-chip + house fabric for someone else’s cloud</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Opus 5.5 does not move KV blocks and does not invent a fabric. It argues that <strong>most long coding / knowledge-work agent loops should not burn Astra tokens</strong>, and that Claude’s invoice is finally competitive with Sol on the tasks you actually care about — if your eval agrees.
+        </p>
+
+        <h2>Caveats I would write into any Opus 5.5 ticket</h2>
+        <ol>
+          <li>
+            <strong>Reproduce Terminal-Bench / FrontierCode / your repo harness</strong> at fixed effort before you price a SKU — vendor $/task uses Anthropic’s research environment.
+          </li>
+          <li>
+            <strong>Plan for fallback.</strong> Cyber/biology safeguards can silently change which model finished the turn; log model id per step.
+          </li>
+          <li>
+            <strong>Astra still leads some lanes</strong> (AutomationBench, Terminal-Bench-Science on vendor tables). Do not paste “Opus wins everywhere.”
+          </li>
+          <li>
+            <strong>Harness noise.</strong> Treat sub-~5 point gaps as unresolved (Opus 5 FrontierCode: Anthropic 48.0% vs OpenAI 53.4%).
+          </li>
+          <li>
+            <strong>Vals SRE fallback rate.</strong> Runs that route refusals to older Opus models are not pure Opus 5.5 scores.
+          </li>
+          <li>
+            <strong>Fast mode is 2× price.</strong> Latency tool, not the default fleet rate card.
+          </li>
+          <li>
+            <strong>Sonnet/Haiku 5.5 are not out yet.</strong> Do not assume the whole ladder prices like Opus.
+          </li>
+        </ol>
+
+        <h2>How I would evaluate the claim if I ran agent fleets</h2>
+        <p>
+          Pick twenty real tasks (migrations, overnight unattended jobs, one citation-checked knowledge pack). Run Opus 5.5, Astra, and Sol at <strong>medium</strong> and <strong>max</strong>. Log wall time, tokens, <strong>dollars per successful merge</strong>, fallback events, and rework minutes. Keep Fable 5.1 on a shadow route for a week. Promote Opus 5.5 only when cost-per-success and rework both move.
+        </p>
+
+        <h2>Bottom line</h2>
+        <p>
+          On <strong>September 22, 2026</strong>, Anthropic shipped <strong>Claude Opus 5.5</strong> (<code>claude-opus-5-5</code>) at <strong>$4 / $20</strong> with <strong>$0.20</strong> cache reads, claiming Fable-class work at roughly <strong>40%</strong> less cost than Opus 5. The durable facts for a systems reader are the named rate card (including <strong>no</strong> Astra-style &gt;272K whole-request surcharge), the vendor leads on Terminal-Bench / GDPval / HLE, Astra’s remaining leads on AutomationBench and Terminal-Bench-Science, Vals AI’s nearly-level broad index with long-task edges, and the <strong>fallback</strong> safeguard contract you must design for.
+        </p>
+        <p>
+          That is enough to re-open the routing ticket last night’s Sol/Luna post left open. It is not enough to freeze a fleet default without your own twenty-task bake-off.
+        </p>
+        <p>
+          Create-only. Specs and dates from Anthropic’s Claude Opus 5.5 launch, the Opus 5.5 overview docs, and Digital Applied’s Opus 5.5 vs Astra comparison (including the Vals AI Sep 22 read). Update when a named harness reproduces Terminal-Bench / FrontierCode / AutomationBench against Astra and Sol, or when Sonnet 5.5 / Haiku 5.5 ship.
+        </p>
+        <p>
+          Sources:
+          <a href="https://www.anthropic.com/claude-opus-5-5" target="_blank" rel="noopener noreferrer">Anthropic</a>
+          ·
+          <a href="https://platform.claude.com/docs/en/models/opus-5-5/overview" target="_blank" rel="noopener noreferrer">Opus 5.5 docs</a>
+          ·
+          <a href="https://www.digitalapplied.com/blog/claude-opus-5-5-vs-gpt-6-astra-comparison" target="_blank" rel="noopener noreferrer">Digital Applied</a>.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated September 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
