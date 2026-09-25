@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>EdgeCortix RAIDEN: 3.36 PFLOPS FP4 on Four Dies — Thick-Edge Physical AI as One Chiplet Stack — Anpoo Sivanadi</title>
+  <meta name="description" content="EdgeCortix RAIDEN — up to 3.36 PFLOPS FP4, 256 GB, and 1.54 TB/s die-to-die on a four-die Physical AI chiplet stack shipping samples in early 2027." />
+  <link rel="canonical" href="https://asivanadi0.github.io/edgecortix-raiden-chiplet.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="EdgeCortix RAIDEN: 3.36 PFLOPS FP4 on Four Dies — Thick-Edge Physical AI as One Chiplet Stack — Anpoo Sivanadi" />
+  <meta property="og:description" content="EdgeCortix RAIDEN — up to 3.36 PFLOPS FP4, 256 GB, and 1.54 TB/s die-to-die on a four-die Physical AI chiplet stack shipping samples in early 2027." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/edgecortix-raiden-chiplet.html" />
+  <meta property="article:published_time" content="2026-09-24T18:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>EdgeCortix RAIDEN: 3.36 PFLOPS FP4 on Four Dies — Thick-Edge Physical AI as One Chiplet Stack</h1>
+        <p class="article-meta">
+          <time datetime="2026-09-24">24 September 2026</time>
+          · Anpoo Sivanadi
+          · based on EdgeCortix’s Sep 23 RAIDEN launch and BusinessWire / Semiconductor Digest reads
+        </p>
+        <p class="dek article-dek">
+          EdgeCortix RAIDEN — up to 3.36 PFLOPS FP4, 256 GB, and 1.54 TB/s die-to-die on a four-die Physical AI chiplet stack shipping samples in early 2027.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          This morning’s
+          <a href="/whitefiber-continuum-scale-across.html">WhiteFiber Continuum</a>
+          note was the <em>campus</em> purchase: what you do when GPUs cannot all live under one roof. Last night’s
+          <a href="/claude-opus-5-5.html">Claude Opus 5.5</a>
+          note was a <em>model</em> purchase. Tonight is silicon again — a <strong>multi-die Physical AI chiplet</strong> for the thick edge, with named FP4 ceiling, memory capacity, die-to-die bandwidth, and chip-to-chip scale-out a board designer can put next to an Axelera Europa card or a SAKURA-II module.
+        </p>
+        <p>
+          On <strong>September 23, 2026</strong>, Japanese fabless EdgeCortix unveiled <strong>RAIDEN</strong>, a scalable AI chiplet platform built around the latest <strong>DNA-X</strong> accelerator architecture and the existing <strong>MERA</strong> software stack. Primary sources: the
+          <a href="https://www.financialcontent.com/article/bizwire-2026-9-23-edgecortix-unveils-raiden-a-scalable-energy-efficient-ai-chiplet-platform-purpose-built-for-physical-ai" target="_blank" rel="noopener noreferrer">BusinessWire / FinancialContent launch</a>,
+          <a href="https://www.semiconductor-digest.com/edgecortix-unveils-raiden-a-scalable-energy-efficient-ai-chiplet-platform-purpose-built-for-physical-ai/" target="_blank" rel="noopener noreferrer">Semiconductor Digest’s same-day rewrite</a>,
+          and EdgeCortix’s
+          <a href="https://www.edgecortix.com/en/" target="_blank" rel="noopener noreferrer">product home</a>.
+          Numbers below are <strong>vendor architecture claims</strong> until samples land and third-party pods publish.
+        </p>
+
+        <h2>Spec sheet (named numbers)</h2>
+        <div class="table-wrap" role="region" aria-label="EdgeCortix RAIDEN named numbers spec sheet" tabindex="0">
+          <table>
+            <tbody>
+              <tr>
+                <td>Product</td>
+                <td><strong>RAIDEN</strong> — scalable AI chiplet platform for Physical AI / thick edge</td>
+              </tr>
+              <tr>
+                <td>Vendor</td>
+                <td><strong>EdgeCortix</strong> (Kanagawa HQ; fabless; DNA / SAKURA lineage)</td>
+              </tr>
+              <tr>
+                <td>Public launch</td>
+                <td><strong>Sep 23, 2026</strong> (BusinessWire)</td>
+              </tr>
+              <tr>
+                <td>Configurations</td>
+                <td><strong>X1</strong> (1 die), <strong>X2</strong> (2 dies), <strong>X4</strong> (4-die flagship) — one architecture, one software</td>
+              </tr>
+              <tr>
+                <td>Accelerator</td>
+                <td>Latest <strong>DNA-X</strong> (runtime-reconfigurable; micro-code programmable matrix + vector engines)</td>
+              </tr>
+              <tr>
+                <td>Software</td>
+                <td><strong>MERA</strong> — same stack across RAIDEN configs and forward from <strong>SAKURA-II</strong></td>
+              </tr>
+              <tr>
+                <td>X4 FP4 compute (claimed)</td>
+                <td>Up to <strong>3.36 PFLOPS</strong> (3,360 TFLOPS)</td>
+              </tr>
+              <tr>
+                <td>X4 memory capacity (claimed)</td>
+                <td>Up to <strong>256 GB</strong></td>
+              </tr>
+              <tr>
+                <td>X4 memory bandwidth (claimed)</td>
+                <td><strong>548 GB/s</strong></td>
+              </tr>
+              <tr>
+                <td>X4 die-to-die (claimed)</td>
+                <td>Up to <strong>1.54 TB/s</strong> aggregate DNA-X-to-DNA-X</td>
+              </tr>
+              <tr>
+                <td>X4 chip-to-chip scale-out (claimed)</td>
+                <td>Up to <strong>6.4 Tb/s</strong> beyond a single package</td>
+              </tr>
+              <tr>
+                <td>Host / I/O</td>
+                <td>Integrated multi-core host processing <strong>per die</strong>; high-speed system connectivity for self-contained designs</td>
+              </tr>
+              <tr>
+                <td>Power</td>
+                <td>Configurable power settings (no public TDP table yet for X1/X2/X4)</td>
+              </tr>
+              <tr>
+                <td>X1 / X2 detail</td>
+                <td>Specs deferred to later RAIDEN launch phases</td>
+              </tr>
+              <tr>
+                <td>Named design wins</td>
+                <td><strong>Kawasaki Heavy Industries</strong> (aerospace / defense products); <strong>Unigen</strong> (RAIDEN-based server platforms, expanding SAKURA-II shipping collaboration)</td>
+              </tr>
+              <tr>
+                <td>Sampling</td>
+                <td>Customer samples expected <strong>early 2027</strong></td>
+              </tr>
+              <tr>
+                <td>Volume</td>
+                <td>Volume production planned <strong>H2 2027</strong></td>
+              </tr>
+              <tr>
+                <td>Early access</td>
+                <td>RAIDEN Early Access Program open now for qualified customers / partners</td>
+              </tr>
+              <tr>
+                <td>Funding footnote</td>
+                <td>Built on NEDO JPNP20017 post-5G infrastructure R&amp;D results</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          RAIDEN is not “another edge NPU sticker” and not a datacenter HBM island. It is a claim that <strong>Physical AI at the thick edge</strong> — robots, aerospace/defense platforms, on-prem edge AI servers — needs compute, memory capacity, memory bandwidth, and connectivity to <strong>scale together</strong> under one software investment, from a single die inside a machine to a four-die package that still speaks MERA.
+        </p>
+
+        <h2>What the chiplet ladder is supposed to change</h2>
+        <p>
+          Most Physical AI teams I talk to still buy three incompatible boxes: a vision/inference card for perception, a general CPU/GPU for planning and agents, and a separate controller path for actuation. When the model grows or the product lifecycle outlasts the silicon generation, they re-partition the pipeline and rewrite the glue.
+        </p>
+        <p>
+          EdgeCortix’s pitch is the opposite: <strong>one DNA-X + MERA platform</strong> that scales die count instead of forking architecture. X1 for the machine-local node, X2 for mid-tier, X4 for the flagship that tries to keep perception, reasoning, application processing, and control on a <strong>tightly integrated four-die system</strong> rather than a bag of discrete accelerators. The PR is explicit that X4 is meant to operate as one AI system, not four isolated cards glued by PCIe.
+        </p>
+        <p>
+          That is a different CapEx sentence from
+          <a href="/axelera-europa-629-tops-edge-232p.html">Axelera Europa</a>
+          (shipping 629 TOPS / 45 W PCIe AIPU),
+          <a href="/groq-3-lpx.html">Groq 3 LPX</a>,
+          or
+          <a href="/dmatrix-raptor-nvlink-fusion-nvl144.html">d-Matrix Raptor</a>.
+          Those are merchant cards for inference lanes you already own. RAIDEN argues for <strong>thick-edge packages you design into the product</strong>, with a software path that does not reset when you move from one die to four.
+        </p>
+
+        <h2>The bandwidth triangle worth checking</h2>
+        <p>
+          Three numbers on the X4 sheet matter more to me than the PFLOPS headline:
+        </p>
+        <ol>
+          <li>
+            <strong>548 GB/s memory bandwidth vs 256 GB capacity.</strong> Capacity is generous for thick-edge multimodal / agentic context; bandwidth is the constraint you will feel first under concurrent perception + reasoning. Ask how many independent memory channels sit behind that 548 GB/s, and what happens when four dies contend.
+          </li>
+          <li>
+            <strong>1.54 TB/s aggregate die-to-die.</strong> That is the claim that four DNA-X dies behave as one fabric, not four cards. Ask topology (all-to-all vs mesh), latency, and whether MERA collectives use that path natively.
+          </li>
+          <li>
+            <strong>6.4 Tb/s chip-to-chip scale-out.</strong> Package-to-package escape when one X4 is not enough. Convert carefully: 6.4 Tb/s is <strong>0.8 TB/s</strong> unidirectional if you treat it as bit/s / 8 — still serious for thick-edge scale-out, but a different order of magnitude from Continuum’s campus fabric. Ask media (SerDes generation, reach, cable vs board), and whether Unigen’s server platforms expose it as a product feature or a lab demo.
+          </li>
+        </ol>
+        <p>
+          DNA-X’s micro-code programmable matrix and vector engines are the software half of that triangle. EdgeCortix says Physical AI is more than neural-network inference — perception, reasoning, application processing, and control need to co-reside. Runtime reconfigurability from earlier DNA generations stays; micro-code is the new lever for non-standard kernels without bolting on a second SoC. MERA is the continuity bet: work on <strong>SAKURA-II today</strong> is supposed to carry forward, and X1→X2→X4 should not force a new compile toolchain.
+        </p>
+
+        <h2>Where it sits next to Europa, Continuum, and the GPU island notes</h2>
+        <div class="table-wrap" role="region" aria-label="Where EdgeCortix RAIDEN sits next to Europa, Continuum, and GPU island notes" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Purchase</th>
+                <th>Product</th>
+                <th>What it buys</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Cross-campus scale-across</td>
+                <td><a href="/whitefiber-continuum-scale-across.html">WhiteFiber Continuum</a></td>
+                <td>Second site as capacity when one campus hits power/space</td>
+              </tr>
+              <tr>
+                <td>Efficient PCIe AIPU (shipping)</td>
+                <td><a href="/axelera-europa-629-tops-edge-232p.html">Axelera Europa</a></td>
+                <td>629 TOPS / 45 W cards for agent / VLM / vision lanes</td>
+              </tr>
+              <tr>
+                <td>Merchant GPU island</td>
+                <td>
+                  <a href="/vera-rubin-nvl72-mlperf-v6-1.html">Vera Rubin NVL72</a>
+                  /
+                  <a href="/amd-mi355x-mlperf-v6-1-512-gpu.html">MI355X</a>
+                </td>
+                <td>What the HBM island does when you fill a powered hall</td>
+              </tr>
+              <tr>
+                <td>Package HBM / optics IP</td>
+                <td>
+                  <a href="/nvhbm.html">NVHBM</a>
+                  /
+                  <a href="/newphotonics-tower-npg102-ph18da-cpx.html">NewPhotonics NPG102</a>
+                </td>
+                <td>Memory / optical building blocks inside someone else’s ASIC</td>
+              </tr>
+              <tr>
+                <td>Thick-edge chiplet platform (2027)</td>
+                <td><strong>RAIDEN</strong></td>
+                <td>One DNA-X/MERA stack from 1→4 dies with named D2D + C2C</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Five purchase domains. RAIDEN does not move KV across a metro and does not replace an NVL72. It answers the product question Continuum and Europa leave open: <strong>when the AI has to live next to the machine for years, do you redesign the board every generation, or do you buy a chiplet ladder that scales under one software stack?</strong>
+        </p>
+
+        <h2>Caveats for a RAIDEN ticket</h2>
+        <ol>
+          <li>
+            <strong>Samples early 2027 / volume H2 2027</strong> — design-in story, not a Continuum-style “available yesterday” SKU.
+          </li>
+          <li>
+            <strong>X1 and X2 specs still withheld</strong> — you cannot size the low/mid rungs from the public sheet yet.
+          </li>
+          <li>
+            <strong>No public TDP / tokens-per-watt table</strong> — measure before comparing to Europa’s 45 W or a GPU card.
+          </li>
+          <li>
+            <strong>3.36 PFLOPS is FP4 peak architecture</strong> — ask precision mix, sustained fraction, and whether FP8/INT8 rows exist.
+          </li>
+          <li>
+            <strong>548 GB/s vs 256 GB</strong> — capacity-heavy vs datacenter HBM islands; validate concurrent multimodal + agent loads.
+          </li>
+          <li>
+            <strong>Kawasaki / Unigen are design wins, not published pod results</strong> — ask schedule, form factor, and which config each uses.
+          </li>
+          <li>
+            <strong>MERA continuity is a claim</strong> — port a SAKURA-II model through Early Access before believing “no rewrite.”
+          </li>
+          <li>
+            <strong>Do not confuse with killed Huawei Atlas / Ascend SuperPoD numbers.</strong> That lane stays closed here.
+          </li>
+        </ol>
+
+        <h2>How I would evaluate if I ran thick-edge systems</h2>
+        <ol>
+          <li>
+            Early Access schedule + first X1/X2 public sheets — without them the ladder is a flagship slide.
+          </li>
+          <li>
+            Port one perception + planning + control pipeline from SAKURA-II and measure the MERA migration delta.
+          </li>
+          <li>
+            Stress the 1.54 TB/s die-to-die path with a multi-die collective that mirrors your agentic batch.
+          </li>
+          <li>
+            Memory bandwidth headroom at 256 GB residency under concurrent vision + LLM context.
+          </li>
+          <li>
+            Unigen server SKU timeline — is 6.4 Tb/s chip-to-chip a product connector or a roadmap checkbox?
+          </li>
+          <li>
+            Power: W/die and W/package at the configurable settings you would actually ship.
+          </li>
+        </ol>
+
+        <h2>Thick-edge ticket read</h2>
+        <p>
+          RAIDEN is the densest <strong>named Physical AI chiplet</strong> sheet after Continuum ate the morning networking slot. Shipping PCIe inference lanes stay on
+          <a href="/axelera-europa-629-tops-edge-232p.html">Europa</a>.
+          Multi-year machines or on-prem edge AI servers that must climb 1→4 dies without rewriting MERA should put RAIDEN Early Access on the calendar, demand the missing X1/X2 rows and a real TDP table, and treat 3.36 PFLOPS / 256 GB / 1.54 TB/s / 6.4 Tb/s as architecture targets to verify on early-2027 samples — not fleet assumptions today.
+        </p>
+        <p>
+          Create-only. Specs and dates from EdgeCortix’s Sep 23 RAIDEN launch, BusinessWire / FinancialContent, Semiconductor Digest’s same-day rewrite, and EdgeCortix’s product home. Compute, memory, die-to-die, and chip-to-chip numbers are vendor architecture claims until samples land and a named third-party pod publishes. Update when X1/X2 sheets or a TDP table ship, or when Early Access reproduces a SAKURA-II pipeline on RAIDEN.
+        </p>
+        <p>
+          Sources:
+          <a href="https://www.financialcontent.com/article/bizwire-2026-9-23-edgecortix-unveils-raiden-a-scalable-energy-efficient-ai-chiplet-platform-purpose-built-for-physical-ai" target="_blank" rel="noopener noreferrer">BusinessWire / FinancialContent</a>
+          ·
+          <a href="https://www.semiconductor-digest.com/edgecortix-unveils-raiden-a-scalable-energy-efficient-ai-chiplet-platform-purpose-built-for-physical-ai/" target="_blank" rel="noopener noreferrer">Semiconductor Digest</a>
+          ·
+          <a href="https://www.edgecortix.com/en/" target="_blank" rel="noopener noreferrer">EdgeCortix</a>.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated September 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
