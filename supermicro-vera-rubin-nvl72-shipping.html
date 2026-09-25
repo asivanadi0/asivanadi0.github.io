@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Supermicro Is Shipping Vera Rubin NVL72: 20.7 TB HBM4 and a Cold-Plate-to-Tower BOM You Can Order — Anpoo Sivanadi</title>
+  <meta name="description" content="Supermicro says Vera Rubin NVL72 racks are shipping now — 72 Rubin GPUs, 20.7 TB HBM4, and a cold-plate-to-tower DLC BOM you can order as a 16-rack Scalable Unit." />
+  <link rel="canonical" href="https://asivanadi0.github.io/supermicro-vera-rubin-nvl72-shipping.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Supermicro Is Shipping Vera Rubin NVL72: 20.7 TB HBM4 and a Cold-Plate-to-Tower BOM You Can Order — Anpoo Sivanadi" />
+  <meta property="og:description" content="Supermicro says Vera Rubin NVL72 racks are shipping now — 72 Rubin GPUs, 20.7 TB HBM4, and a cold-plate-to-tower DLC BOM you can order as a 16-rack Scalable Unit." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/supermicro-vera-rubin-nvl72-shipping.html" />
+  <meta property="article:published_time" content="2026-09-25T07:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Supermicro Is Shipping Vera Rubin NVL72: 20.7 TB HBM4 and a Cold-Plate-to-Tower BOM You Can Order</h1>
+        <p class="article-meta">
+          <time datetime="2026-09-25">25 September 2026</time>
+          · Anpoo Sivanadi
+          · based on Supermicro’s Sep 23 Vera Rubin NVL72 shipping release and datasheet
+        </p>
+        <p class="dek article-dek">
+          Supermicro says Vera Rubin NVL72 racks are shipping now — 72 Rubin GPUs, 20.7 TB HBM4, and a cold-plate-to-tower DLC BOM you can order as a 16-rack Scalable Unit.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          The live
+          <a href="/vera-rubin-nvl72-mlperf-v6-1.html">Vera Rubin NVL72 MLPerf</a>
+          note answered the <em>benchmark</em> purchase: what does one rack do on Qwen3-VL, and what is the AgentX tokens-per-megawatt asterisk. This morning is the <em>ops</em> purchase. On <strong>September 23, 2026</strong>, Supermicro said it is <strong>now shipping</strong> NVIDIA Vera Rubin NVL72 racks integrated with its Data Center Building Block Solutions (DCBBS) and DLC-2 direct liquid-cooling stack — cold plates through manifolds to cooling towers, not a GPU tray and a promise.
+        </p>
+        <p>
+          Primary sources: the
+          <a href="https://www.prnewswire.com/news-releases/supermicro-now-shipping-nvidia-vera-rubin-nvl72-racks-302886839.html" target="_blank" rel="noopener noreferrer">PR Newswire shipping release</a>,
+          Supermicro’s
+          <a href="https://www.supermicro.com/en/pressreleases/supermicro-now-shipping-nvidia-vera-rubin-nvl72-racks" target="_blank" rel="noopener noreferrer">same-day press page</a>,
+          and the
+          <a href="https://www.supermicro.com/datasheet/datasheet_Supermicro_NVIDIA_Vera_Rubin_NVL72.pdf" target="_blank" rel="noopener noreferrer">Vera Rubin NVL72 datasheet PDF</a>.
+          Numbers below are <strong>vendor claims</strong> until your own L11/L12 tickets and third-party pods publish. Where the PR and datasheet disagree, I call it out.
+        </p>
+
+        <h2>Spec sheet (named numbers)</h2>
+        <div class="table-wrap" role="region" aria-label="Supermicro Vera Rubin NVL72 named numbers spec sheet" tabindex="0">
+          <table>
+            <tbody>
+              <tr>
+                <td>Product</td>
+                <td><strong>Supermicro NVIDIA Vera Rubin NVL72</strong> rack-scale AI</td>
+              </tr>
+              <tr>
+                <td>Status</td>
+                <td><strong>Now shipping</strong> (Supermicro, Sep 23, 2026)</td>
+              </tr>
+              <tr>
+                <td>Per rack GPUs / CPUs</td>
+                <td><strong>72</strong> NVIDIA Rubin GPUs + <strong>36</strong> NVIDIA Vera CPUs</td>
+              </tr>
+              <tr>
+                <td>Compute trays</td>
+                <td><strong>18× 1U</strong> trays — <strong>4</strong> Rubin + <strong>2</strong> Vera each</td>
+              </tr>
+              <tr>
+                <td>HBM4 per GPU (claimed)</td>
+                <td>Up to <strong>288 GB</strong></td>
+              </tr>
+              <tr>
+                <td>HBM4 per rack (claimed)</td>
+                <td><strong>20.7 TB</strong> total</td>
+              </tr>
+              <tr>
+                <td>Aggregate HBM4 BW / rack (datasheet)</td>
+                <td><strong>1.6 PB/s</strong></td>
+              </tr>
+              <tr>
+                <td>Host / context memory / rack (claimed)</td>
+                <td>Up to <strong>54 TB LPDDR5X</strong> (SOCAMM)</td>
+              </tr>
+              <tr>
+                <td>NVLink scale-up / rack</td>
+                <td>Datasheet: <strong>260 TB/s</strong> via <strong>9</strong> sixth-gen NVLink switch trays; PR text said <strong>216 TB/s</strong> — ask which figure is current on the SKU you order</td>
+              </tr>
+              <tr>
+                <td>Per-GPU NVLink (datasheet)</td>
+                <td><strong>3.6 TB/s</strong> bidirectional</td>
+              </tr>
+              <tr>
+                <td>Scale-out / GPU (datasheet)</td>
+                <td>Up to <strong>1.6 Tb/s</strong> via <strong>4× ConnectX-9</strong> SuperNICs per tray (Spectrum-X Ethernet or Quantum-X800 InfiniBand)</td>
+              </tr>
+              <tr>
+                <td>North-south / tray (datasheet)</td>
+                <td><strong>BlueField-4</strong> DPU, up to <strong>800 Gb/s</strong></td>
+              </tr>
+              <tr>
+                <td>Power shelves (datasheet)</td>
+                <td><strong>4× 3U 110 kW</strong></td>
+              </tr>
+              <tr>
+                <td>Cooling</td>
+                <td>DLC-2 stack; in-row CDU up to <strong>2.2 MW</strong> (datasheet) with N+1 pumps — PR quoted <strong>1.8 MW</strong> per CDU</td>
+              </tr>
+              <tr>
+                <td>Optional residual heat</td>
+                <td>Rear-door heat exchanger; Liquid-to-Air sidecar CDU (<strong>200 / 500 kW</strong> options on datasheet)</td>
+              </tr>
+              <tr>
+                <td>Scalable Unit (PR)</td>
+                <td><strong>16</strong> compute racks → <strong>1,152</strong> Rubin GPUs + <strong>331 TB</strong> HBM4, with balanced cooling, power, storage, context memory, networking</td>
+              </tr>
+              <tr>
+                <td>Blueprint envelope (PR)</td>
+                <td>Balanced BOM from <strong>5 MW</strong> to <strong>gigawatt</strong> scale</td>
+              </tr>
+              <tr>
+                <td>Integration path</td>
+                <td>Site survey → design → integration → <strong>L11 / L12</strong> test → on-site deploy → ongoing support</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          That is a different CapEx sentence from
+          <a href="/whitefiber-continuum-scale-across.html">WhiteFiber Continuum</a>
+          (second campus over metro fiber) or
+          <a href="/axelera-europa-629-tops-edge-232p.html">Axelera Europa</a>
+          (shipping 45 W PCIe AIPU). Continuum answers <em>where else can the GPUs live</em>. Europa answers <em>what efficient card do I put in an existing chassis</em>. This NVL72 shipping note answers <em>can I order the 72-GPU coherent domain, the liquid loop, and a 16-rack Scalable Unit BOM from one accountable team today</em>.
+        </p>
+
+        <h2>What “shipping” is supposed to change</h2>
+        <p>
+          Most Vera Rubin conversations I still hear are slideware: MLPerf rows, HBM4 stack counts, NVLink gen numbers, and a vague “2H26/4Q” availability hedge. Supermicro’s claim is narrower and more useful for anyone who runs clusters: the rack is orderable, the liquid path is productized (cold plate → manifold → CDU → tower), and the Scalable Unit is a named 16-rack building block rather than “buy N racks and figure out the facility later.”
+        </p>
+        <p>
+          The datasheet frames the rack as one coherent NVLink domain, not 72 PCIe cards that happen to share a chassis. Eighteen compute trays and nine sixth-gen NVLink switch trays are the mechanical expression of that claim. Scale-out escapes the domain over ConnectX-9 at up to 1.6 Tb/s per GPU, with BlueField-4 for the north-south path. If you already operate Spectrum-X or Quantum-X800 fabrics, that is the integration sentence that matters more than another FLOPS headline.
+        </p>
+        <p>
+          Charles Liang’s quote in the PR is marketing, but the operational claim underneath it is testable: every layer between cold plate and cooling tower is supposed to come from the same DCBBS portfolio, and every rack is supposed to ship validated with that full liquid stack. That is how you compress time-to-online when the heat load no longer fits air.
+        </p>
+
+        <h2>The three numbers to check before you sign a Scalable Unit</h2>
+        <ol>
+          <li>
+            <strong>20.7 TB HBM4 and 1.6 PB/s aggregate.</strong> Capacity is the residency story for long-context / multi-agent batches; bandwidth is what you feel when all 72 GPUs hammer HBM together. Ask how Supermicro and NVIDIA want you to measure sustained fraction under your mixture of training and agentic decode, not only datasheet peak.
+          </li>
+          <li>
+            <strong>260 TB/s vs 216 TB/s NVLink scale-up.</strong> The datasheet and PR disagree. Treat that as a purchase checklist item: which figure is on the SRS-VR-NVL72 revision you are buying, and what is the per-GPU 3.6 TB/s bidirectional path under contention.
+          </li>
+          <li>
+            <strong>1.8 MW vs 2.2 MW CDU and the 16-rack Scalable Unit.</strong> Cooling is the real schedule risk. Ask which CDU SKU ships with your Blueprint, what N+1 means for your hall, and whether the 331 TB / 1,152 GPU Scalable Unit BOM includes context-memory storage and fabric oversubscription assumptions you can live with.
+          </li>
+        </ol>
+        <p>
+          Secondary but real: up to <strong>54 TB LPDDR5X</strong> on the Vera CPUs is a host/context pool next to HBM4, not a substitute for it. Pair that mentally with fabric-attached KV work like
+          <a href="/astera-leo-x-fabric-kv-cache.html">Astera Leo X</a>
+          and orchestration like
+          <a href="/lightbits-inferra-kv-cache-prefetch.html">Lightbits Inferra</a>
+          — different layers, same question of where tokens live when HBM is full.
+        </p>
+
+        <h2>Where it sits next to Continuum, MI355X, and the live MLPerf note</h2>
+        <div class="table-wrap" role="region" aria-label="Where Supermicro Vera Rubin NVL72 shipping sits next to Continuum, MI355X, and the live MLPerf note" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Purchase</th>
+                <th>Product</th>
+                <th>What it buys</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Benchmark / AgentX asterisk</td>
+                <td><a href="/vera-rubin-nvl72-mlperf-v6-1.html">Vera Rubin NVL72 MLPerf</a></td>
+                <td>What one rack did on the public suite</td>
+              </tr>
+              <tr>
+                <td>Orderable rack + liquid BOM</td>
+                <td><strong>Supermicro Vera Rubin NVL72 shipping</strong></td>
+                <td>Cold-plate-to-tower path and 16-rack Scalable Unit</td>
+              </tr>
+              <tr>
+                <td>Cross-campus scale-across</td>
+                <td><a href="/whitefiber-continuum-scale-across.html">WhiteFiber Continuum</a></td>
+                <td>Second site when one campus hits power/space</td>
+              </tr>
+              <tr>
+                <td>Merchant GPU island (AMD)</td>
+                <td><a href="/amd-mi355x-mlperf-v6-1-512-gpu.html">MI355X MLPerf</a></td>
+                <td>Alternate HBM island math at 512-GPU scale</td>
+              </tr>
+              <tr>
+                <td>CPU next to the island</td>
+                <td><a href="/epyc-venice-vera-specrate-stream.html">EPYC Venice vs Vera</a></td>
+                <td>Host SPECrate / Stream context</td>
+              </tr>
+              <tr>
+                <td>Decode add-in on MGX family</td>
+                <td><a href="/dmatrix-raptor-nvlink-fusion-nvl144.html">d-Matrix Raptor</a></td>
+                <td>NVLink Fusion decode beside the GPU domain</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Five related purchases. Shipping NVL72 does not replace Continuum, and it does not retire the MLPerf asterisk. It answers the question the benchmark post cannot: <strong>is the liquid-cooled coherent domain a purchase order yet, or still a roadmap slide?</strong>
+        </p>
+
+        <h2>Caveats for a Vera Rubin ticket this week</h2>
+        <ol>
+          <li>
+            <strong>“Now shipping” is a vendor claim</strong> — ask lead time, allocation, and which Blueprint power envelope you actually get on the first PO.
+          </li>
+          <li>
+            <strong>PR vs datasheet deltas</strong> on NVLink aggregate (216 vs 260 TB/s) and CDU rating (1.8 vs 2.2 MW) — resolve in writing before facilities designs freeze.
+          </li>
+          <li>
+            <strong>Up to 10× per-watt vs Blackwell</strong> on the datasheet is a vendor target, not a measured column in this post; keep that separate from the live MLPerf numbers.
+          </li>
+          <li>
+            <strong>L11/L12 testing is named</strong> — ask what those gates cover for <em>your</em> fabric choice (Spectrum-X vs Quantum-X800) and residual heat path (rear door vs L2A sidecar).
+          </li>
+          <li>
+            <strong>Scalable Unit storage and context memory</strong> are mentioned without a public SKU table here — pull the full BOM, not only GPU count.
+          </li>
+          <li>
+            <strong>Do not confuse with killed Huawei Atlas / Ascend SuperPoD numbers.</strong> That lane stays closed on this site.
+          </li>
+          <li>
+            <a href="/edgecortix-raiden-chiplet.html">EdgeCortix RAIDEN</a>
+            remains a separate thick-edge chiplet story from the Sep 24 package — different purchase domain; do not merge the tickets.
+          </li>
+        </ol>
+
+        <h2>How I would evaluate if I ran the hall</h2>
+        <ol>
+          <li>
+            Get the SRS-VR-NVL72 revision and the DCBBS Blueprint PDF for the MW envelope you can actually feed.
+          </li>
+          <li>
+            Resolve the 216 vs 260 TB/s and 1.8 vs 2.2 MW deltas with the account team in one email thread.
+          </li>
+          <li>
+            Run a short L12 acceptance that includes NVLink domain collectives <em>and</em> Spectrum-X / Quantum-X800 escape under your real oversubscription.
+          </li>
+          <li>
+            Measure HBM residency vs the 54 TB LPDDR5X host pool on one long-context agentic workload before you buy the 16-rack story.
+          </li>
+          <li>
+            Keep the
+            <a href="/vera-rubin-nvl72-mlperf-v6-1.html">MLPerf post</a>
+            as the performance asterisk and this shipping note as the deployment asterisk — both required, neither sufficient alone.
+          </li>
+        </ol>
+        <p>
+          If you are buying Vera Rubin this quarter, the useful question is no longer “does the architecture slide look good.” It is whether Supermicro’s cold-plate-to-tower stack and 16-rack Scalable Unit BOM survive your site survey with the NVLink and CDU numbers that match the datasheet you signed.
+        </p>
+        <p>
+          Create-only. Specs and dates from Supermicro’s Sep 23 Vera Rubin NVL72 shipping release, the same-day press page, and the Vera Rubin NVL72 datasheet. Rack, memory, NVLink, CDU, and Scalable Unit numbers are vendor claims until L11/L12 tickets and a named third-party pod publish. Update when the account team resolves the 216 vs 260 TB/s NVLink and 1.8 vs 2.2 MW CDU deltas in writing, or when a public BOM lists Scalable Unit storage and context-memory SKUs.
+        </p>
+        <p>
+          Sources:
+          <a href="https://www.prnewswire.com/news-releases/supermicro-now-shipping-nvidia-vera-rubin-nvl72-racks-302886839.html" target="_blank" rel="noopener noreferrer">PR Newswire</a>
+          ·
+          <a href="https://www.supermicro.com/en/pressreleases/supermicro-now-shipping-nvidia-vera-rubin-nvl72-racks" target="_blank" rel="noopener noreferrer">Supermicro press</a>
+          ·
+          <a href="https://www.supermicro.com/datasheet/datasheet_Supermicro_NVIDIA_Vera_Rubin_NVL72.pdf" target="_blank" rel="noopener noreferrer">NVL72 datasheet</a>.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated September 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
