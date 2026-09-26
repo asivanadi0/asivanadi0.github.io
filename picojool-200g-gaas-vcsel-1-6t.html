@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PicoJool’s 200G GaAs VCSEL: &gt;37 GHz, Three Paths to 1.6T, and the Unconstrained-Supply Bet — Anpoo Sivanadi</title>
+  <meta name="description" content="PicoJool’s 200G GaAs VCSEL / microVCSEL bet: &gt;37 GHz device claims, three 1.6T recipes, WIN foundry, Series A funding qualification → early-2027 volume — vendor claims until your BER tickets land." />
+  <link rel="canonical" href="https://asivanadi0.github.io/picojool-200g-gaas-vcsel-1-6t.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="PicoJool’s 200G GaAs VCSEL: &gt;37 GHz, Three Paths to 1.6T, and the Unconstrained-Supply Bet — Anpoo Sivanadi" />
+  <meta property="og:description" content="PicoJool’s 200G GaAs VCSEL / microVCSEL bet: &gt;37 GHz device claims, three 1.6T recipes, WIN foundry, Series A funding qualification → early-2027 volume — vendor claims until your BER tickets land." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/picojool-200g-gaas-vcsel-1-6t.html" />
+  <meta property="article:published_time" content="2026-09-25T18:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>PicoJool’s 200G GaAs VCSEL: &gt;37 GHz, Three Paths to 1.6T, and the Unconstrained-Supply Bet</h1>
+        <p class="article-meta">
+          <time datetime="2026-09-25">25 September 2026</time>
+          · Anpoo Sivanadi
+          · based on PicoJool’s Sep 24 Series A, the June 200G VCSEL / microVCSEL product announcement, and ChipStrat / SiliconANGLE reads
+        </p>
+        <p class="dek article-dek">
+          PicoJool’s 200G GaAs VCSEL / microVCSEL bet: &gt;37 GHz device claims, three 1.6T recipes, WIN foundry, Series A funding qualification → early-2027 volume — vendor claims until your BER tickets land.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          This morning’s
+          <a href="/supermicro-vera-rubin-nvl72-shipping.html">Supermicro Vera Rubin NVL72 shipping</a>
+          note answered the <em>rack</em> purchase: can you order the cold-plate-to-tower coherent domain.
+          <a href="/whitefiber-continuum-scale-across.html">WhiteFiber Continuum</a>
+          answered the <em>campus</em> purchase: second site when one hall hits the power wall. Tonight is the <em>laser</em> purchase underneath short-reach scale-up AOCs and near-packaged optics.
+        </p>
+        <p>
+          On <strong>September 24, 2026</strong>, PicoJool said it closed a <strong>$27.5 million</strong> Series A led by Socratic Partners, with Hudson River Trading participating, bringing total funding to <strong>$39.5 million</strong> after a <strong>$12 million</strong> Playground Global seed. The money is framed as execution: qualify, manufacture, and move chip-level VCSELs and microVCSELs into <strong>AOC</strong> and <strong>NPO</strong> modules — not invent a new physics paper.
+        </p>
+        <p>
+          Primary sources: PicoJool’s
+          <a href="https://www.picojool.com/news/picojool-raises-27-5-million-series-a-to-scale-optical-connectivity-for-ai-infrastructure" target="_blank" rel="noopener noreferrer">Series A release</a>,
+          the June
+          <a href="https://www.picojool.com/news/picojool-introduces-200g-vcsels-and-microvcsels-for-scale-up-ai-data-centers" target="_blank" rel="noopener noreferrer">200G VCSEL product announcement</a>,
+          <a href="https://siliconangle.com/2026/09/24/pat-gelsinger-backed-startup-picojool-raises-27-5m-to-boost-bandwidth-for-ai-clusters/" target="_blank" rel="noopener noreferrer">SiliconANGLE’s Sep 24 write-up</a>,
+          and the July
+          <a href="https://www.chipstrat.com/p/picojools-al-yuen-the-case-for-gaas" target="_blank" rel="noopener noreferrer">ChipStrat interview with CEO Al Yuen</a>
+          for roadmap color. Numbers below are <strong>vendor claims</strong> until your own link qualification tickets publish measured BER, power per bit, and yield.
+        </p>
+
+        <h2>Spec sheet (named numbers)</h2>
+        <div class="table-wrap" role="region" aria-label="PicoJool 200G GaAs VCSEL named numbers spec sheet" tabindex="0">
+          <table>
+            <tbody>
+              <tr>
+                <td>Company / product</td>
+                <td><strong>PicoJool</strong> 200G VCSEL + microVCSEL family</td>
+              </tr>
+              <tr>
+                <td>Headline device</td>
+                <td><strong>200G</strong> per lane VCSEL, bandwidth <strong>&gt;37 GHz</strong></td>
+              </tr>
+              <tr>
+                <td>Portfolio (company)</td>
+                <td>High-speed <strong>100G / 200G</strong> VCSEL; microVCSEL <strong>50G NRZ</strong>, <strong>64G NRZ/PAM4</strong></td>
+              </tr>
+              <tr>
+                <td>1.6T recipes (ChipStrat / company)</td>
+                <td><strong>8×200</strong> PAM4; <strong>16×100</strong> LPO; <strong>32×50</strong> NRZ microVCSEL</td>
+              </tr>
+              <tr>
+                <td>Module roadmap (company)</td>
+                <td><strong>800G → 1.6T → 3.2T</strong> (and ChipStrat color to <strong>12.8T</strong> via arrays / bi-di)</td>
+              </tr>
+              <tr>
+                <td>Form factors in scope</td>
+                <td>Pluggable, <strong>AOC</strong>, <strong>NPO</strong>, co-packaged optics engagement</td>
+              </tr>
+              <tr>
+                <td>Status (Sep 24)</td>
+                <td><strong>Early chip sampling</strong> underway; Series A funds qualification → modules</td>
+              </tr>
+              <tr>
+                <td>Volume target</td>
+                <td><strong>Early 2027</strong> high-volume ramp (June PR + ChipStrat)</td>
+              </tr>
+              <tr>
+                <td>Foundry</td>
+                <td><strong>WIN Semiconductor</strong> (+ other <strong>GaAs</strong> foundries); recipes transferred</td>
+              </tr>
+              <tr>
+                <td>WIN capacity color (ChipStrat)</td>
+                <td>Up to <strong>~1,000 wafers/week</strong>; ~<strong>240,000</strong> VCSELs/wafer (tiny die); “unconstrained” GaAs claim</td>
+              </tr>
+              <tr>
+                <td>Funding</td>
+                <td>Seed <strong>$12M</strong> (Playground / Pat Gelsinger); Series A <strong>$27.5M</strong> (Socratic lead + HRT); total <strong>$39.5M</strong></td>
+              </tr>
+              <tr>
+                <td>HQ</td>
+                <td>Palo Alto</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          That is a different CapEx sentence from
+          <a href="/newphotonics-tower-npg102-ph18da-cpx.html">NewPhotonics NPG102 + Tower</a>
+          (laser-integrated PICs shipping into 800G–1.6T engines) or
+          <a href="/lightmatter-passage-l20-cpx-bidi-open-cpx.html">Lightmatter Passage L20 CPX</a>
+          (BiDi NPO that halves a fiber plant). Those posts are <em>engines and packaging</em>. PicoJool is the <em>emitter</em> bet: will short-reach scale-up stay on multi-mode GaAs VCSELs that already ship in the millions, or migrate to InP / silicon-photonics lanes that were built for longer reach and thinner volume?
+        </p>
+
+        <h2>What “200G per lane” is supposed to buy</h2>
+        <p>
+          Copper at <strong>200G/lane</strong> is collapsing to a few meters of useful reach inside a hot GPU row. Hyperscale training and agentic inference treat thousands of accelerators as one machine, so the interconnect BER bar moved from classic Ethernet comfort (<strong>~10⁻⁶</strong>) toward error-free territory (<strong>10⁻¹⁰–10⁻¹²</strong>). That is why expensive single-mode solutions walked into the hall: they already lived at low BER. PicoJool’s claim is the pragmatic counter — raise the VCSEL bar to <strong>200G</strong>, keep the <strong>GaAs</strong> fab line that already knows millions-per-month, and offer three recipes to the same <strong>1.6T</strong> aggregate depending on power and BER taste.
+        </p>
+        <ol>
+          <li>
+            <strong>8×200 PAM4</strong> — “fast and narrow,” closest to a straight electrical-to-optical map, more DSP / integrity cost.
+          </li>
+          <li>
+            <strong>16×100 LPO</strong> — run a 200G-capable die at half rate for cleaner noise; linear-drive / low-power path.
+          </li>
+          <li>
+            <strong>32×50 NRZ microVCSEL</strong> — “slow and wide,” full 0/1 SNR, many lanes, aimed at OCI-class and very low BER budgets.
+          </li>
+        </ol>
+        <p>
+          The Sep 24 release also calls out <strong>50G NRZ</strong> microVCSEL interest for optical compute interconnects and <strong>64G NRZ/PAM4</strong> for <strong>PCIe 6.0</strong>-based NPO. That is how this sheet sits next to fabric-attached memory and KV work like
+          <a href="/astera-leo-x-fabric-kv-cache.html">Astera Leo X</a>:
+          different layers, same question of how bits leave the tray without melting the power budget.
+        </p>
+
+        <h2>The manufacturing asterisk that is the whole thesis</h2>
+        <p>
+          Yuen’s ChipStrat argument is not “VCSELs are new.” It is that <strong>GaAs VCSEL capacity is unconstrained</strong> relative to <strong>indium phosphide</strong> substrate and packaging lines sized for metro/long-haul volumes. WIN is the named wafer partner; PicoJool designs epi and device, WIN processes, module partners build AOCs/transceivers. Cycle-time color from the interview: roughly <strong>8–10 weeks</strong> for VCSEL wafers, then packaging weeks on top — limited by build time, not by “sold out through next year” InP scarcity, <em>if</em> you believe the unconstrained claim.
+        </p>
+        <p>
+          That is the purchase checklist item, not the Series A headline. Ask for:
+        </p>
+        <ol>
+          <li>
+            <strong>Known-good-die yield</strong> on the 200G process at WIN under your temp/bias quals.
+          </li>
+          <li>
+            <strong>BER vs reach vs fiber plant</strong> (OM3/OM4/OM5 assumptions) at the 8×200 / 16×100 / 32×50 operating points you actually want.
+          </li>
+          <li>
+            <strong>Module partner and SKU</strong> — chip sampling ≠ AOC on a PO; which integrator owns the connector, driver, and reliability log.
+          </li>
+          <li>
+            <strong>Tier-1 qualification clock</strong> — ChipStrat: small customers ~<strong>3 months</strong>, tier-1 often <strong>&gt;6 months</strong>; early-2027 volume is a <em>ramp start</em>, not guaranteed hyperscaler GA.
+          </li>
+        </ol>
+
+        <h2>Where it sits next to Continuum, NewPhotonics, and Lightmatter</h2>
+        <div class="table-wrap" role="region" aria-label="Where PicoJool 200G GaAs VCSEL sits next to Continuum, NewPhotonics, and Lightmatter" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Purchase</th>
+                <th>Product</th>
+                <th>What it buys</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Orderable Rubin rack</td>
+                <td><a href="/supermicro-vera-rubin-nvl72-shipping.html">Supermicro NVL72 shipping</a></td>
+                <td>Cold-plate-to-tower coherent domain</td>
+              </tr>
+              <tr>
+                <td>Cross-campus scale-across</td>
+                <td><a href="/whitefiber-continuum-scale-across.html">WhiteFiber Continuum</a></td>
+                <td>Second site over metro fiber</td>
+              </tr>
+              <tr>
+                <td>Laser-integrated PIC shipping</td>
+                <td><a href="/newphotonics-tower-npg102-ph18da-cpx.html">NewPhotonics NPG102</a></td>
+                <td>800G–1.6T engine on-ramp</td>
+              </tr>
+              <tr>
+                <td>BiDi NPO / fiber-plant halving</td>
+                <td><a href="/lightmatter-passage-l20-cpx-bidi-open-cpx.html">Lightmatter L20 CPX</a></td>
+                <td>Packaging + MSA on-ramp</td>
+              </tr>
+              <tr>
+                <td>Short-reach VCSEL emitter</td>
+                <td><strong>PicoJool 200G / microVCSEL</strong></td>
+                <td>GaAs lane rates + 1.6T recipes + early-2027 volume bet</td>
+              </tr>
+              <tr>
+                <td>Open scale-up fabric (non-NVLink)</td>
+                <td><a href="/cornelis-delos-open-scaleup-ualink-esun.html">Cornelis ACF + Delos</a></td>
+                <td>800G fabric / I/O dies</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Five related tickets. PicoJool does not replace Continuum’s campus math or NewPhotonics’ PIC sheet. It answers whether the <em>emitter</em> under your next AOC/NPO generation stays on a volume GaAs line that already knows consumer-scale wafers.
+        </p>
+
+        <h2>Caveats for a PicoJool ticket this week</h2>
+        <ol>
+          <li>
+            <strong>Series A is not a shipping PLU.</strong> Early sampling + early-2027 volume is the honest timeline; treat 2026 as qualification, not hall cutover.
+          </li>
+          <li>
+            <strong>&gt;37 GHz and 200G/lane are vendor device claims</strong> — demand measured eye / BER under <em>your</em> fiber and temperature.
+          </li>
+          <li>
+            <strong>Three 1.6T recipes are not three fielded SKUs.</strong> Confirm which module partners sample which flavor.
+          </li>
+          <li>
+            <strong>“Unconstrained” GaAs</strong> is a capacity thesis vs InP — verify lead times and wafer allocation in writing; do not paste ChipStrat wafer math into a CapEx sheet without a quote.
+          </li>
+          <li>
+            <strong>Roadmap color to 3.2T / 12.8T</strong> (bi-di second wavelength, 2-D arrays, 100G NRZ) is interview roadmap, not a Sep 24 datasheet.
+          </li>
+          <li>
+            <strong>Do not confuse with killed Huawei Atlas / Ascend SuperPoD / Hi-ONE NPO amplification.</strong> That lane stays closed here.
+          </li>
+          <li>
+            <strong>Not a rematch of Continuum.</strong> Continuum is fabric + WEKA across 83 km; PicoJool is the laser diode inside short-reach links.
+          </li>
+        </ol>
+
+        <h2>How I would evaluate if I ran the hall</h2>
+        <ol>
+          <li>
+            Pick the 1.6T recipe that matches your power/BER budget (8×200 vs 16×100 LPO vs 32×50 NRZ) before you argue “VCSEL vs SiPh.”
+          </li>
+          <li>
+            Get a written sampling matrix: chip vs AOC vs NPO, partner name, OM fiber class, target BER, and qualification plan through early 2027.
+          </li>
+          <li>
+            Ask WIN/PicoJool for yield and cycle-time commitments at the volume you would actually pull — not the theoretical wafers-per-week ceiling.
+          </li>
+          <li>
+            Put the same reach/power test next to whatever PIC / CPO path you already track from NewPhotonics or Lightmatter; keep the layers separate.
+          </li>
+          <li>
+            Budget the Series A story as <em>funding to finish quals</em>, not as proof the die already won the row.
+          </li>
+        </ol>
+        <p>
+          If you are buying short-reach scale-up optics for the next GPU generation, the useful question is no longer “can VCSELs do 200G in a press release.” It is whether PicoJool’s GaAs line, WIN partnership, and three 1.6T recipes survive your BER and reliability gates before copper runs out of meters inside the rack.
+        </p>
+        <p>
+          Create-only. Specs and dates from PicoJool’s Sep 24 Series A release, the June 200G VCSEL product announcement, SiliconANGLE’s Sep 24 write-up, the July ChipStrat interview with CEO Al Yuen, and Electronics Weekly’s June sampling note. Bandwidth, volume, and capacity numbers are vendor claims until your own BER, power-per-bit, and yield tickets publish.
+        </p>
+        <p>
+          Sources:
+          <a href="https://www.picojool.com/news/picojool-raises-27-5-million-series-a-to-scale-optical-connectivity-for-ai-infrastructure" target="_blank" rel="noopener noreferrer">PicoJool Series A</a>
+          ·
+          <a href="https://www.picojool.com/news/picojool-introduces-200g-vcsels-and-microvcsels-for-scale-up-ai-data-centers" target="_blank" rel="noopener noreferrer">200G product page</a>
+          ·
+          <a href="https://siliconangle.com/2026/09/24/pat-gelsinger-backed-startup-picojool-raises-27-5m-to-boost-bandwidth-for-ai-clusters/" target="_blank" rel="noopener noreferrer">SiliconANGLE</a>
+          ·
+          <a href="https://www.chipstrat.com/p/picojools-al-yuen-the-case-for-gaas" target="_blank" rel="noopener noreferrer">ChipStrat / Al Yuen</a>
+          ·
+          <a href="https://www.electronicsweekly.com/news/business/898229-2026-06/" target="_blank" rel="noopener noreferrer">Electronics Weekly (June sampling)</a>.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated September 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
