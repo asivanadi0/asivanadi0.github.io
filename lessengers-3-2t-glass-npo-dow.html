@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lessengers’ 3.2T Glass NPO: TGVs, Lens-Free DOW, and the Millimeters-from-ASIC Bet — Anpoo Sivanadi</title>
+  <meta name="description" content="Lessengers’ 3.2T glass-substrate NPO: TGVs, lens-free DOW polymer waveguides, millimeters-from-ASIC placement, immersion-native claim, aimed at 51.2T/102.4T switch generations — vendor claims until your BER and yield tickets land." />
+  <link rel="canonical" href="https://asivanadi0.github.io/lessengers-3-2t-glass-npo-dow.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Lessengers’ 3.2T Glass NPO: TGVs, Lens-Free DOW, and the Millimeters-from-ASIC Bet — Anpoo Sivanadi" />
+  <meta property="og:description" content="Lessengers’ 3.2T glass-substrate NPO: TGVs, lens-free DOW polymer waveguides, millimeters-from-ASIC placement, immersion-native claim, aimed at 51.2T/102.4T switch generations — vendor claims until your BER and yield tickets land." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/lessengers-3-2t-glass-npo-dow.html" />
+  <meta property="article:published_time" content="2026-09-26T07:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Lessengers’ 3.2T Glass NPO: TGVs, Lens-Free DOW, and the Millimeters-from-ASIC Bet</h1>
+        <p class="article-meta">
+          <time datetime="2026-09-26">26 September 2026</time>
+          · Anpoo Sivanadi
+          · based on Lessengers’ Sep 21 ECOC 3.2T glass-substrate NPO release and Sep 25 secondary reads
+        </p>
+        <p class="dek article-dek">
+          Lessengers’ 3.2T glass-substrate NPO: TGVs, lens-free DOW polymer waveguides, millimeters-from-ASIC placement, immersion-native claim, aimed at 51.2T/102.4T switch generations — vendor claims until your BER and yield tickets land.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          Last night’s
+          <a href="/picojool-200g-gaas-vcsel-1-6t.html">PicoJool 200G GaAs VCSEL</a>
+          note answered the <em>emitter</em> purchase: will short-reach scale-up stay on multi-mode lasers that already ship in the millions. This morning is the <em>package</em> purchase underneath the next switch generation — how you put optics millimeters from the ASIC without drowning the row in front-panel pluggables.
+        </p>
+        <p>
+          On <strong>September 21, 2026</strong>, at ECOC in Málaga, Lessengers unveiled a <strong>3.2 Tbps</strong> near-packaged optics (NPO) platform built on a <strong>glass packaging core</strong> and the company’s <strong>Direct Optical Wiring (DOW)</strong> polymer waveguides. Secondary coverage on <strong>September 25</strong> framed the same sheet for AI/HPC switch chassis: density into <strong>51.2T</strong> and <strong>102.4T</strong> generations, immersion-native sealing, and a vendor claim of <strong>up to 50%</strong> power savings versus conventional packaging approaches.
+        </p>
+        <p>
+          Primary sources: Lessengers’
+          <a href="https://investor.wedbush.com/wedbush/article/bizwire-2026-9-21-lessengers-unveils-breakthrough-32t-glass-substrate-near-packaged-optics-npo-powered-by-direct-optical-wiring-dow-technology" target="_blank" rel="noopener noreferrer">BusinessWire ECOC release</a>
+          (mirrored),
+          <a href="https://convergedigest.com/lessengers-3-2t-glass-substrate-npo-ai-networks/" target="_blank" rel="noopener noreferrer">Converge Digest’s ECOC write-up</a>,
+          <a href="https://thedatacenterengineer.com/news/3-2t-near-packaged-optics-uses-glass-substrate-to-cut-ai-switch-power-50/" target="_blank" rel="noopener noreferrer">The Data Center Engineer’s Sep 25 summary</a>,
+          and Lessengers’ earlier
+          <a href="https://www.lessengers.com/news/lessengers-to-present-an-industry-first-immersion-cooled-optical-demonstration-at-sc25" target="_blank" rel="noopener noreferrer">SC25 immersion-cooled 800G NPO / Alphawave demo note</a>
+          for DOW pedigree. Numbers below are <strong>vendor claims</strong> until your own switch OEM and link-qualification tickets publish measured BER, insertion loss, pJ/bit, and yield.
+        </p>
+
+        <h2>Spec sheet (named numbers)</h2>
+        <div class="table-wrap" role="region" aria-label="Lessengers 3.2T glass-substrate NPO named numbers spec sheet" tabindex="0">
+          <table>
+            <tbody>
+              <tr>
+                <td>Company / product</td>
+                <td><strong>Lessengers</strong> 3.2T glass-substrate NPO</td>
+              </tr>
+              <tr>
+                <td>Aggregate per engine</td>
+                <td><strong>3.2 Tbps</strong></td>
+              </tr>
+              <tr>
+                <td>Packaging core</td>
+                <td><strong>Glass</strong> substrate with vertical <strong>through-glass vias (TGVs)</strong></td>
+              </tr>
+              <tr>
+                <td>Optical path</td>
+                <td>Integrated <strong>planar waveguides</strong> in glass + <strong>DOW polymer waveguides</strong></td>
+              </tr>
+              <tr>
+                <td>Coupling claims</td>
+                <td><strong>No multi-channel lens assemblies</strong>; <strong>no active alignment</strong></td>
+              </tr>
+              <tr>
+                <td>Placement</td>
+                <td>Optical core <strong>mere millimeters</strong> from host ASIC (not front-panel pluggable)</td>
+              </tr>
+              <tr>
+                <td>Thermal / mechanical claim</td>
+                <td>Glass <strong>CTE</strong> closer to silicon than organics → less warpage / micro-shift</td>
+              </tr>
+              <tr>
+                <td>Cooling claim</td>
+                <td>DOW hermetic seal → <strong>immersion-cooling native</strong> without extra packaging</td>
+              </tr>
+              <tr>
+                <td>Target switch classes</td>
+                <td><strong>51.2T</strong> and <strong>102.4T</strong> generation networking hardware</td>
+              </tr>
+              <tr>
+                <td>Power claim (vendor)</td>
+                <td><strong>Up to 50%</strong> savings — no independent switch-level budget in the PR</td>
+              </tr>
+              <tr>
+                <td>Pedigree</td>
+                <td>SC25: immersion-cooled detachable <strong>800G</strong> NPO + Alphawave Semi AlphaCHIP1600-IO; OFC 2025: <strong>1.6T</strong> OSFP path in portfolio</td>
+              </tr>
+              <tr>
+                <td>ECOC 2026</td>
+                <td>Booth <strong>2184</strong>, FYCMA, Málaga (Sep 21 unveil)</td>
+              </tr>
+              <tr>
+                <td>HQ</td>
+                <td>South Korea (CEO Chongcook Kim)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          That is a different CapEx sentence from
+          <a href="/picojool-200g-gaas-vcsel-1-6t.html">PicoJool’s 200G VCSEL</a>
+          (the laser diode),
+          <a href="/newphotonics-tower-npg102-ph18da-cpx.html">NewPhotonics NPG102 + Tower</a>
+          (laser-integrated PIC engines shipping into 800G–1.6T), or
+          <a href="/lightmatter-passage-l20-cpx-bidi-open-cpx.html">Lightmatter Passage L20 CPX</a>
+          (BiDi NPO that halves a fiber plant). Those posts are <em>emitters, engines, and MSA packaging</em>. Lessengers is the <em>glass + polymer-waveguide NPO module</em> bet: can you socket optics next to the switch ASIC, survive immersion, and hit 3.2T density without lens assemblies and active aligners.
+        </p>
+
+        <h2>What “millimeters from the ASIC” is supposed to buy</h2>
+        <p>
+          Front-panel pluggables won the last decade because they were serviceable and multi-sourced. At <strong>200G/lane</strong> and the road to <strong>400G/lane</strong>, the electrical SerDes run from switch silicon to the faceplate is the power and signal-integrity tax. NPO and CPO exist to shorten that run. Lessengers’ claim is narrower than “optics everywhere”: put a <strong>3.2T</strong> engine on a <strong>glass</strong> core with <strong>TGVs</strong>, route light through planar + polymer waveguides, and keep the optical junctions hermetically sealed so the same module can sit in an immersion tank.
+        </p>
+        <p>
+          Three purchase sentences sit inside that architecture:
+        </p>
+        <ol>
+          <li>
+            <strong>Density</strong> — one 3.2T engine is how a switch vendor stacks toward <strong>51.2T</strong> (sixteen engines) and <strong>102.4T</strong> (thirty-two) without doubling faceplate real estate.
+          </li>
+          <li>
+            <strong>Manufacturing</strong> — DOW’s “no lenses / no active alignment” pitch is a yield and CapEx claim for module partners, not a BER claim. Ask for known-good-module yield under your temp/immersion quals.
+          </li>
+          <li>
+            <strong>Cooling</strong> — SC25 already showed an 800G DOW NPO submerged with an Alphawave I/O chiplet. The 3.2T PR extends that hermetic story; it does not publish a 3.2T immersion BER ticket.
+          </li>
+        </ol>
+        <p>
+          This sits next to fabric and memory work like
+          <a href="/astera-leo-x-fabric-kv-cache.html">Astera Leo X</a>
+          and open scale-up like
+          <a href="/cornelis-delos-open-scaleup-ualink-esun.html">Cornelis ACF + Delos</a>:
+          different layers, same question of how bits leave the tray without melting the power budget.
+        </p>
+
+        <h2>Glass vs organic is the mechanical asterisk</h2>
+        <p>
+          Organic substrates warp when the ASIC and optics see workload-driven thermal swings. Glass’s lower CTE mismatch with silicon is why advanced packaging teams keep talking about glass cores and TGVs for high-density electrical/optical fan-out. Lessengers’ thesis is that mechanical stability is not a packaging footnote — it is the difference between a coupling that stays aligned through a training run and one that drifts into FEC cliffs.
+        </p>
+        <p>
+          Treat that as a checklist item, not a slogan:
+        </p>
+        <ol>
+          <li>
+            <strong>Coupling stability vs temperature</strong> — demand eye / BER sweeps across your immersion or cold-plate envelope, not a room-temp demo photo.
+          </li>
+          <li>
+            <strong>TGV electrical budget</strong> — glass vias are the electrical path from ASIC to optics; ask for loss, crosstalk, and reliability data at your SerDes rate.
+          </li>
+          <li>
+            <strong>Waveguide loss stack</strong> — planar glass path + DOW polymer path + fiber plant; get a written link budget at the 3.2T operating point.
+          </li>
+          <li>
+            <strong>Socket / service model</strong> — “open, socketable ecosystem” is the PR phrase; confirm which switch OEM owns the socket, CMIS story, and field-replace procedure.
+          </li>
+        </ol>
+
+        <h2>Where it sits next to PicoJool, NewPhotonics, and Lightmatter</h2>
+        <div class="table-wrap" role="region" aria-label="Where Lessengers 3.2T glass NPO sits next to PicoJool, NewPhotonics, and Lightmatter" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Purchase</th>
+                <th>Product</th>
+                <th>What it buys</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Orderable Rubin rack</td>
+                <td><a href="/supermicro-vera-rubin-nvl72-shipping.html">Supermicro NVL72 shipping</a></td>
+                <td>Cold-plate-to-tower coherent domain</td>
+              </tr>
+              <tr>
+                <td>Cross-campus scale-across</td>
+                <td><a href="/whitefiber-continuum-scale-across.html">WhiteFiber Continuum</a></td>
+                <td>Second site over metro fiber</td>
+              </tr>
+              <tr>
+                <td>Short-reach VCSEL emitter</td>
+                <td><a href="/picojool-200g-gaas-vcsel-1-6t.html">PicoJool 200G / microVCSEL</a></td>
+                <td>GaAs lane rates + 1.6T recipes</td>
+              </tr>
+              <tr>
+                <td>Laser-integrated PIC shipping</td>
+                <td><a href="/newphotonics-tower-npg102-ph18da-cpx.html">NewPhotonics NPG102</a></td>
+                <td>800G–1.6T engine on-ramp</td>
+              </tr>
+              <tr>
+                <td>BiDi NPO / fiber-plant halving</td>
+                <td><a href="/lightmatter-passage-l20-cpx-bidi-open-cpx.html">Lightmatter L20 CPX</a></td>
+                <td>Packaging + MSA on-ramp</td>
+              </tr>
+              <tr>
+                <td>Glass-substrate NPO engine</td>
+                <td><strong>Lessengers 3.2T DOW</strong></td>
+                <td>TGV glass core + lens-free polymer waveguides + immersion-native claim</td>
+              </tr>
+              <tr>
+                <td>Open scale-up fabric (non-NVLink)</td>
+                <td><a href="/cornelis-delos-open-scaleup-ualink-esun.html">Cornelis ACF + Delos</a></td>
+                <td>800G fabric / I/O dies</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Six related tickets. Lessengers does not replace PicoJool’s emitter math or NewPhotonics’ PIC sheet. It answers whether the <em>module that sits next to the switch ASIC</em> can be glass + DOW at 3.2T with immersion as a first-class constraint.
+        </p>
+
+        <h2>Caveats for a Lessengers ticket this week</h2>
+        <ol>
+          <li>
+            <strong>ECOC unveil ≠ shipping PLU.</strong> The PR invites engineering evaluations; there is no volume date, SKU list, or named switch OEM design-win in the Sep 21 text.
+          </li>
+          <li>
+            <strong>“Up to 50% power savings” is a vendor claim</strong> — demand a switch-level comparison (baseline pluggable vs this NPO) at your lane rate and FEC, not a brochure percentage.
+          </li>
+          <li>
+            <strong>No lane recipe in the PR.</strong> Unlike PicoJool’s explicit 8×200 / 16×100 / 32×50 paths, Lessengers has not published 3.2T lane count, modulation, or reach class here. Ask before you model faceplate math.
+          </li>
+          <li>
+            <strong>Immersion-native is pedigree + claim.</strong> SC25 proved 800G submerged DOW; treat 3.2T immersion as an extension that still needs your coolant chemistry and BER ticket.
+          </li>
+          <li>
+            <strong>Not a rematch of Lightmatter or NewPhotonics.</strong> Lightmatter is BiDi NPO / fiber plant; NewPhotonics is InP-integrated PIC engines; Lessengers is glass substrate + polymer DOW packaging.
+          </li>
+          <li>
+            <strong>Do not confuse with killed Huawei Atlas / Ascend SuperPoD / Hi-ONE NPO amplification.</strong> That lane stays closed here.
+          </li>
+          <li>
+            <strong>Not Marvell’s 2nm 400G/lane ECOC demos.</strong> Marvell is DSP/silicon roadmap; Lessengers is the module package next to the ASIC.
+          </li>
+        </ol>
+
+        <h2>How I would evaluate if I ran the hall</h2>
+        <ol>
+          <li>
+            Get a written sampling matrix: engine vs detachable NPO, host ASIC / chiplet partner, fiber plant, target BER, and immersion vs cold-plate path.
+          </li>
+          <li>
+            Ask for the missing lane sheet — how many lanes, what modulation, what reach — before you argue “3.2T density” into a 51.2T/102.4T BOM.
+          </li>
+          <li>
+            Put the same power and BER test next to whatever pluggable 1.6T/3.2T path and PIC/CPO path you already track from NewPhotonics or Lightmatter; keep the layers separate.
+          </li>
+          <li>
+            Score manufacturability claims (no active align) with yield data from a module partner, not a booth demo.
+          </li>
+          <li>
+            Budget the ECOC story as <em>architecture to evaluate</em>, not as proof the 3.2T engine already won the switch chassis.
+          </li>
+        </ol>
+        <p>
+          If you are buying the next AI switch generation’s optics package, the useful question is no longer “can NPO sit near the ASIC in a press release.” It is whether Lessengers’ glass TGV core, lens-free DOW waveguides, and immersion-native seal survive your BER, thermal, and serviceability gates before front-panel pluggables run out of power and faceplate.
+        </p>
+        <p>
+          Create-only. Specs and dates from Lessengers’ Sep 21 ECOC 3.2T glass-substrate NPO release, Converge Digest’s ECOC write-up, The Data Center Engineer’s Sep 25 summary, and Lessengers’ SC25 immersion-cooled 800G NPO note. Density, power, coupling, and immersion numbers are vendor claims until your own switch OEM and link-qualification tickets publish measured BER, insertion loss, pJ/bit, and yield.
+        </p>
+        <p>
+          Sources:
+          <a href="https://investor.wedbush.com/wedbush/article/bizwire-2026-9-21-lessengers-unveils-breakthrough-32t-glass-substrate-near-packaged-optics-npo-powered-by-direct-optical-wiring-dow-technology" target="_blank" rel="noopener noreferrer">BusinessWire / Wedbush mirror</a>
+          ·
+          <a href="https://convergedigest.com/lessengers-3-2t-glass-substrate-npo-ai-networks/" target="_blank" rel="noopener noreferrer">Converge Digest</a>
+          ·
+          <a href="https://thedatacenterengineer.com/news/3-2t-near-packaged-optics-uses-glass-substrate-to-cut-ai-switch-power-50/" target="_blank" rel="noopener noreferrer">Data Center Engineer</a>
+          ·
+          <a href="https://www.lessengers.com/news/lessengers-to-present-an-industry-first-immersion-cooled-optical-demonstration-at-sc25" target="_blank" rel="noopener noreferrer">Lessengers SC25 immersion 800G</a>.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated September 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
