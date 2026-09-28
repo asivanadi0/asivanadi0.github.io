@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Holo4: Computer-Use Agents With Named $/Task — 27B Dense, 35B-A3B MoE, Open Trajectories — Anpoo Sivanadi</title>
+  <meta name="description" content="H Company Holo4: 27B dense + 35B-A3B MoE computer-use VLMs with named OSWorld / AutomationBench $/task and open trajectories — no AA Index row, and a CC BY-NC vs Apache-2.0 license split you should write into the routing ticket." />
+  <link rel="canonical" href="https://asivanadi0.github.io/holo4.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Holo4: Computer-Use Agents With Named $/Task — 27B Dense, 35B-A3B MoE, Open Trajectories — Anpoo Sivanadi" />
+  <meta property="og:description" content="H Company Holo4: 27B dense + 35B-A3B MoE computer-use VLMs with named OSWorld / AutomationBench $/task and open trajectories — no AA Index row, and a CC BY-NC vs Apache-2.0 license split you should write into the routing ticket." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/holo4.html" />
+  <meta property="article:published_time" content="2026-09-28T07:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Holo4: Computer-Use Agents With Named $/Task — 27B Dense, 35B-A3B MoE, Open Trajectories</h1>
+        <p class="article-meta">
+          <time datetime="2026-09-28">28 September 2026</time>
+          · Anpoo Sivanadi
+          · based on H Company’s Sep 28 Holo4 newsroom, HF blog, and Holo4-27B / 35B-A3B cards
+        </p>
+        <p class="dek article-dek">
+          H Company Holo4: 27B dense + 35B-A3B MoE computer-use VLMs with named OSWorld / AutomationBench $/task and open trajectories — no AA Index row, and a CC BY-NC vs Apache-2.0 license split you should write into the routing ticket.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          Last night’s
+          <a href="/aliceai-foundation-80b.html">AliceAI-Foundation-80B</a>
+          note was a <strong>from-scratch base</strong>: <strong>80B / 3B</strong>, KDA:GA <strong>3:1</strong>, WikiWebFacts / HardMultiQA. Yesterday’s
+          <a href="/deepseek-v4-1-flash.html">DeepSeek-V4.1-Flash</a>
+          and
+          <a href="/xiaomi-mimo-v2-6-pro.html">MiMo-V2.6-Pro</a>
+          pieces were <strong>API KV math</strong> and an <strong>open-weights AA 46 price floor</strong>. This morning is a different purchase: a <strong>generalist computer-use agent</strong> that clicks, types, runs code, and calls MCP or business APIs from one model — with published <strong>cost per task</strong>, not just pass rates. On <strong>September 28, 2026</strong>, H Company shipped <strong>Holo4</strong>.
+        </p>
+        <p>
+          Primary sources:
+          <a href="https://hcompany.ai/newsroom/holo4" target="_blank" rel="noopener noreferrer">H Company newsroom</a>,
+          <a href="https://huggingface.co/blog/Hcompany/holo4" target="_blank" rel="noopener noreferrer">Hugging Face blog</a>,
+          <a href="https://huggingface.co/Hcompany/Holo4-27B" target="_blank" rel="noopener noreferrer">Holo4-27B card</a>,
+          <a href="https://huggingface.co/Hcompany/Holo4-35B-A3B" target="_blank" rel="noopener noreferrer">Holo4-35B-A3B card</a>,
+          and the open
+          <a href="https://huggingface.co/datasets/Hcompany/trajectories" target="_blank" rel="noopener noreferrer">trajectories dataset</a>.
+          Benchmark rows below are <strong>H Company’s harness</strong> (mean over 2–4 runs; single run on OSWorld 2.0 and ALE-CLI) unless marked as public leaderboard / other-provider charts. Treat every $/task as <strong>their token accounting at H Models API rates</strong> (or Alibaba list for Qwen foils) until you reproduce it.
+        </p>
+
+        <h2>Spec sheet (named numbers)</h2>
+        <div class="table-wrap" role="region" aria-label="Holo4 named numbers spec sheet" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th></th>
+                <th>Holo4-27B</th>
+                <th>Holo4-35B-A3B</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>HF checkpoint</td>
+                <td><code>Hcompany/Holo4-27B</code></td>
+                <td><code>Hcompany/Holo4-35B-A3B</code></td>
+              </tr>
+              <tr>
+                <td>Base architecture</td>
+                <td>Qwen3.8 <strong>dense</strong></td>
+                <td>Qwen3.5 <strong>MoE</strong></td>
+              </tr>
+              <tr>
+                <td>Size</td>
+                <td><strong>27B</strong> dense</td>
+                <td><strong>35B</strong> total / <strong>3B</strong> active</td>
+              </tr>
+              <tr>
+                <td>Context (config)</td>
+                <td><strong>262,144</strong></td>
+                <td><strong>262,144</strong></td>
+              </tr>
+              <tr>
+                <td>Model type</td>
+                <td>VLM (computer use)</td>
+                <td>VLM (computer use)</td>
+              </tr>
+              <tr>
+                <td>Interfaces</td>
+                <td>GUI + code + tool / MCP / API</td>
+                <td>same</td>
+              </tr>
+              <tr>
+                <td>Weight license</td>
+                <td><strong>CC BY-NC 4.0</strong></td>
+                <td><strong>Apache 2.0</strong></td>
+              </tr>
+              <tr>
+                <td>API list (USD / 1M tok)</td>
+                <td><strong>$0.40</strong> in / <strong>$0.04</strong> cached / <strong>$3.00</strong> out</td>
+                <td><strong>$0.30</strong> / <strong>$0.03</strong> / <strong>$2.00</strong></td>
+              </tr>
+              <tr>
+                <td>Formats on HF</td>
+                <td>BF16, FP8, NVFP4, Q4 GGUF</td>
+                <td>BF16, FP8, NVFP4, Q4 GGUF</td>
+              </tr>
+              <tr>
+                <td>Harness</td>
+                <td><code>hai-agents</code> (screenshots → actions)</td>
+                <td>same</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Sibling in the same drop: <strong>Holotron4 Nano</strong> (Nemotron 3 Nano Omni + same recipe). Newsroom deltas vs that base (absolute pp): OSWorld CUA GUI <strong>21.0 → 76.3</strong>, AutomationBench MCP <strong>19.4 → 35.6</strong> — a transfer check, not the fleet SKU.
+        </p>
+
+        <h2>What actually changed for people who run agent fleets</h2>
+        <p>
+          The durable product change is <strong>one model across GUI, code, MCP, and API</strong> with a published <strong>score × $/task</strong> table and <strong>open evaluation trajectories</strong>.
+        </p>
+        <p>
+          Most agent stacks still pick a lane: a GUI specialist that dies without a screenshot, or a tool-calling model that stalls when the app has no API. Holo4’s pitch is that a real task mixes those modes — FreeCAD + shell + MCP in one session — and the same checkpoint should run on desktop, web, Android, code sandbox, and business APIs without swapping models.
+        </p>
+        <p>
+          Training stack (newsroom): <strong>Agentic Task Factory</strong> ~<strong>10,000</strong> tasks (~4k web, ~3k MCP, ~3k desktop/OS), including hybrid GUI+MCP environments. <strong>SFT on 127B tokens</strong> (~¾ successful agentic trajectories: desktop <strong>45%</strong>, web <strong>14%</strong>, MCP/API <strong>12%</strong>, mobile <strong>3%</strong>). Then <strong>two asynchronous online RL LoRA experts</strong> (desktop/web vs terminal/MCP/API) merged at equal weight. They also rebuilt the harness (memory across hundreds of steps; shell on the desktop) and publish the OSWorld 2.0 climb from Aug 10 <strong>6.1%</strong> to release <strong>61.7%</strong>. Trajectories behind the public scores are open — replay at <code>trajectories.hcompany.ai</code> or pull
+          <a href="https://huggingface.co/datasets/Hcompany/trajectories" target="_blank" rel="noopener noreferrer">Hcompany/trajectories</a>.
+        </p>
+
+        <h2>Vendor benches vs what you should not invent</h2>
+        <p>
+          H Company table (their harness; under each score: cost per task USD at H Models rates for Holo4; Qwen foils at Alibaba list from their token counts; frontier rows are public / other harnesses — do not treat as A/B):
+        </p>
+        <div class="table-wrap" role="region" aria-label="H Company vendor benchmark comparison for Holo4 with cost per task" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Benchmark</th>
+                <th>Holo4-27B</th>
+                <th>Holo4-35B-A3B</th>
+                <th>Qwen3.8 27B</th>
+                <th>Named frontier foil</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>OSWorld (computer tasks)</td>
+                <td><strong>85.2%</strong> / <strong>$0.08</strong></td>
+                <td><strong>80.8%</strong> / <strong>$0.05</strong></td>
+                <td>84.3% / $0.22</td>
+                <td>Fable 5 <strong>86.0%</strong>; Qwen3.8 Max <strong>86.1%</strong></td>
+              </tr>
+              <tr>
+                <td>OSWorld 2.0 (long workflows)</td>
+                <td><strong>61.7%</strong> (succ. <strong>41.5%</strong>) / <strong>$1.22</strong></td>
+                <td><strong>30.9%</strong> (<strong>12.3%</strong>) / <strong>$0.61</strong></td>
+                <td>48.0% (<strong>19.4%</strong>) / $3.49</td>
+                <td>Opus 5.5 <strong>81.8%</strong> (<strong>48.7%</strong>) / <strong>$8.48</strong>; GPT-6 Astra <strong>73.5%</strong> / <strong>$9.07</strong></td>
+              </tr>
+              <tr>
+                <td>ALE-CLI (105-task Linux)</td>
+                <td><strong>44.1%</strong> (<strong>19.4%</strong>) / <strong>$0.82</strong></td>
+                <td><strong>30.9%</strong> (<strong>13.5%</strong>) / <strong>$0.29</strong></td>
+                <td>43.5% (<strong>19.0%</strong>)</td>
+                <td>Opus 5.5 <strong>63.7%</strong> / $8.22; GPT-6 Astra <strong>61.4%</strong> / $5.31</td>
+              </tr>
+              <tr>
+                <td>AutomationBench v1.0.6 public</td>
+                <td><strong>45.4%</strong> / <strong>$0.05</strong></td>
+                <td><strong>34.5%</strong> / <strong>$0.02</strong></td>
+                <td>40.3%* / $0.09</td>
+                <td>Opus 5 <strong>50.3%</strong> / $3.05; GPT-5.6 Sol <strong>45.8%</strong> / $0.67</td>
+              </tr>
+              <tr>
+                <td>AndroidWorld</td>
+                <td><strong>85.1%</strong> / <strong>$0.08</strong></td>
+                <td><strong>77.6%</strong> / <strong>$0.07</strong></td>
+                <td>81.9% / $0.13</td>
+                <td>Fable 5 <strong>88.8%</strong>; Qwen3.8 Max <strong>85.3%</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          * Qwen3.8 27B in H Company’s harness where no public score exists. AutomationBench footnote: <strong>480</strong>/600 public tasks overlap their training-data split; held-out <strong>120</strong>: Holo4-27B <strong>49.3%</strong>, 35B-A3B <strong>31.7%</strong> vs Qwen3.8 27B <strong>40.3%</strong>. They will report the official private set when evaluated — do not paste public-set as private-set.
+        </p>
+        <p>
+          Agentic Task Factory held-out (not used in training): Web <strong>80.2%</strong> / MCP <strong>89.4%</strong> / Desktop <strong>72.0%</strong> for 27B (35B-A3B: <strong>70.8%</strong> / <strong>85.4%</strong> / <strong>64.8%</strong>).
+        </p>
+        <p>
+          Pattern for a routing ticket: <strong>27B wins the hard long-workflow row</strong> (OSWorld 2.0 <strong>61.7%</strong>) at ~<strong>1/7</strong> the Opus 5.5 $/task in their chart; <strong>35B-A3B</strong> is the cheap Apache-2.0 MoE sibling that under-indexes on long desktop workflows but still posts AutomationBench <strong>34.5%</strong> at <strong>$0.02</strong>/task. Neither claims an Artificial Analysis Intelligence Index row in this drop — do not invent one.
+        </p>
+
+        <h2>Where it sits next to AliceAI, Flash, MiMo, and closed agents</h2>
+        <div class="table-wrap" role="region" aria-label="Where Holo4 sits next to AliceAI, Flash, MiMo, and closed agents" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Purchase</th>
+                <th>Product</th>
+                <th>What it buys</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>From-scratch hybrid base + RU protocols</td>
+                <td><a href="/aliceai-foundation-80b.html">AliceAI-Foundation-80B</a></td>
+                <td>80B/3B; KDA:GA 3:1; Apache-2.0 base</td>
+              </tr>
+              <tr>
+                <td>Model-side KV / activate API</td>
+                <td><a href="/deepseek-v4-1-flash.html">DeepSeek-V4.1-Flash</a></td>
+                <td>890 B/tok; 8B/16B; Flash rates</td>
+              </tr>
+              <tr>
+                <td>Open-weights AA price floor (instruct)</td>
+                <td><a href="/xiaomi-mimo-v2-6-pro.html">MiMo-V2.6-Pro</a></td>
+                <td>AA 46; <code>$0.435/$0.87</code>; 1.02T/42B</td>
+              </tr>
+              <tr>
+                <td>Computer-use $/task + open trajectories</td>
+                <td><strong>Holo4</strong></td>
+                <td>OSWorld 2.0 61.7% @ $1.22; Apache 35B/3B; GUI+code+MCP</td>
+              </tr>
+              <tr>
+                <td>Default coding agents (OpenAI)</td>
+                <td><a href="/gpt-6-sol-luna.html">GPT-6 Sol</a></td>
+                <td><code>$2/$10</code>; cache-steerable effort</td>
+              </tr>
+              <tr>
+                <td>Volume / extract (OpenAI)</td>
+                <td><a href="/gpt-6-sol-luna.html">GPT-6 Luna</a></td>
+                <td><code>$0.10/$0.50</code></td>
+              </tr>
+              <tr>
+                <td>Flagship / agentic coding (Anthropic)</td>
+                <td><a href="/claude-opus-5-5.html">Claude Opus 5.5</a></td>
+                <td>Fable-class work at <code>$4/$20</code></td>
+              </tr>
+              <tr>
+                <td>Flagship reasoning (OpenAI)</td>
+                <td><a href="/gpt-6-astra.html">GPT-6 Astra</a></td>
+                <td>Highest OpenAI ceilings; <code>$10/$50</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Holo4 does not claim an AA ceiling. It argues that <strong>a mid-size VLM with published GUI+code+MCP cost tables and open traces</strong> is a better agent-fleet canary than guessing which chat flagship still works when the app only has a screen.
+        </p>
+
+        <h2>Caveats I would write into any Holo4 ticket</h2>
+        <ol>
+          <li>
+            <strong>Harness ≠ model.</strong> Scores are Holo4 inside <code>hai-agents</code>. Swap the loop and the number moves — reproduce before you retire a Sol / Opus path.
+          </li>
+          <li>
+            <strong>License split is real.</strong> <strong>35B-A3B is Apache 2.0</strong>; <strong>27B is CC BY-NC 4.0</strong>. Self-host commercial fleets should start on the MoE card unless counsel clears NC.
+          </li>
+          <li>
+            <strong>OSWorld ≠ OSWorld 2.0.</strong> Short-task <strong>85.2%</strong> is not long-workflow <strong>61.7%</strong>. Quote the row you mean.
+          </li>
+          <li>
+            <strong>AutomationBench public set overlaps training data</strong> (480/600). Prefer held-out <strong>120</strong> (<strong>49.3%</strong> for 27B) or wait for private-set.
+          </li>
+          <li>
+            <strong>No AA Index in this drop.</strong> Keep
+            <a href="/xiaomi-mimo-v2-6-pro.html">MiMo Pro</a>
+            on the open Intelligence Index floor.
+          </li>
+          <li>
+            <strong>Not a rematch of Inferra / Leo X / Lessengers / Continuum.</strong> Those are memory and optics. This is an <strong>agent model + harness</strong> ticket.
+          </li>
+          <li>
+            <strong>Frontier foils are mixed harnesses.</strong> Opus / Astra / Fable $/task rows are order-of-magnitude, not a controlled bake-off.
+          </li>
+        </ol>
+
+        <h2>How I would evaluate if I ran computer-use or MCP fleets</h2>
+        <ol>
+          <li>
+            <strong>API canary</strong> on H Models at published rates — your $/task on a fixed OSWorld 2.0 / AutomationBench subset before any weight download.
+          </li>
+          <li>
+            <strong>Self-host Apache 35B-A3B</strong> (BF16 → FP8/NVFP4 as memory allows) behind <code>hai-agents</code> or your loop; keep 27B as research/NC only.
+          </li>
+          <li>
+            <strong>Replay</strong>
+            <a href="https://huggingface.co/datasets/Hcompany/trajectories" target="_blank" rel="noopener noreferrer">Hcompany/trajectories</a>
+            on failing tasks to separate harness bugs from weights.
+          </li>
+          <li>
+            <strong>A/B against Qwen3.8 27B</strong> on the same harness, and against
+            <a href="/gpt-6-sol-luna.html">Sol</a>
+            /
+            <a href="/claude-opus-5-5.html">Opus 5.5</a>
+            on the hard unattended subset where $/task still loses to closed max-effort.
+          </li>
+          <li>
+            <strong>Keep AliceAI</strong> for post-train substrate and <strong>MiMo / Flash</strong> for chat/API volume — Holo4 is the <strong>computer-use board</strong>.
+          </li>
+        </ol>
+        <p>
+          This is a <strong>computer-use agent release</strong> with named OSWorld / AutomationBench <strong>$/task</strong>, dual licenses, and open trajectories — not a new closed flagship and not an AA rematch. Put Holo4 where you need <strong>GUI + code + MCP in one mid-size VLM</strong> with a readable cost table. Keep
+          <a href="/xiaomi-mimo-v2-6-pro.html">MiMo</a>
+          on the open ceiling/price row,
+          <a href="/deepseek-v4-1-flash.html">DeepSeek-V4.1-Flash</a>
+          on cacheable API loops,
+          <a href="/aliceai-foundation-80b.html">AliceAI</a>
+          on from-scratch bases, and Astra / Opus 5.5 on hard unattended work until your harness says otherwise. Measure, then move traffic.
+        </p>
+        <p>
+          Create-only. Specs from H Company’s Sep 28 newsroom, the HF blog, the Holo4-27B / Holo4-35B-A3B cards, and the trajectories dataset. Update when the AutomationBench private set lands, when Artificial Analysis publishes an Index row, when DSpark drafter checkpoints ship, or when a named third-party harness reproduces OSWorld 2.0 against Sol / Opus 5.5.
+        </p>
+        <p>
+          Sources:
+          <a href="https://hcompany.ai/newsroom/holo4" target="_blank" rel="noopener noreferrer">H Company newsroom</a>
+          ·
+          <a href="https://huggingface.co/blog/Hcompany/holo4" target="_blank" rel="noopener noreferrer">Hugging Face blog</a>
+          ·
+          <a href="https://huggingface.co/Hcompany/Holo4-27B" target="_blank" rel="noopener noreferrer">Holo4-27B card</a>
+          ·
+          <a href="https://huggingface.co/Hcompany/Holo4-35B-A3B" target="_blank" rel="noopener noreferrer">Holo4-35B-A3B card</a>
+          ·
+          <a href="https://huggingface.co/datasets/Hcompany/trajectories" target="_blank" rel="noopener noreferrer">trajectories dataset</a>.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated September 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
