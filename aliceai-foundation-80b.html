@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AliceAI-Foundation-80B: From-Scratch 3B Activate, KDA:GA 3:1 — and Two Open Russian Factual Benches — Anpoo Sivanadi</title>
+  <meta name="description" content="Yandex AliceAI-Foundation-80B-A3B-Base: from-scratch 80B/3B hybrid MoE, KDA:GA 3:1, Apache 2.0, WikiWebFacts / HardMultiQA — no AA Index row yet, and a base you still owe SFT/RL before you compare it to Flash/Pro chat endpoints." />
+  <link rel="canonical" href="https://asivanadi0.github.io/aliceai-foundation-80b.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="AliceAI-Foundation-80B: From-Scratch 3B Activate, KDA:GA 3:1 — and Two Open Russian Factual Benches — Anpoo Sivanadi" />
+  <meta property="og:description" content="Yandex AliceAI-Foundation-80B-A3B-Base: from-scratch 80B/3B hybrid MoE, KDA:GA 3:1, Apache 2.0, WikiWebFacts / HardMultiQA — no AA Index row yet, and a base you still owe SFT/RL before you compare it to Flash/Pro chat endpoints." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/aliceai-foundation-80b.html" />
+  <meta property="article:published_time" content="2026-09-27T18:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>AliceAI-Foundation-80B: From-Scratch 3B Activate, KDA:GA 3:1 — and Two Open Russian Factual Benches</h1>
+        <p class="article-meta">
+          <time datetime="2026-09-27">27 September 2026</time>
+          · Anpoo Sivanadi
+          · based on Yandex’s Sep 21 AliceAI-Foundation-80B release and HF / Habr / CCLeaks reads
+        </p>
+        <p class="dek article-dek">
+          Yandex AliceAI-Foundation-80B-A3B-Base: from-scratch 80B/3B hybrid MoE, KDA:GA 3:1, Apache 2.0, WikiWebFacts / HardMultiQA — no AA Index row yet, and a base you still owe SFT/RL before you compare it to Flash/Pro chat endpoints.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          This morning’s
+          <a href="/deepseek-v4-1-flash.html">DeepSeek-V4.1-Flash</a>
+          note was a <strong>model-side KV and activate</strong> sentence: <strong>890 bytes/token</strong>, <strong>8B/16B</strong>, forced Flash rates. Last night’s
+          <a href="/xiaomi-mimo-v2-6-pro.html">MiMo-V2.6-Pro</a>
+          was the <strong>open-weights AA 46 price floor</strong>. Tonight is a third purchase: a <strong>from-scratch mid-size base</strong> you can post-train yourself — not a continued Qwen/Llama card, and not another closed API rematch. On <strong>September 21, 2026</strong>, Yandex open-sourced <strong>AliceAI-Foundation-80B-A3B-Base</strong> under <strong>Apache 2.0</strong>.
+        </p>
+        <p>
+          Primary sources:
+          <a href="https://ir.yandex/press-releases?year=2026&amp;id=2026-09-21" target="_blank" rel="noopener noreferrer">Yandex IR Sep 21 release</a>,
+          <a href="https://huggingface.co/yandex/AliceAI-Foundation-80B-A3B-Base/blob/main/README_en.md" target="_blank" rel="noopener noreferrer">Hugging Face model card / README_en</a>,
+          <a href="https://huggingface.co/yandex/AliceAI-Foundation-80B-A3B-Base" target="_blank" rel="noopener noreferrer">HF repo</a>,
+          <a href="https://habr.com/ru/companies/yandex/articles/1083300/" target="_blank" rel="noopener noreferrer">Habr tech write-up (RU)</a>,
+          and
+          <a href="https://ccleaks.com/news/aliceai-foundation-80b-open-weights-sep-2026" target="_blank" rel="noopener noreferrer">CCLeaks Sep 21 pack</a>.
+          Vendor benches below are <strong>Yandex’s</strong> (vLLM harness on the card / Habr) unless marked otherwise. There is <strong>no Artificial Analysis Intelligence Index row</strong> for this checkpoint as of this writing — treat that as a gap, not a silent win.
+        </p>
+
+        <h2>Spec sheet (named numbers)</h2>
+        <div class="table-wrap" role="region" aria-label="AliceAI-Foundation-80B named numbers spec sheet" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th></th>
+                <th>AliceAI-Foundation-80B-A3B-Base</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>HF checkpoint</td>
+                <td><code>yandex/AliceAI-Foundation-80B-A3B-Base</code></td>
+              </tr>
+              <tr>
+                <td>Stage</td>
+                <td><strong>Pretrain / base only</strong> (no post-train / alignment on the card)</td>
+              </tr>
+              <tr>
+                <td>Architecture</td>
+                <td>Hybrid MoE + KDA / Gated Attention</td>
+              </tr>
+              <tr>
+                <td>Total / active</td>
+                <td><strong>80B / 3B</strong></td>
+              </tr>
+              <tr>
+                <td>Hidden / vocab</td>
+                <td><strong>2048</strong> / <strong>129024</strong></td>
+              </tr>
+              <tr>
+                <td>Layers</td>
+                <td><strong>48</strong></td>
+              </tr>
+              <tr>
+                <td>Layer schedule</td>
+                <td><strong>12 ×</strong> ( <strong>3 ×</strong> (KDA → MoE) → <strong>1 ×</strong> (Gated Attention → MoE) )</td>
+              </tr>
+              <tr>
+                <td>KDA heads</td>
+                <td>Q <strong>32</strong> / KV <strong>32</strong>; head dim <strong>128</strong>; conv kernel <strong>4</strong></td>
+              </tr>
+              <tr>
+                <td>Gated Attention</td>
+                <td>Q <strong>16</strong> / KV <strong>2</strong>; Q head dim <strong>256</strong></td>
+              </tr>
+              <tr>
+                <td>MoE</td>
+                <td><strong>512</strong> routed experts; top-<strong>10</strong> + <strong>1</strong> shared; expert intermediate <strong>512</strong></td>
+              </tr>
+              <tr>
+                <td>Speculative</td>
+                <td><strong>1</strong> MTP layer</td>
+              </tr>
+              <tr>
+                <td>Context</td>
+                <td><strong>262,144</strong></td>
+              </tr>
+              <tr>
+                <td>Pretrain stages (Habr)</td>
+                <td><strong>17.5T</strong> @ 8K → <strong>50B</strong> @ 32K → <strong>240B</strong> @ 256K → <strong>280B</strong> reasoning @ 128K</td>
+              </tr>
+              <tr>
+                <td>Optimizer note (Habr / IR)</td>
+                <td>Muon with overlapped GPU comms; IR: optimizer steps ~<strong>2×</strong> faster vs prior path</td>
+              </tr>
+              <tr>
+                <td>License</td>
+                <td><strong>Apache 2.0</strong> (ungated HF)</td>
+              </tr>
+              <tr>
+                <td>Load flags</td>
+                <td><code>trust_remote_code=True</code>; Transformers <strong>5.16.1</strong> + <code>flash-linear-attention==0.5.0</code></td>
+              </tr>
+              <tr>
+                <td>Serve path (card)</td>
+                <td>Docker <code>yamlbrand/alice-ai-vllm:latest</code>; example <code>tp 4</code> + MTP speculative config</td>
+              </tr>
+              <tr>
+                <td>Open benches shipped</td>
+                <td><strong>WikiWebFacts</strong>, <strong>HardMultiQA</strong> (+ evaluation protocols)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Same-week foil:
+          <a href="/xiaomi-mimo-v2-6-pro.html">MiMo-V2.6-Pro</a>
+          is an <strong>instruct/RL</strong> omnimodal MoE at <strong>1.02T/42B</strong> with an AA <strong>46</strong> row. AliceAI is a <strong>base</strong> with <strong>3B</strong> active — a post-train substrate, not a drop-in chat SKU.
+        </p>
+
+        <h2>What actually changed for people who fine-tune or self-host</h2>
+        <p>
+          The durable product change is not a new API price card. It is <strong>from-scratch weights + a published hybrid attention schedule + open factual protocols</strong>.
+        </p>
+        <p>
+          Yandex’s IR note states the checkpoint was trained entirely from scratch — no third-party open-source weights as the init. Habr expands that into architecture choices they ablated on separate <strong>2T</strong>-token from-scratch runs: <strong>Kimi Delta Attention (KDA)</strong> for the linear-attention layers, full <strong>Gated Attention</strong> every fourth attention block (3:1), <strong>Attention Residuals</strong> (Block AttnRes), DeepSeek-V3-style auxiliary-loss-free MoE routing, and MoE activation <strong>Z-Loss</strong> after a scaling-law learning-rate run blew up activations. That is a research-ops ticket you can read, not a one-line “80B MoE” sticker.
+        </p>
+        <p>
+          Activate math is the serving sentence: <strong>3B</strong> of <strong>80B</strong> fire per token. That is lighter active compute than
+          <a href="/deepseek-v4-1-flash.html">DeepSeek-V4.1-Flash</a>’s
+          <strong>8B/16B</strong> CED path and far lighter than MiMo Pro’s <strong>42B</strong> — but AliceAI is a <strong>base</strong>, so you still owe SFT/RL before you compare it to Flash/Pro chat endpoints. The card’s vLLM Docker example is a realistic on-ramp (<code>tp 4</code> on four GPUs in the published command); KDA layers need <code>flash-linear-attention</code> with KDA support on the Transformers path.
+        </p>
+        <p>
+          Operational bonus: alongside the weights, Yandex released <strong>WikiWebFacts</strong> and <strong>HardMultiQA</strong> — Russian-context factual suites with evaluation protocols. If your fleet cares about RU factual recall (or you just want a reproducible scoreboard that is not another MMLU paste), that is the artifact, not a press-kit claim.
+        </p>
+
+        <h2>Vendor benches vs what you should not invent</h2>
+        <p>
+          Yandex’s README table (internal eval infra; vLLM; facts/education at <code>t=0</code>; selected rows; higher better):
+        </p>
+        <div class="table-wrap" role="region" aria-label="Yandex vendor benchmark comparison for AliceAI-Foundation-80B" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Benchmark</th>
+                <th>AliceAI-80B-A3B-Base</th>
+                <th>Qwen3.5-35B-A3B-Base</th>
+                <th>Nemotron-3-Super-120B-A12B-Base</th>
+                <th>DeepSeek-V4-Flash-Base</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>WikiWebFacts (RU)</td>
+                <td><strong>86.5</strong></td>
+                <td>62.4</td>
+                <td>72.8</td>
+                <td>83.2</td>
+              </tr>
+              <tr>
+                <td>HardMultiQA (RU)</td>
+                <td><strong>67.9</strong></td>
+                <td>47.2</td>
+                <td>54.5</td>
+                <td>65.4</td>
+              </tr>
+              <tr>
+                <td>MATH-500</td>
+                <td><strong>91.1</strong></td>
+                <td>81.9</td>
+                <td>84.8</td>
+                <td>80.7</td>
+              </tr>
+              <tr>
+                <td>LiveCodeBench v5–6 CoT pass@1</td>
+                <td><strong>50.5</strong></td>
+                <td>50.4</td>
+                <td>50.4</td>
+                <td>38.1</td>
+              </tr>
+              <tr>
+                <td>FinQA 128k</td>
+                <td><strong>74.1</strong></td>
+                <td>73.5</td>
+                <td>71.7</td>
+                <td>74.1</td>
+              </tr>
+              <tr>
+                <td>LongMemEval 128k</td>
+                <td>64.6</td>
+                <td>55.6</td>
+                <td><strong>64.8</strong></td>
+                <td>68.0</td>
+              </tr>
+              <tr>
+                <td>MMLU-Pro CoT</td>
+                <td>66.8</td>
+                <td>63.2</td>
+                <td><strong>69.9</strong></td>
+                <td>66.5</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Hard reasoning table (<code>t=1</code>, repetition penalties per card; pass@k):
+        </p>
+        <div class="table-wrap" role="region" aria-label="Yandex hard reasoning pass@k comparison for AliceAI-Foundation-80B" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Benchmark</th>
+                <th>AliceAI-80B-A3B-Base</th>
+                <th>Qwen3.5-35B-A3B-Base</th>
+                <th>Nemotron-3-Super-120B-A12B-Base</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>AIME 2026 pass@32</td>
+                <td><strong>96.7</strong></td>
+                <td><strong>96.7</strong></td>
+                <td>90.0</td>
+              </tr>
+              <tr>
+                <td>HMMT 2026 Feb pass@32</td>
+                <td><strong>96.9</strong></td>
+                <td>87.9</td>
+                <td>66.7</td>
+              </tr>
+              <tr>
+                <td>IMO-AnswerBench pass@8</td>
+                <td><strong>88.7</strong></td>
+                <td>84.5</td>
+                <td>64.5</td>
+              </tr>
+              <tr>
+                <td>CodeForces CPP pass@8</td>
+                <td>68.9</td>
+                <td><strong>73.7</strong></td>
+                <td>56.6</td>
+              </tr>
+              <tr>
+                <td>LiveCodeBench v5–6 pass@1</td>
+                <td><strong>60.4</strong></td>
+                <td>51.9</td>
+                <td>34.7</td>
+              </tr>
+              <tr>
+                <td>LiveCodeBench v5–6 pass@8</td>
+                <td><strong>82.9</strong></td>
+                <td>82.1</td>
+                <td>59.8</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Pattern for a routing / post-train ticket: AliceAI <strong>leads Yandex’s own RU factual rows</strong> and several <strong>pass@k math</strong> rows against larger open bases, ties Qwen on AIME, and still <strong>trails</strong> on some English TriviaQA / MMLU-Pro / CodeForces cells in the same tables. Treat every row as <strong>Yandex-harness</strong> until your suite says otherwise. Do <strong>not</strong> paste “beats DeepSeek Flash” into a chat-model bake-off — the Flash column here is <strong>V4-Flash-Base</strong>, and this morning’s product is <strong>V4.1-Flash</strong> instruct/API.
+        </p>
+
+        <h2>Where it sits next to MiMo, Flash, and the closed ladder</h2>
+        <div class="table-wrap" role="region" aria-label="Where AliceAI-Foundation-80B sits next to MiMo, Flash, and the closed ladder" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Purchase</th>
+                <th>Product</th>
+                <th>What it buys</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Open-weights price floor (instruct)</td>
+                <td><a href="/xiaomi-mimo-v2-6-pro.html">MiMo-V2.6-Pro</a></td>
+                <td>AA 46; <code>$0.435/$0.87</code>; 1.02T/42B</td>
+              </tr>
+              <tr>
+                <td>Open volume / self-host on-ramp</td>
+                <td><a href="/xiaomi-mimo-v2-6-pro.html">MiMo-V2.6-Flash</a></td>
+                <td><code>$0.14/$0.28</code>; 309B/15B</td>
+              </tr>
+              <tr>
+                <td>Model-side KV / activate API</td>
+                <td><a href="/deepseek-v4-1-flash.html">DeepSeek-V4.1-Flash</a></td>
+                <td>890 B/tok; 8B/16B; <code>$0.15/$0.60</code> off-peak</td>
+              </tr>
+              <tr>
+                <td>From-scratch hybrid base + RU protocols</td>
+                <td><strong>AliceAI-Foundation-80B</strong></td>
+                <td>80B/3B; KDA:GA 3:1; Apache-2.0; WikiWebFacts / HardMultiQA</td>
+              </tr>
+              <tr>
+                <td>Default coding agents (OpenAI)</td>
+                <td><a href="/gpt-6-sol-luna.html">GPT-6 Sol</a></td>
+                <td><code>$2/$10</code>; cache-steerable effort</td>
+              </tr>
+              <tr>
+                <td>Volume / extract (OpenAI)</td>
+                <td><a href="/gpt-6-sol-luna.html">GPT-6 Luna</a></td>
+                <td><code>$0.10/$0.50</code></td>
+              </tr>
+              <tr>
+                <td>Flagship / agentic coding (Anthropic)</td>
+                <td><a href="/claude-opus-5-5.html">Claude Opus 5.5</a></td>
+                <td>Fable-class work at <code>$4/$20</code></td>
+              </tr>
+              <tr>
+                <td>Flagship reasoning (OpenAI)</td>
+                <td><a href="/gpt-6-astra.html">GPT-6 Astra</a></td>
+                <td>Highest OpenAI ceilings; <code>$10/$50</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          AliceAI does not invent a fabric and does not claim an AA ceiling. It argues that <strong>a 3B-activate from-scratch base with linear-attention hybrids and open RU factual protocols</strong> is a better post-train starting point than guessing which continued-pretrain card still carries someone else’s tokenizer debt.
+        </p>
+
+        <h2>Caveats I would write into any AliceAI ticket</h2>
+        <ol>
+          <li>
+            <strong>This is a base.</strong> The card is explicit: no post-training / alignment. Do not A/B it against
+            <a href="/xiaomi-mimo-v2-6-pro.html">MiMo Pro</a>,
+            <a href="/deepseek-v4-1-flash.html">Flash</a>,
+            <a href="/gpt-6-sol-luna.html">Sol</a>,
+            or
+            <a href="/claude-opus-5-5.html">Opus 5.5</a>
+            without your own SFT/RL stack.
+          </li>
+          <li>
+            <strong>No AA Index yet.</strong> Do not invent a “top open” slogan. MiMo still owns the published AA <strong>46</strong> open-weights row from last night.
+          </li>
+          <li>
+            <strong>Reproduce WikiWebFacts / HardMultiQA / your suite</strong> with the published protocols — Yandex’s tables are not your fleet.
+          </li>
+          <li>
+            <strong><code>trust_remote_code</code> + KDA deps are real.</strong> Pin Transformers / <code>flash-linear-attention</code> as on the README; prefer the published vLLM Docker for the first canary.
+          </li>
+          <li>
+            <strong>Russian factual strength ≠ English product win.</strong> TriviaQA / MMLU-Pro rows in the same card show the gap; keep a closed or MiMo fallback for English agent work.
+          </li>
+          <li>
+            <strong>Not a rematch of Inferra / Leo X / Lessengers / Continuum.</strong> Those are system memory and optics. This is a <strong>pretrain substrate</strong>.
+          </li>
+        </ol>
+
+        <h2>How I would evaluate if I ran post-train or self-host</h2>
+        <ol>
+          <li>
+            <strong>Bring-up canary</strong> on the card’s <code>yamlbrand/alice-ai-vllm</code> path (<code>tp 4</code>, MTP speculative config) and record pins before any fleet percentage.
+          </li>
+          <li>
+            <strong>WikiWebFacts + HardMultiQA</strong> with Yandex’s protocols if RU factual recall is in scope; otherwise skip the marketing claim.
+          </li>
+          <li>
+            <strong>Same SFT recipe</strong> against Qwen3.5-35B-A3B-Base / Nemotron-3-Super-Base before you trust pass@k olympiad rows as product signal.
+          </li>
+          <li>
+            <strong>Activate / memory footprint</strong> at <strong>262K</strong> with KDA in the loop — do not assume “3B active” means workstation-class.
+          </li>
+          <li>
+            <strong>Keep MiMo Pro / Flash / Opus / Astra</strong> on production agent boards until your post-train harness clears them.
+          </li>
+        </ol>
+        <p>
+          This is a <strong>from-scratch hybrid-attention base release</strong> with Apache-2.0 weights and two open RU factual suites — not a new closed flagship and not an AA rematch. Put AliceAI where you need a <strong>3B-activate post-train substrate</strong> with a readable KDA:GA schedule. Keep
+          <a href="/xiaomi-mimo-v2-6-pro.html">MiMo</a>
+          on the open ceiling/price row,
+          <a href="/deepseek-v4-1-flash.html">DeepSeek-V4.1-Flash</a>
+          on cacheable API agent loops, and Astra / Opus 5.5 on hard unattended work until your harness says otherwise. Measure, then move traffic.
+        </p>
+        <p>
+          Create-only. Specs from Yandex’s Sep 21 IR note, the HF README_en / card, the Habr tech write-up (pretrain stage token table and architecture notes), and the CCLeaks Sep 21 pack. Update when an instruct/RL checkpoint ships, when Artificial Analysis publishes an Index row, or when a named harness reproduces LiveCodeBench / AIME against MiMo Pro / Flash / Qwen3.5 bases.
+        </p>
+        <p>
+          Sources:
+          <a href="https://ir.yandex/press-releases?year=2026&amp;id=2026-09-21" target="_blank" rel="noopener noreferrer">Yandex IR Sep 21</a>
+          ·
+          <a href="https://huggingface.co/yandex/AliceAI-Foundation-80B-A3B-Base" target="_blank" rel="noopener noreferrer">Hugging Face repo</a>
+          ·
+          <a href="https://huggingface.co/yandex/AliceAI-Foundation-80B-A3B-Base/blob/main/README_en.md" target="_blank" rel="noopener noreferrer">README_en</a>
+          ·
+          <a href="https://habr.com/ru/companies/yandex/articles/1083300/" target="_blank" rel="noopener noreferrer">Habr</a>
+          ·
+          <a href="https://ccleaks.com/news/aliceai-foundation-80b-open-weights-sep-2026" target="_blank" rel="noopener noreferrer">CCLeaks Sep 21 pack</a>.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated September 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
