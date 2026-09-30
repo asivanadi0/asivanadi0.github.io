@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Naive-N0.5-Flash: 309B / 15.5B MoE with Zero Full-Attention Layers — Native 1M via SWA+DSA — Anpoo Sivanadi</title>
+  <meta name="description" content="Naive-N0.5-Flash: open-weight 309B / 15.5B MoE with zero full-attention layers, native 1M via SWA+DSA, MIT, announced $0.10/$0.40/$0.01, NaiveRT peak you should re-time — decode-cost architecture, not an AA rematch." />
+  <link rel="canonical" href="https://asivanadi0.github.io/naive-n0-5-flash.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Naive-N0.5-Flash: 309B / 15.5B MoE with Zero Full-Attention Layers — Native 1M via SWA+DSA — Anpoo Sivanadi" />
+  <meta property="og:description" content="Naive-N0.5-Flash: open-weight 309B / 15.5B MoE with zero full-attention layers, native 1M via SWA+DSA, MIT, announced $0.10/$0.40/$0.01, NaiveRT peak you should re-time — decode-cost architecture, not an AA rematch." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/naive-n0-5-flash.html" />
+  <meta property="article:published_time" content="2026-09-29T18:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Naive-N0.5-Flash: 309B / 15.5B MoE with Zero Full-Attention Layers — Native 1M via SWA+DSA</h1>
+        <p class="article-meta">
+          <time datetime="2026-09-29">29 September 2026</time>
+          · Anpoo Sivanadi
+          · based on NaiveAI’s Sep 27 research post, the HF card, and Aivio’s Sep 28 coverage
+        </p>
+        <p class="dek article-dek">
+          Naive-N0.5-Flash: open-weight 309B / 15.5B MoE with zero full-attention layers, native 1M via SWA+DSA, MIT, announced $0.10/$0.40/$0.01, NaiveRT peak you should re-time — decode-cost architecture, not an AA rematch.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          This morning’s
+          <a href="/nvidia-open-agent-safety.html">OpenShell</a>
+          note was a <strong>runtime policy</strong> ticket. Last night’s
+          <a href="/jev-27b.html">JEV-27B</a>
+          was <strong>System 1</strong>; yesterday morning’s
+          <a href="/holo4.html">Holo4</a>
+          was <strong>computer-use $/task</strong>. Agents that already have policy, micro-decisions, and a GUI path still need a different board — <strong>what decode costs at a million tokens when the network has no full-attention layers</strong>. On <strong>September 27, 2026</strong>, NaiveAI published <strong>Naive-N0.5-Flash</strong>: open-weight <strong>309B / 15.5B</strong> MoE under <strong>MIT</strong>, native <strong>1M</strong> via hybrid <strong>SWA + DSA</strong>, plus companion runtime <strong>NaiveRT</strong>.
+        </p>
+        <p>
+          Primary sources:
+          <a href="https://naive.ai/en/research/" target="_blank" rel="noopener noreferrer">NaiveAI technical post (Sep 27)</a>,
+          <a href="https://huggingface.co/NaiveAI/Naive-N0.5-Flash" target="_blank" rel="noopener noreferrer">Hugging Face model card</a>,
+          <a href="https://aivio.news/news/naive-ai-opens-309b-model-no-full-attention/" target="_blank" rel="noopener noreferrer">Aivio (Sep 28)</a>.
+          Numbers below are <strong>NaiveAI’s</strong> (or Aivio’s restatement). Treat NaiveRT peaks, indexer wall-time, CPT throughput, and chart benches as <strong>vendor claims</strong>. Do <strong>not</strong> invent percentages from the research-post figures — point readers there.
+        </p>
+
+        <h2>Spec sheet (named numbers)</h2>
+        <div class="table-wrap" role="region" aria-label="Naive-N0.5-Flash named numbers spec sheet" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th></th>
+                <th>Naive-N0.5-Flash</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>HF</td>
+                <td><code>NaiveAI/Naive-N0.5-Flash</code> · FP8 <code>NaiveAI/Naive-N0.5-Flash-FP8</code></td>
+              </tr>
+              <tr>
+                <td>Arch</td>
+                <td>MoE; <strong>no full-attention layers</strong>; <strong>309B</strong> / <strong>15.5B</strong> active; native <strong>1M</strong></td>
+              </tr>
+              <tr>
+                <td>Layers</td>
+                <td><strong>48</strong>; <strong>39 SWA + 9 DSA</strong> (predominantly <strong>5:1</strong>); eight six-layer modules (5 SWA + 1 DSA; first layer of first module also DSA)</td>
+              </tr>
+              <tr>
+                <td>SWA / DSA</td>
+                <td>SWA window <strong>128</strong>; DSA top <strong>2,048</strong> for backbone; indexer <strong>16</strong> query heads; <strong>GQA4</strong> (not MLA); sink bias both</td>
+              </tr>
+              <tr>
+                <td>KV</td>
+                <td>Full KV cache retained; indexer scans full history; savings in attention compute / memory traffic</td>
+              </tr>
+              <tr>
+                <td>Base</td>
+                <td>Xiaomi <strong>MiMo-V2.5</strong> (not V2.6-Pro —
+                  <a href="/xiaomi-mimo-v2-6-pro.html">MiMo-V2.6-Pro</a>
+                  is a different ticket); credits DeepSeek DSA + SGLang</td>
+              </tr>
+              <tr>
+                <td>CPT</td>
+                <td><strong>3.25T</strong>: <strong>50B</strong> indexer warmup (KL to full-attn) → <strong>3T</strong> sparse CPT → <strong>200B</strong> LR decay/SFT; native 1M throughout</td>
+              </tr>
+              <tr>
+                <td>Train claim</td>
+                <td><strong>1T</strong> tokens ~<strong>4 days</strong> on <strong>512</strong> GPUs at 1M (<strong>vendor</strong>); indexer wall time <strong>−44%</strong> vs original DSA; hybrid seq-par: <strong>Ulysses</strong> (DSA) / <strong>Halo</strong> (SWA)</td>
+              </tr>
+              <tr>
+                <td>License / size</td>
+                <td><strong>MIT</strong>; ~<strong>315 GB</strong>; FP8-capable NVIDIA GPUs</td>
+              </tr>
+              <tr>
+                <td>API</td>
+                <td>Priced at <strong>$0.10 / $0.40 / $0.01</strong> per MTok in / out / cache reads; API access will also be provided</td>
+              </tr>
+              <tr>
+                <td>NaiveRT</td>
+                <td>Standard ~<strong>50</strong> tok/s/user; Ultrafast up to <strong>2,000</strong>; peak <strong>2,122</strong> tok/s on <strong>8 GPUs</strong> (best 1s; thinking off; 41 HTML/SVG; temp 0.4; top-p 0.95; exclude prefill); speculative round <strong>3.4 ms</strong> vs SGLang <strong>12.3 ms</strong> (<strong>−72.4%</strong>); mega-kernel + PDL + speculative; fused DFlash; DSA <strong>29→1</strong> mega-kernel (<strong>148</strong> CTAs); <strong>6 days</strong> / <strong>151</strong> trials (63/71/17); bitwise-deterministic sampling; GitHub “available by <strong>Oct 12</strong>”</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Lab context (short): founded <strong>Feb 2026</strong>; Dai Jifeng; Tencent-backed; ~<strong>$400M</strong> raised / ~<strong>$1.42B</strong> valuation before first model (Aivio). Infra claim: ~<strong>10M</strong> sandboxes/week, <strong>100k</strong> concurrent peak (vendor).
+        </p>
+
+        <h2>What actually changed for long-context decode</h2>
+        <p>
+          The durable change is not “another 300B MoE.” It is a <strong>full-attention-free stack</strong> at native 1M, built as a <strong>MiMo-V2.5 retrofit</strong>.
+        </p>
+        <p>
+          Most transformers keep a few global layers so long-range information survives; at a million tokens those layers dominate decode. Naive removes them. Every layer is local (<strong>SWA, 128</strong>) or sparse (<strong>DSA, top 2,048</strong>). The indexer still walks history and the full KV cache still sits in memory — same storage sentence as a dense stack — but backbone attention compute and memory traffic shrink to the selected set. Decode-cost board: <strong>not</strong> “we deleted the KV,” <strong>yes</strong> “we stopped paying full attention on every layer.”
+        </p>
+        <p>
+          GQA4 instead of MLA, a 16-head indexer, and the vendor <strong>−44%</strong> indexer wall-time claim are the co-design details that matter if you already read
+          <a href="/deepseek-v4-1-flash.html">DeepSeek-V4.1-Flash</a>.
+          DeepSeek Flash sells <strong>890 bytes/token KV and activate asymmetry</strong>. Naive sells <strong>zero full-attn layers + hybrid SWA/DSA + a named NaiveRT peak</strong>. Different tickets; both care about long loops.
+        </p>
+        <p>
+          CPT adapts the base: freeze everything but the indexer for <strong>50B</strong> under KL to a full-attention reference, then <strong>3T</strong> sparse CPT, then <strong>200B</strong> decay/SFT — all at native 1M. Hybrid sequence parallelism matches the split: Ulysses for DSA’s full-history need, Halo for SWA’s 128-token ghost region.
+        </p>
+
+        <h2>NaiveRT and vendor benches</h2>
+        <p>
+          NaiveRT: mega-kernel fusion, PDL, speculative decoding with fused DFlash draft, bitwise-deterministic sampling (same seed → identical tokens, logits, KV). Peak <strong>2,122</strong> tok/s on 8 GPUs is a <strong>best one-second window</strong> with thinking off on 41 HTML/SVG requests — not a multi-user SLA. Speculative-round cut (<strong>3.4 ms</strong> vs SGLang <strong>12.3 ms</strong>) is same-system. Source “by Oct 12”; until then re-time Ultrafast yourself.
+        </p>
+        <p>
+          Coding/agentic and AI R&amp;D figures are <strong>NaiveAI’s own</strong> on <strong>Claude Code 2.1.207</strong> (1M ctx, temp <strong>1.0</strong>, top-p <strong>0.95</strong>, basic file I/O + Bash only). Competitors are quoted from other vendors’ blogs/leaderboards, not re-run. Named families: <strong>SWE-Bench Pro</strong>, <strong>DeepSWE v1.1</strong>, <strong>Terminal-Bench 2.1</strong>, <strong>ALE-CLI</strong>, <strong>ProgramBench</strong>, <strong>PostTrainBench</strong>, <strong>MLE-bench-30</strong>, <strong>PaperBench</strong>. No invented chart percentages — open the
+          <a href="https://naive.ai/en/research/" target="_blank" rel="noopener noreferrer">research post</a>
+          figures and re-run your suite before retiring a Sol / Opus / MiMo / DeepSeek Flash route.
+        </p>
+        <p>
+          Optional RSI aside (not the story): <strong>400</strong> hours / <strong>15</strong> rounds → AutoWM WorldArena-1 Track 1 <strong>77.43</strong> vs prior published <strong>73.64</strong> (<strong>vendor</strong>). Process anecdote only.
+        </p>
+
+        <h2>Where it sits next to OpenShell, JEV, Holo4, Flash, MiMo, and closed agents</h2>
+        <div class="table-wrap" role="region" aria-label="Where Naive-N0.5-Flash sits next to OpenShell, JEV, Holo4, Flash, MiMo, and closed agents" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Purchase</th>
+                <th>Product</th>
+                <th>What it buys</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Runtime policy + optional in-silicon quarantine</td>
+                <td><a href="/nvidia-open-agent-safety.html">OpenShell + Sentry</a></td>
+                <td>OPA/Rego; OCSF; BF-4 ms stop</td>
+              </tr>
+              <tr>
+                <td>Self-hosted System 1</td>
+                <td><a href="/jev-27b.html">JEV-27B</a></td>
+                <td>Typed decisions on a frozen backbone</td>
+              </tr>
+              <tr>
+                <td>Computer-use $/task</td>
+                <td><a href="/holo4.html">Holo4</a></td>
+                <td>GUI + code + MCP</td>
+              </tr>
+              <tr>
+                <td>From-scratch hybrid base</td>
+                <td><a href="/aliceai-foundation-80b.html">AliceAI-Foundation-80B</a></td>
+                <td>80B/3B; Apache-2.0</td>
+              </tr>
+              <tr>
+                <td>Open-weights AA price floor</td>
+                <td><a href="/xiaomi-mimo-v2-6-pro.html">MiMo-V2.6-Pro</a></td>
+                <td>Different ticket — this is a <strong>V2.5 base retrofit</strong></td>
+              </tr>
+              <tr>
+                <td>Model-side KV / activate API</td>
+                <td><a href="/deepseek-v4-1-flash.html">DeepSeek-V4.1-Flash</a></td>
+                <td>890 B/tok; cacheable loops</td>
+              </tr>
+              <tr>
+                <td>KV prefetch / fabric CapEx</td>
+                <td><a href="/lightbits-inferra-kv-cache-prefetch.html">Inferra</a> · <a href="/astera-leo-x-fabric-kv-cache.html">Leo X</a></td>
+                <td>Memory/optics boards</td>
+              </tr>
+              <tr>
+                <td><strong>Decode-cost at 1M, zero full-attn</strong></td>
+                <td><strong>Naive-N0.5-Flash + NaiveRT</strong></td>
+                <td>39 SWA + 9 DSA; MIT; <code>$0.10/$0.40/$0.01</code></td>
+              </tr>
+              <tr>
+                <td>Closed coding defaults</td>
+                <td><a href="/gpt-6-sol-luna.html">GPT-6 Sol</a> · <a href="/claude-opus-5-5.html">Opus 5.5</a></td>
+                <td>Unattended coding ladders</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          OpenShell answers <strong>what the process may touch</strong>. JEV answers <strong>micro-decisions</strong>. Holo4 answers <strong>desktop computer-use</strong>. Naive answers <strong>decode cost when context hits 1M and every layer is SWA or DSA</strong>. Inferra / Leo X remain memory CapEx. MiMo-V2.6-Pro remains the open price-floor night — do not collapse this V2.5 retrofit into that SKU.
+        </p>
+
+        <h2>Caveats I would write into any Naive-N0.5-Flash ticket</h2>
+        <ol>
+          <li>
+            <strong>Vendor harness ≠ your fleet.</strong> Re-run SWE / DeepSWE / Terminal-Bench / your repo before moving traffic.
+          </li>
+          <li>
+            <strong>Do not invent chart percentages.</strong> Point at the research-post figures.
+          </li>
+          <li>
+            <strong>Full KV cache retained.</strong> Sparse cuts compute/traffic, not storage — pair with Inferra / Leo X if CapEx is the constraint.
+          </li>
+          <li>
+            <strong>2,122 tok/s is a peak window</strong>, not a multi-tenant Ultrafast SLA.
+          </li>
+          <li>
+            <strong>NaiveRT “by Oct 12.”</strong> Near-term path is transformers FP8 (<code>NaiveAI/Naive-N0.5-Flash-FP8</code>, ~315 GB).
+          </li>
+          <li>
+            <strong>API priced, not necessarily live.</strong> Confirm when the endpoint answers.
+          </li>
+          <li>
+            <strong>MiMo-V2.5 ≠ V2.6-Pro.</strong> Cross-link
+            <a href="/xiaomi-mimo-v2-6-pro.html">MiMo-V2.6-Pro</a>
+            as lineage foil only.
+          </li>
+          <li>
+            <strong>Not OpenShell / JEV / Holo4 / DeepSeek Flash KV-bytes.</strong> This is <strong>decode-cost architecture</strong>.
+          </li>
+        </ol>
+
+        <h2>How I would evaluate if I ran million-token decode loops</h2>
+        <ol>
+          <li>
+            <strong>Self-host smoke</strong> — load FP8 checkpoint; confirm 1M paths and temp 1.0 / top-p 0.95.
+          </li>
+          <li>
+            <strong>Decode cost at long context</strong> — tok/s and attention traffic at 128K → 1M vs a full-attn or MLA baseline.
+          </li>
+          <li>
+            <strong>Harness parity</strong> — your SWE / DeepSWE / Terminal-Bench / internal suite; no pasted NaiveAI chart rows.
+          </li>
+          <li>
+            <strong>NaiveRT after Oct 12</strong> — re-time speculative round and Ultrafast; keep SGLang as control.
+          </li>
+          <li>
+            <strong>Keep boards separate</strong> —
+            <a href="/nvidia-open-agent-safety.html">OpenShell</a>
+            for policy,
+            <a href="/jev-27b.html">JEV</a>
+            for System 1,
+            <a href="/holo4.html">Holo4</a>
+            for computer-use,
+            <a href="/xiaomi-mimo-v2-6-pro.html">MiMo-V2.6-Pro</a>
+            for open price,
+            <a href="/deepseek-v4-1-flash.html">DeepSeek Flash</a>
+            for cacheable API loops,
+            <a href="/lightbits-inferra-kv-cache-prefetch.html">Inferra</a>
+            /
+            <a href="/astera-leo-x-fabric-kv-cache.html">Leo X</a>
+            for memory fabric,
+            <a href="/gpt-6-sol-luna.html">Sol</a>
+            /
+            <a href="/claude-opus-5-5.html">Opus 5.5</a>
+            for hard unattended coding. Naive is the <strong>zero-full-attn decode board</strong>.
+          </li>
+        </ol>
+        <p>
+          This is an <strong>open decode-architecture release</strong> — 309B/15.5B, 39 SWA + 9 DSA, native 1M, MIT, announced <code>$0.10/$0.40/$0.01</code>, NaiveRT peak you should re-time — not a chat flagship and not an OpenShell rematch. Put Naive where million-token loops make full-attention layers the bill. Keep the other boards where they belong. Measure, then move traffic.
+        </p>
+        <p>
+          Create-only. Specs from NaiveAI’s Sep 27 research post, the HF card, and Aivio’s Sep 28 coverage. Update when NaiveRT GitHub lands, when a named third party reproduces the coding/agentic figures under a common harness, or when API availability and live rates are confirmed.
+        </p>
+        <p>
+          Sources:
+          <a href="https://naive.ai/en/research/" target="_blank" rel="noopener noreferrer">NaiveAI technical post (Sep 27)</a>
+          ·
+          <a href="https://huggingface.co/NaiveAI/Naive-N0.5-Flash" target="_blank" rel="noopener noreferrer">Hugging Face model card</a>
+          ·
+          <a href="https://aivio.news/news/naive-ai-opens-309b-model-no-full-attention/" target="_blank" rel="noopener noreferrer">Aivio (Sep 28)</a>.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated September 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
