@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Claude Sonnet 5.5: Everyday Coding Ladder Beside Opus 5.5 — Cost Per Task, Not Another Flagship Rematch — Anpoo Sivanadi</title>
+  <meta name="description" content="Claude Sonnet 5.5: same $2/$10 list as Sonnet 5, vendor fewer-tokens plus 30%+ faster generation, near-Opus on several Max benches — everyday coding ladder beside live Opus 5.5, not another flagship rematch." />
+  <link rel="canonical" href="https://asivanadi0.github.io/claude-sonnet-5-5.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Claude Sonnet 5.5: Everyday Coding Ladder Beside Opus 5.5 — Cost Per Task, Not Another Flagship Rematch — Anpoo Sivanadi" />
+  <meta property="og:description" content="Claude Sonnet 5.5: same $2/$10 list as Sonnet 5, vendor fewer-tokens plus 30%+ faster generation, near-Opus on several Max benches — everyday coding ladder beside live Opus 5.5, not another flagship rematch." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/claude-sonnet-5-5.html" />
+  <meta property="article:published_time" content="2026-09-30T07:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Claude Sonnet 5.5: Everyday Coding Ladder Beside Opus 5.5 — Cost Per Task, Not Another Flagship Rematch</h1>
+        <p class="article-meta">
+          <time datetime="2026-09-30">30 September 2026</time>
+          · Anpoo Sivanadi
+          · based on Anthropic’s Sep 28 Claude Sonnet 5.5 launch and Sonnet 5.5 overview docs
+        </p>
+        <p class="dek article-dek">
+          Claude Sonnet 5.5: same $2/$10 list as Sonnet 5, vendor fewer-tokens plus 30%+ faster generation, near-Opus on several Max benches — everyday coding ladder beside live Opus 5.5, not another flagship rematch.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          Last night’s
+          <a href="/naive-n0-5-flash.html">Naive-N0.5-Flash</a>
+          note was a <strong>decode-cost</strong> ticket — zero full-attention layers at native 1M. Yesterday morning’s
+          <a href="/nvidia-open-agent-safety.html">OpenShell</a>
+          was <strong>runtime policy</strong>. The live
+          <a href="/claude-opus-5-5.html">Claude Opus 5.5</a>
+          post closed with an asterisk: Sonnet and Haiku 5.5 were still “coming weeks,” so do not assume the whole Claude ladder prices like Opus. On <strong>September 28, 2026</strong>, Anthropic shipped <strong>Claude Sonnet 5.5</strong>. This morning is that mid-tier board — when to route Sonnet vs Opus after both 5.5 ships exist, not another Opus rematch.
+        </p>
+        <p>
+          Primary sources:
+          <a href="https://www.anthropic.com/claude-sonnet-5-5" target="_blank" rel="noopener noreferrer">Anthropic launch</a>,
+          <a href="https://platform.claude.com/docs/en/models/sonnet-5-5/overview" target="_blank" rel="noopener noreferrer">Sonnet 5.5 overview docs</a>.
+          Optional secondary:
+          <a href="https://the-decoder.com/anthropics-claude-sonnet-5-5-nearly-matches-opus-5-5-on-benchmarks-while-costing-up-to-30-percent-less-per-task/" target="_blank" rel="noopener noreferrer">The Decoder</a>.
+          Specs and benches below are <strong>Anthropic’s</strong>. Treat cost-per-task charts, generation-speed claims, and eval rows as <strong>vendor claims</strong>.
+        </p>
+
+        <h2>Spec sheet (named numbers)</h2>
+        <div class="table-wrap" role="region" aria-label="Claude Sonnet 5.5 named numbers spec sheet" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th></th>
+                <th>Claude Sonnet 5.5</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Released</td>
+                <td><strong>September 28, 2026</strong></td>
+              </tr>
+              <tr>
+                <td>API id</td>
+                <td><code>claude-sonnet-5-5</code> (Claude API)</td>
+              </tr>
+              <tr>
+                <td>Cloud ids</td>
+                <td>AWS Bedrock <code>anthropic.claude-sonnet-5-5</code>; Google Cloud / Microsoft Foundry / Claude Platform on AWS: <code>claude-sonnet-5-5</code></td>
+              </tr>
+              <tr>
+                <td>Context / max output</td>
+                <td><strong>1,000,000</strong> / <strong>128,000</strong> (Batch API beta up to <strong>300K</strong> with <code>output-300k-2026-03-24</code>)</td>
+              </tr>
+              <tr>
+                <td>Knowledge cutoff</td>
+                <td><strong>June 2026</strong></td>
+              </tr>
+              <tr>
+                <td>Modalities</td>
+                <td>Text + <strong>image</strong> input; text out</td>
+              </tr>
+              <tr>
+                <td>Thinking</td>
+                <td>Adaptive; Claude API default effort <code>high</code> (apps default <strong>Medium</strong>)</td>
+              </tr>
+              <tr>
+                <td>List price (per 1MTok)</td>
+                <td><strong>$2</strong> in / <strong>$10</strong> out — <strong>same list as Sonnet 5</strong></td>
+              </tr>
+              <tr>
+                <td>Cache</td>
+                <td>Read <strong>$0.20</strong>; 5m write <strong>$2.50</strong>; 1h write <strong>$4</strong></td>
+              </tr>
+              <tr>
+                <td>Batch</td>
+                <td><strong>50%</strong> off</td>
+              </tr>
+              <tr>
+                <td>Vendor efficiency claim</td>
+                <td>Up to <strong>30%</strong> lower cost per task (fewer tokens) and <strong>30%+</strong> faster generation vs Sonnet 5</td>
+              </tr>
+              <tr>
+                <td>Ladder</td>
+                <td>Complements Opus 5.5 (<strong>$4/$20</strong>); Haiku 5.5 “coming weeks”</td>
+              </tr>
+              <tr>
+                <td>Data retention</td>
+                <td>Zero data retention available (same shape as Opus 5.5 / Sonnet 5)</td>
+              </tr>
+              <tr>
+                <td>Safeguards</td>
+                <td>Cyber + distillation classifiers — <strong>first Sonnet with Opus-class cyber safeguards / fallbacks</strong>; biology same as Sonnet 5; preserved thinking</td>
+              </tr>
+              <tr>
+                <td>Migration</td>
+                <td>Thinking off on Sonnet 5 → need <code>between_tools</code> before Sonnet 5.5; non-default <code>temperature</code> / <code>top_p</code> / <code>top_k</code> → <strong>400</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Opus 5.5 stays <strong>$4/$20</strong>. Sonnet 5.5 stays <strong>$2/$10</strong>. The claim is not a cheaper sticker than Sonnet 5 — it is <strong>fewer tokens per finished task</strong> and faster generation at the same list, with vendor benches near Opus 5.5 on several agentic evals at Max.
+        </p>
+
+        <h2>What actually changed for people who route agents</h2>
+        <p>
+          The durable change is the <strong>Sonnet ladder beside a live Opus 5.5</strong>, not a new FLOPS sticker.
+        </p>
+        <p>
+          Anthropic’s case: same <strong>$2/$10</strong> as Sonnet 5, but up to <strong>30%</strong> lower cost per task (fewer tokens) plus <strong>30%+</strong> faster generation. At Low/Medium effort, Anthropic’s charts say Sonnet 5.5 often beats Sonnet 5’s best for roughly <strong>1/10</strong> the cost per task — <strong>vendor $/task</strong> until you reproduce it.
+        </p>
+        <p>
+          Effort defaults: Claude API <code>high</code>, apps <strong>Medium</strong> — different from Opus 5.5’s medium-default in the
+          <a href="/claude-opus-5-5.html">Opus post</a>.
+          Log the effort you send.
+        </p>
+        <p>
+          Safeguards: first Sonnet with Opus-class cyber safeguards and fallbacks, plus distillation classifiers. Biology stays at Sonnet 5 level; preserved thinking stays on. When cyber fires, the request can <strong>fall back to another Claude model</strong> — log model id per step.
+        </p>
+        <p>
+          Migration: thinking off on Sonnet 5 → set <code>between_tools</code> before cutover. Non-default <code>temperature</code> / <code>top_p</code> / <code>top_k</code> → <strong>400</strong>. Fix sampling in the client first.
+        </p>
+
+        <h2>Vendor benches (Anthropic’s table)</h2>
+        <div class="table-wrap" role="region" aria-label="Anthropic vendor benchmark comparison for Sonnet 5.5" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Bench</th>
+                <th>Sonnet 5.5</th>
+                <th>Sonnet 5</th>
+                <th>Opus 5.5</th>
+                <th>GPT-6 Sol</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Terminal-Bench 4.0</td>
+                <td><strong>70.6%</strong></td>
+                <td>10.3%</td>
+                <td>66.4%¹ (Xhigh)</td>
+                <td>—</td>
+              </tr>
+              <tr>
+                <td>FrontierCode 1.1 Main</td>
+                <td>46.2% Max² / <strong>52.1%</strong> Xhigh</td>
+                <td>42.4%</td>
+                <td><strong>54.4%</strong></td>
+                <td>49.3%</td>
+              </tr>
+              <tr>
+                <td>CursorBench 4.0</td>
+                <td><strong>55.5%</strong></td>
+                <td>34.1%</td>
+                <td><strong>57.8%</strong></td>
+                <td>—</td>
+              </tr>
+              <tr>
+                <td>GDPval-AA v2.1</td>
+                <td><strong>1844</strong></td>
+                <td>1449</td>
+                <td><strong>1846</strong></td>
+                <td>1487⁴</td>
+              </tr>
+              <tr>
+                <td>AA-Briefcase v1.1</td>
+                <td><strong>1811</strong></td>
+                <td>1359</td>
+                <td><strong>1822</strong></td>
+                <td>1483⁴</td>
+              </tr>
+              <tr>
+                <td>HLE with tools</td>
+                <td><strong>64.5%</strong></td>
+                <td>54.9%</td>
+                <td><strong>67.7%</strong></td>
+                <td>—</td>
+              </tr>
+              <tr>
+                <td>OSWorld 2.1 partial</td>
+                <td><strong>80.1%</strong></td>
+                <td>57.0%</td>
+                <td><strong>81.8%</strong></td>
+                <td>—</td>
+              </tr>
+              <tr>
+                <td>Chartography no tools</td>
+                <td><strong>61.6%</strong></td>
+                <td>15.6%</td>
+                <td><strong>64.4%</strong></td>
+                <td>53.6%⁴</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Footnotes (Anthropic): (1) Opus Terminal-Bench at <strong>Xhigh</strong>. (2) Sonnet <strong>Max</strong> can score <strong>lower</strong> than <strong>Xhigh</strong> on FrontierCode (code-review skill / timeout / out-of-scope edits). (3) AA ran GDPval/Briefcase on pre-release with a structured-outputs bug (fixed; may understate). (4) GPT-6 Sol image-understanding bug recently fixed; AA scores may lag.
+        </p>
+        <p>
+          Anthropic’s read: Sonnet 5.5 at Max is <strong>near Opus 5.5</strong> on several evals, but Opus remains <strong>clearly stronger</strong> at complex open-ended judgment. SpaceXAI on CursorBench: “frontier-level… <strong>55.5%</strong>, second only to Opus 5.5.”
+        </p>
+        <p>
+          Fine print: Terminal-Bench <strong>70.6%</strong> vs Sonnet 5’s <strong>10.3%</strong> needs a <em>your</em>-harness re-run; FrontierCode Max vs Xhigh can invert; GDPval/Briefcase sit within a few Elo of Opus (AA understatement risk); small Opus gaps elsewhere are unresolved until you bake off.
+        </p>
+
+        <h2>Where it sits next to Naive, OpenShell, JEV, Holo4, Opus, and Sol</h2>
+        <div class="table-wrap" role="region" aria-label="Where Claude Sonnet 5.5 sits next to Naive, OpenShell, JEV, Holo4, Opus, and Sol" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Purchase</th>
+                <th>Product</th>
+                <th>What it buys</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Decode-cost at 1M, zero full-attn</td>
+                <td><a href="/naive-n0-5-flash.html">Naive-N0.5-Flash</a></td>
+                <td>39 SWA + 9 DSA; MIT; <code>$0.10/$0.40/$0.01</code></td>
+              </tr>
+              <tr>
+                <td>Runtime policy + optional in-silicon quarantine</td>
+                <td><a href="/nvidia-open-agent-safety.html">OpenShell + Sentry</a></td>
+                <td>OPA/Rego; OCSF; BF-4 ms stop</td>
+              </tr>
+              <tr>
+                <td>Self-hosted System 1</td>
+                <td><a href="/jev-27b.html">JEV-27B</a></td>
+                <td>Typed decisions on a frozen backbone</td>
+              </tr>
+              <tr>
+                <td>Computer-use $/task</td>
+                <td><a href="/holo4.html">Holo4</a></td>
+                <td>GUI + code + MCP</td>
+              </tr>
+              <tr>
+                <td>Flagship / open-ended judgment (Anthropic)</td>
+                <td><a href="/claude-opus-5-5.html">Claude Opus 5.5</a></td>
+                <td>Fable-class work at <strong>$4/$20</strong>; fallback safeguards</td>
+              </tr>
+              <tr>
+                <td><strong>Everyday coding / cost-per-task (Anthropic)</strong></td>
+                <td><strong>Claude Sonnet 5.5</strong></td>
+                <td>Same <strong>$2/$10</strong> list as Sonnet 5; vendor fewer-tokens + speed claims; near-Opus on several Max benches</td>
+              </tr>
+              <tr>
+                <td>Default coding agents (OpenAI cost ladder)</td>
+                <td><a href="/gpt-6-sol-luna.html">GPT-6 Sol</a></td>
+                <td>Same methods at <strong>$2/$10</strong>; cache-steerable effort</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Naive = <strong>decode architecture</strong>. OpenShell = <strong>process policy</strong>. Opus = <strong>hard unattended / open-ended judgment</strong>. Sonnet 5.5 = <strong>where most coding agent loops should land once the 5.5 mid-tier exists</strong>. Keep Sol as the OpenAI <strong>$2/$10</strong> peer; do not collapse Sonnet into Opus or Naive.
+        </p>
+
+        <h2>Caveats I would write into any Sonnet 5.5 ticket</h2>
+        <ol>
+          <li>
+            <strong>Vendor harness ≠ your fleet.</strong> Re-run Terminal-Bench / FrontierCode / CursorBench / your repo before moving default traffic off Sonnet 5 or Sol.
+          </li>
+          <li>
+            <strong>Same list as Sonnet 5.</strong> The win is tokens-per-task and speed — measure dollars per successful merge.
+          </li>
+          <li>
+            <strong>Near-Opus ≠ Opus.</strong> Route complex open-ended judgment to Opus 5.5.
+          </li>
+          <li>
+            <strong>Effort defaults differ</strong> (API <code>high</code> vs apps Medium). Pin effort in the client.
+          </li>
+          <li>
+            <strong>Cyber fallbacks.</strong> Log which model finished the turn.
+          </li>
+          <li>
+            <strong>Migration 400s.</strong> Fix <code>between_tools</code> and non-default sampling before cutover.
+          </li>
+          <li>
+            <strong>AA / Sol footnotes.</strong> Pre-release structured-outputs bug and Sol image bug can move Elo rows.
+          </li>
+          <li>
+            <strong>Not Naive / OpenShell / Opus rematch.</strong> This is the <strong>Sonnet cost-per-task ladder</strong>.
+          </li>
+        </ol>
+
+        <h2>How I would evaluate if I routed everyday coding traffic</h2>
+        <ol>
+          <li>
+            <strong>Twenty-task bake-off</strong> — migrations, overnight unattended jobs, one citation-checked pack. Run Sonnet 5.5, Sonnet 5, Opus 5.5, and
+            <a href="/gpt-6-sol-luna.html">GPT-6 Sol</a>
+            at <strong>Medium</strong>, <strong>high</strong>, and <strong>Max/Xhigh</strong> where the API allows.
+          </li>
+          <li>
+            <strong>Cost per success</strong> — wall time, tokens, dollars per successful merge, rework minutes. Prefer Sonnet 5.5 over Sonnet 5 only when both move.
+          </li>
+          <li>
+            <strong>Route split</strong> — Opus 5.5 on open-ended judgment and hardest unattended loops; everyday coding on Sonnet 5.5 if the bake-off holds.
+          </li>
+          <li>
+            <strong>Safeguard logging</strong> — record model id per step when cyber fallbacks fire.
+          </li>
+          <li>
+            <strong>Keep boards separate</strong> — Naive for decode-cost, OpenShell for policy, JEV for System 1, Holo4 for computer-use, Opus for flagship judgment, Sol for the OpenAI <strong>$2/$10</strong> peer. Sonnet 5.5 is the <strong>Claude everyday coding board</strong>.
+          </li>
+        </ol>
+
+        <h2>Bottom line</h2>
+        <p>
+          On <strong>September 28, 2026</strong>, Anthropic shipped <strong>Claude Sonnet 5.5</strong> (<code>claude-sonnet-5-5</code>) at <strong>$2 / $10</strong> with <strong>$0.20</strong> cache reads — same list as Sonnet 5 — claiming up to <strong>30%</strong> lower cost per task and <strong>30%+</strong> faster generation, with vendor benches near
+          <a href="/claude-opus-5-5.html">Opus 5.5</a>
+          on several Max evals while Opus remains the open-ended judgment SKU. Durable facts: rate card across Claude API / Bedrock / Google Cloud / Foundry, adaptive thinking (<code>high</code> on API), first Sonnet with Opus-class cyber safeguards, and migration breakers (<code>between_tools</code>; non-default sampling → 400).
+        </p>
+        <p>
+          That closes the mid-tier asterisk the Opus post left open. Not a Naive night, not an OpenShell night, and not permission to retire Opus without a judgment-lane bake-off. Measure cost per successful merge, then move everyday coding traffic.
+        </p>
+        <p>
+          Create-only. Specs and benches from Anthropic’s Sep 28 launch page and Sonnet 5.5 docs. Update when Haiku 5.5 ships, when a named third party reproduces Terminal-Bench / FrontierCode / CursorBench under a common harness, or when live Batch 300K availability is confirmed.
+        </p>
+        <p>
+          Sources:
+          <a href="https://www.anthropic.com/claude-sonnet-5-5" target="_blank" rel="noopener noreferrer">Anthropic</a>
+          ·
+          <a href="https://platform.claude.com/docs/en/models/sonnet-5-5/overview" target="_blank" rel="noopener noreferrer">Sonnet 5.5 docs</a>
+          ·
+          <a href="https://the-decoder.com/anthropics-claude-sonnet-5-5-nearly-matches-opus-5-5-on-benchmarks-while-costing-up-to-30-percent-less-per-task/" target="_blank" rel="noopener noreferrer">The Decoder</a>.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated September 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
