@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Everspin Hooks PERSYST MRAM to CXL — 1GB Persistent Demo Tier Between DRAM and NAND — Anpoo Sivanadi</title>
+  <meta name="description" content="Everspin demonstrated CXL-connected PERSYST 1GB MRAM at SNIA SDC 2026 — memory-semantic persistence between DRAM and NAND, vendor 100× writes vs NAND, working demo not a shipping SKU." />
+  <link rel="canonical" href="https://asivanadi0.github.io/everspin-cxl-persyst-mram.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Everspin Hooks PERSYST MRAM to CXL — 1GB Persistent Demo Tier Between DRAM and NAND — Anpoo Sivanadi" />
+  <meta property="og:description" content="Everspin demonstrated CXL-connected PERSYST 1GB MRAM at SNIA SDC 2026 — memory-semantic persistence between DRAM and NAND, vendor 100× writes vs NAND, working demo not a shipping SKU." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/everspin-cxl-persyst-mram.html" />
+  <meta property="article:published_time" content="2026-10-01T06:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Everspin Hooks PERSYST MRAM to CXL — 1GB Persistent Demo Tier Between DRAM and NAND</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-01">1 October 2026</time>
+          · Anpoo Sivanadi
+          · based on Everspin’s Sep 29 Business Wire SDC release and HPCwire reprint
+        </p>
+        <p class="dek article-dek">
+          Everspin demonstrated CXL-connected PERSYST 1GB MRAM at SNIA SDC 2026 — memory-semantic persistence between DRAM and NAND, vendor 100× writes vs NAND, working demo not a shipping SKU.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          Last night’s
+          <a href="/coreweave-cognition-vera-rubin.html">CoreWeave × Cognition Vera Rubin</a>
+          note was a <strong>neocloud production</strong> ticket — limited NVL72 availability with customer SWE-2 / RL deltas vs GB200. Yesterday morning’s
+          <a href="/claude-sonnet-5-5.html">Claude Sonnet 5.5</a>
+          note was a <strong>routing</strong> ticket. The live
+          <a href="/lightbits-inferra-kv-cache-prefetch.html">Lightbits Inferra</a>
+          and
+          <a href="/astera-leo-x-fabric-kv-cache.html">Astera Leo X</a>
+          posts already answered two sides of the post-HBM memory ladder: <em>prefetch orchestration across tiers</em> and <em>fabric-attached DDR for warm KV</em>. On <strong>September 29, 2026</strong> (Business Wire; HPCwire dated Sep 30), Everspin demonstrated what it calls the world’s first <strong>CXL-connected MRAM</strong> platform at SNIA Developer Conference 2026. This morning is that <strong>persistent media on CXL</strong> board — a working demo you can aim checkpointing and persistent KV experiments at, not another orchestration or fabric-controller rematch.
+        </p>
+        <p>
+          Primary source:
+          <a href="https://www.financialcontent.com/article/bizwire-2026-9-29-everspin-demonstrates-worlds-first-cxl-connected-mram-at-snia-developer-conference-2026" target="_blank" rel="noopener noreferrer">Everspin Business Wire release (FinancialContent)</a>.
+          Secondary reprint:
+          <a href="https://www.hpcwire.com/off-the-wire/everspin-demonstrates-cxl-connected-mram-at-snia-developer-conference-2026/" target="_blank" rel="noopener noreferrer">HPCwire off-the-wire</a>.
+          Product context:
+          <a href="https://www.everspin.com/applications/data-centers" target="_blank" rel="noopener noreferrer">Everspin data-center applications</a>
+          and the
+          <a href="https://www.everspin.com/data-persistence-mram-over-cxl%C2%AE" target="_blank" rel="noopener noreferrer">FLIT-MRAM / CXL persistence page</a>.
+          Specs and speed claims below are <strong>vendor claims</strong> from the SDC demo release unless noted.
+        </p>
+
+        <h2>Spec sheet (named numbers)</h2>
+        <div class="table-wrap" role="region" aria-label="Everspin CXL PERSYST MRAM named numbers spec sheet" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th></th>
+                <th>Everspin PERSYST CXL MRAM</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Announcement / demo</td>
+                <td><strong>September 29–30, 2026</strong> — SNIA Developer Conference (SDC) 2026</td>
+              </tr>
+              <tr>
+                <td>Claim</td>
+                <td>World’s first <strong>CXL-connected MRAM</strong> platform (Everspin)</td>
+              </tr>
+              <tr>
+                <td>Memory product</td>
+                <td>Everspin <strong>PERSYST</strong> <strong>1GB</strong> DDR4 MRAM <strong>UDIMMs</strong></td>
+              </tr>
+              <tr>
+                <td>Server</td>
+                <td>Supermicro <strong>AS-1116CS-TN</strong></td>
+              </tr>
+              <tr>
+                <td>Host CPU</td>
+                <td>AMD EPYC <strong>9355</strong> (<strong>32</strong>-core)</td>
+              </tr>
+              <tr>
+                <td>CXL endpoint</td>
+                <td>AMD Alveo <strong>U250</strong> FPGA + <strong>Wolley</strong> CXL controller</td>
+              </tr>
+              <tr>
+                <td>Access model</td>
+                <td>Memory-semantic persistent memory over CXL (not block SSD semantics)</td>
+              </tr>
+              <tr>
+                <td>Latency framing</td>
+                <td>Cache-line-level, <strong>nanosecond-class</strong> access (vendor)</td>
+              </tr>
+              <tr>
+                <td>Write claim</td>
+                <td>Up to <strong>100×</strong> faster writes vs NAND-based SSD (vendor)</td>
+              </tr>
+              <tr>
+                <td>Persistence</td>
+                <td>Retains data through power loss / restart — no battery-backed DRAM, no mandatory flush-to-SSD</td>
+              </tr>
+              <tr>
+                <td>Pooling</td>
+                <td>Memory resources can be pooled and shared across hosts (vendor)</td>
+              </tr>
+              <tr>
+                <td>AI workloads named</td>
+                <td>Checkpointing; persistent key-value (<strong>KV</strong>) cache</td>
+              </tr>
+              <tr>
+                <td>Status</td>
+                <td>Working demo; <strong>ready for customer workload testing</strong> — not a disclosed shipping appliance SKU or capacity roadmap</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          That is a different purchase sentence from Inferra’s <em>when do I prefetch the next KV block</em> and Leo X’s <em>attach DDR to the accelerator fabric</em>. This one is: <em>is there a working open-standards path that puts magnetoresistive persistent media on CXL with memory semantics</em>, and what BOM do I need to reproduce the demo.
+        </p>
+
+        <h2>What the demo actually is</h2>
+        <p>
+          Everspin and Wolley showed read and write access to PERSYST MRAM through the CXL interface under what they describe as demanding test conditions. The configuration is explicit enough to put on a lab whiteboard:
+        </p>
+        <ol>
+          <li>
+            <strong>Host</strong> — Supermicro AS-1116CS-TN with EPYC 9355.
+          </li>
+          <li>
+            <strong>CXL bridge</strong> — Alveo U250 carrying a Wolley CXL controller (FPGA endpoint, not a sealed Everspin CXL ASIC appliance).
+          </li>
+          <li>
+            <strong>Media</strong> — PERSYST 1GB DDR4 MRAM UDIMMs.
+          </li>
+        </ol>
+        <p>
+          The architectural claim is the interesting part for people who already run CXL expanders and KV tiers. MRAM keeps state without power. CXL gives coherent, memory-semantic attachment instead of treating the device like another SSD. Together, Everspin’s pitch is a fast persistent buffer/cache tier between DRAM and NAND: survive a power hit without supercaps or battery-backed DRAM, and without waiting for a flush path to flash.
+        </p>
+        <p>
+          Sanjeev Aggarwal’s quote in the release is marketing-adjacent, but the operational sentence underneath it is the one I care about: they now have a <strong>working system</strong> so customers can run their own workloads and measure benefit — not a slide of theoretical endurance curves.
+        </p>
+
+        <h2>Where it sits next to Inferra, Leo X, and NVHBM</h2>
+        <div class="table-wrap" role="region" aria-label="Where Everspin CXL PERSYST MRAM sits next to Inferra, Leo X, and NVHBM" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Purchase</th>
+                <th>Product</th>
+                <th>What it buys</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Prefetch / orchestration across HBM→DRAM→NVMe</td>
+                <td><a href="/lightbits-inferra-kv-cache-prefetch.html">Lightbits Inferra</a></td>
+                <td>SLSAP timing; published TTFT multiples on long restores</td>
+              </tr>
+              <tr>
+                <td>Fabric-attached DDR for warm KV</td>
+                <td><a href="/astera-leo-x-fabric-kv-cache.html">Astera Leo X</a></td>
+                <td>Scorpio-side expanders; vendor 62% warm TTFT / 22% TPS claims</td>
+              </tr>
+              <tr>
+                <td>HBM capacity / bandwidth roadmaps</td>
+                <td><a href="/nvhbm.html">NVHBM</a> and related HBM notes</td>
+                <td>On-package high-bandwidth working set</td>
+              </tr>
+              <tr>
+                <td><strong>Persistent CXL MRAM media (demo)</strong></td>
+                <td><strong>Everspin PERSYST + Wolley</strong></td>
+                <td>Memory-semantic persistence; 1GB UDIMM demo; 100× write claim vs NAND</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Do not collapse this into Inferra or Leo X. Inferra answers <em>when</em> to move blocks. Leo X answers <em>where</em> DDR attaches relative to the accelerator fabric. Everspin answers <em>what media</em> stays hot and coherent across power events if you want persistence without battery DRAM or a NAND write buffer.
+        </p>
+        <p>
+          The AI-specific callouts in the SDC release are checkpointing and persistent KV cache — the same problem class as Inferra/Leo X, one tier down the stack into the media itself. Capacity is still <strong>demo-scale</strong>: <strong>1GB</strong> UDIMMs. That is enough to prove the CXL path and to prototype metadata, small persistent caches, or checkpoint scratch — not enough to hold a multi-hundred-GB KV working set. Treat the demo as a <strong>media + interconnect proof</strong>, then ask Everspin/Wolley what capacity and controller roadmap sits behind customer testing.
+        </p>
+
+        <h2>Caveats</h2>
+        <ol>
+          <li>
+            <strong>Demo ≠ shipping SKU.</strong> The release says ready for customer workload testing. There is no public appliance part number, rack BOM, or capacity ladder in the SDC note.
+          </li>
+          <li>
+            <strong>1GB is not a fleet KV tier.</strong> Compare against Leo X’s up-to-2TB-per-device class claims and Inferra’s multi-tier virtualization. This morning’s durable fact is the CXL+MRAM path, not terabytes of persistent media.
+          </li>
+          <li>
+            <strong>100× vs NAND is a vendor write claim.</strong> Reproduce under your IO size, queue depth, and persistence mode before you reprice a write buffer or checkpoint path.
+          </li>
+          <li>
+            <strong>Nanosecond-class / cache-line framing</strong> is marketing language until you measure load-to-use on the Alveo/Wolley path vs local DDR5 and vs a CXL DRAM expander.
+          </li>
+          <li>
+            <strong>FPGA CXL endpoint.</strong> Alveo U250 + Wolley is a flexible demo path; ask what the production controller looks like (ASIC vs continued FPGA) before you design a SKU around it.
+          </li>
+          <li>
+            <strong>Not a rematch of CoreWeave NVL72, Sonnet 5.5, Helios $1.2B, or Volantis $88M.</strong> Those are production GPU, mid-tier model, procurement, and 2027 photonic funding boards. This is the <strong>persistent CXL MRAM demo</strong>.
+          </li>
+        </ol>
+
+        <h2>How I would evaluate</h2>
+        <ol>
+          <li>
+            <strong>Reproduce the BOM</strong> — AS-1116CS-TN + EPYC 9355 + U250/Wolley + PERSYST 1GB; confirm the CXL.mem path and persistence across controlled power pulls.
+          </li>
+          <li>
+            <strong>Checkpoint microbench</strong> — measure time-to-durable for small model/optimizer shards vs battery-DRAM + SSD flush and vs CXL DRAM without persistence.
+          </li>
+          <li>
+            <strong>Persistent KV prototype</strong> — pin a hot metadata or prefix-KV working set that must survive restart; compare restart TTFT and correctness against Inferra-style restore from NVMe and Leo-style warm DDR.
+          </li>
+          <li>
+            <strong>Capacity ask</strong> — get the next UDIMM/module sizes and whether pooling across hosts is software-visible the way the release implies.
+          </li>
+          <li>
+            <strong>Keep boards separate</strong> —
+            <a href="/lightbits-inferra-kv-cache-prefetch.html">Inferra</a>
+            for prefetch policy,
+            <a href="/astera-leo-x-fabric-kv-cache.html">Leo X</a>
+            for fabric-attached DDR, Everspin for persistent MRAM on CXL. Do not merge them into one “memory wall” post.
+          </li>
+        </ol>
+
+        <h2>Bottom line</h2>
+        <p>
+          At <strong>SNIA SDC 2026</strong> (<strong>September 29–30</strong> window), Everspin demonstrated a working <strong>CXL-connected PERSYST MRAM</strong> platform: Supermicro <strong>AS-1116CS-TN</strong>, EPYC <strong>9355</strong>, Alveo <strong>U250</strong> + Wolley CXL, and PERSYST <strong>1GB</strong> DDR4 MRAM UDIMMs, with vendor claims of memory-semantic access, up to <strong>100×</strong> writes vs NAND SSD, power-loss persistence without battery DRAM, and explicit AI targets in checkpointing and persistent KV cache. Durable facts are the named BOM, the demo status (customer workload testing), and the separation from Inferra’s orchestration board and Leo X’s fabric-DDR board. Capacity is still 1GB-class — measure before you invent a fleet tier — but the CXL+MRAM path is now something you can put hands on, not only a FLIT-MRAM architecture page.
+        </p>
+        <p>
+          Create-only. Specs from Everspin’s Sep 29 Business Wire SDC release and related Everspin product pages. Update when Everspin publishes a shipping CXL MRAM SKU, capacity roadmap, or third-party customer benches under a common checkpoint/KV harness.
+        </p>
+        <p>
+          Sources:
+          <a href="https://www.financialcontent.com/article/bizwire-2026-9-29-everspin-demonstrates-worlds-first-cxl-connected-mram-at-snia-developer-conference-2026" target="_blank" rel="noopener noreferrer">Everspin Business Wire (FinancialContent)</a>
+          ·
+          <a href="https://www.hpcwire.com/off-the-wire/everspin-demonstrates-cxl-connected-mram-at-snia-developer-conference-2026/" target="_blank" rel="noopener noreferrer">HPCwire</a>
+          ·
+          <a href="https://www.everspin.com/applications/data-centers" target="_blank" rel="noopener noreferrer">Everspin data centers</a>
+          ·
+          <a href="https://www.everspin.com/data-persistence-mram-over-cxl%C2%AE" target="_blank" rel="noopener noreferrer">FLIT-MRAM / CXL</a>.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
