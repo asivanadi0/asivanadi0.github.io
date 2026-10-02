@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lightning V2 on Tenstorrent: 4× TTS Cost Cut vs L40S — BFP8, NoC, Perceptual Fragility — Anpoo Sivanadi</title>
+  <meta name="description" content="Tenstorrent and Smallest.ai put Lightning V2 on Blackhole — vendor L40S bake-off with ~3–4× modeled TTS CapEx, BFP8/LoFi co-design, and a paper on perceptual fragility — not a blanket NVIDIA cost claim." />
+  <link rel="canonical" href="https://asivanadi0.github.io/tenstorrent-lightning-v2.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Lightning V2 on Tenstorrent: 4× TTS Cost Cut vs L40S — BFP8, NoC, Perceptual Fragility — Anpoo Sivanadi" />
+  <meta property="og:description" content="Tenstorrent and Smallest.ai put Lightning V2 on Blackhole — vendor L40S bake-off with ~3–4× modeled TTS CapEx, BFP8/LoFi co-design, and a paper on perceptual fragility — not a blanket NVIDIA cost claim." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/tenstorrent-lightning-v2.html" />
+  <meta property="article:published_time" content="2026-10-02T06:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Lightning V2 on Tenstorrent: 4× TTS Cost Cut vs L40S — BFP8, NoC, Perceptual Fragility</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-02">2 October 2026</time>
+          · Anpoo Sivanadi
+          · based on Tenstorrent’s Oct 1 partnership announcement, Smallest.ai’s Lightning V2 post, and arXiv:2604.03279v2
+        </p>
+        <p class="dek article-dek">
+          Tenstorrent and Smallest.ai put Lightning V2 on Blackhole — vendor L40S bake-off with ~3–4× modeled TTS CapEx, BFP8/LoFi co-design, and a paper on perceptual fragility — not a blanket NVIDIA cost claim.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          Last night’s
+          <a href="/olmo-core-3.html">Olmo-core 3</a>
+          note was a <strong>training-systems</strong> ticket — open MoE capacity on B300. Yesterday morning’s
+          <a href="/everspin-cxl-persyst-mram.html">Everspin CXL PERSYST</a>
+          was <strong>persistent media</strong>. Voice agents still need a different board: real-time <strong>text-to-speech</strong> is numerically harsher than token LLMs, and most “FP8 everywhere” playbooks break the waveform. On <strong>October 1, 2026</strong>, Tenstorrent and Smallest.ai announced a production on-prem stack that runs <strong>Lightning V2</strong> natively on <strong>Blackhole</strong> hardware, backed by a measured L40S bake-off and an arXiv paper. This morning is that <strong>waveform inference economics</strong> board.
+        </p>
+        <p>
+          Primary:
+          <a href="https://tenstorrent.com/en/newsroom/tenstorrent-and-smallestai-partner-to-bring-production-grade-voice-ai-on-prem" target="_blank" rel="noopener noreferrer">Tenstorrent newsroom</a>
+          ·
+          <a href="https://smallest.ai/blog/rewriting-tts-inference-economics-lightning-v2-on-tenstorrent-achieves-4-lower-cost-than-nvidia-l40s" target="_blank" rel="noopener noreferrer">Smallest.ai blog</a>
+          ·
+          <a href="https://arxiv.org/abs/2604.03279v2" target="_blank" rel="noopener noreferrer">arXiv:2604.03279v2</a>
+          ·
+          <a href="https://tenstorrent.com/en/hardware/galaxy" target="_blank" rel="noopener noreferrer">Galaxy Blackhole specs</a>.
+          Numbers below are <strong>Smallest.ai’s / Tenstorrent’s</strong> unless noted. Treat cost gains, concurrency, and DNSMOS deltas as <strong>vendor measurements under the stated configs</strong>, not a claim that every TTS stack will move the same way on your rack.
+        </p>
+
+        <h2>Spec sheet (named numbers)</h2>
+        <div class="table-wrap" role="region" aria-label="Lightning V2 on Tenstorrent named numbers spec sheet" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th></th>
+                <th>Lightning V2 on Tenstorrent</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Partnership announced</td>
+                <td><strong>October 1, 2026</strong> (tech post Sep 28; paper arXiv:2604.03279v2)</td>
+              </tr>
+              <tr>
+                <td>What it is</td>
+                <td>Diffusion TTS co-optimized for Tenstorrent NoC + distributed SRAM; available on Blackhole today (usage-based)</td>
+              </tr>
+              <tr>
+                <td>Precision coverage</td>
+                <td><strong>&gt;95%</strong> layers LoFi; <strong>&gt;80%</strong> BlockFloat8 (BFP8)</td>
+              </tr>
+              <tr>
+                <td>Model / traffic cuts</td>
+                <td>~<strong>2×</strong> model size; <strong>1.8×</strong> memory-transfer volume; <strong>4×</strong> compute cut (acoustic) / <strong>8×</strong> (vocoder)</td>
+              </tr>
+              <tr>
+                <td>L40S baseline</td>
+                <td><strong>$9,000</strong>; concurrency <strong>3</strong>; latency <strong>300</strong> ms → cost gain <strong>1×</strong></td>
+              </tr>
+              <tr>
+                <td>P150</td>
+                <td><strong>$1,400</strong>; concurrency <strong>1</strong>; latency <strong>250</strong> ms → <strong>2.6×</strong> cost gain</td>
+              </tr>
+              <tr>
+                <td>P100</td>
+                <td><strong>$1,000</strong>; concurrency <strong>1</strong>; latency <strong>250</strong> ms (carried from P150; single-chip, no QSFP) → <strong>3.6×</strong></td>
+              </tr>
+              <tr>
+                <td>Fleet model (550 × 5 s streams)</td>
+                <td><strong>11×</strong> L40S ~<strong>$100K</strong> vs <strong>27×</strong> P100 ~<strong>$27K</strong> or <strong>27×</strong> P150 ~<strong>$37K</strong> (~<strong>3–4×</strong>)</td>
+              </tr>
+              <tr>
+                <td>Quality</td>
+                <td>DNSMOS <strong>3.872</strong> (L40S) vs <strong>3.801</strong> (P150), Δ <strong>−0.071</strong>; normalized WER <strong>0.009</strong></td>
+              </tr>
+              <tr>
+                <td>Layer probe (~6B MACs)</td>
+                <td>~<strong>60</strong> μs (L40S) vs ~<strong>31</strong> μs (P150); authors project <strong>8–12×</strong> cost-normalized headroom if more layers match</td>
+              </tr>
+              <tr>
+                <td>Galaxy Blackhole (partner rack)</td>
+                <td><strong>32×</strong> Blackhole ASICs; <strong>23</strong> PFLOPS Block FP8; <strong>6.2</strong> GB SRAM @ <strong>2.9</strong> PB/s; <strong>1</strong> TB GDDR6 @ <strong>16</strong> TB/s; <strong>10×</strong> 400 GbE/ASIC → <strong>32</strong> TB/s fabric; up to <strong>56×</strong> 800 GbE QSFP-DD; 6U air-cooled; <strong>8–10</strong> kW avg; list <strong>$160,000</strong></td>
+              </tr>
+              <tr>
+                <td>P150 card peek</td>
+                <td><strong>120</strong> Tensix cores; <strong>180</strong> MB SRAM; <strong>32</strong> GB GDDR6 @ <strong>512</strong> GB/s; <strong>664</strong> TFLOPS BLOCKFP8; <strong>300</strong> W TBP (
+                  <a href="https://docs.tenstorrent.com/aibs/blackhole/specifications.html" target="_blank" rel="noopener noreferrer">docs</a>
+                )</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          That is a different purchase sentence from “another open TTS checkpoint.” This one is: <em>can I put real-time voice on Blackhole without paying L40S fleet CapEx</em>, and what do they measure when they try.
+        </p>
+
+        <h2>Why TTS breaks the FP8 playbook</h2>
+        <p>
+          LLMs tolerate small logit noise — softmax and the next token often absorb it. Diffusion TTS generates a continuous waveform over many denoising steps. A rounding error does not just flip a token; it perturbs phase, harmonics, and low-energy fricatives. Smallest.ai’s paper is blunt about the metric trap: L40S vs AMD EPYC CPU end-to-end PCC was only <strong>~0.72</strong> with identical inputs, yet the audio was perceptually fine; a different layer with PCC rounded to <strong>1.0</strong> still caused audible breakage that took more than a month to isolate. Tensor similarity is not a hearing test.
+        </p>
+        <p>
+          Their answer is selective, not blanket, precision: keep sensitive layers higher fidelity; push LoFi / BFP8 where perceptual checks allow; exploit Tenstorrent’s explicit dataflow (reader / unpack / compute / writer per Tensix core, software-managed SRAM circular buffers, NoC multicast of weight tiles) so single-stream TTS does not pay a full DRAM round-trip every hop the way a batched GPU SM path often does.
+        </p>
+
+        <h2>What the bake-off actually shows</h2>
+        <p>
+          <strong>Single device.</strong> L40S wins raw concurrency (<strong>3</strong> vs <strong>1</strong>) at <strong>300</strong> ms. P150/P100 win latency (<strong>250</strong> ms) and sticker price. Normalize by sustained stream capacity and Smallest.ai’s table lands <strong>2.6×</strong> / <strong>3.6×</strong> cost gains on P150 / P100.
+        </p>
+        <p>
+          <strong>Fleet extrapolation.</strong> For <strong>550</strong> overlapping 5-second generations at full utilization, they count <strong>~50</strong> audio-seconds/s per L40S → <strong>11</strong> GPUs ≈ <strong>$100K</strong>, versus <strong>~20</strong> audio-seconds/s per P150 → <strong>27</strong> cards ≈ <strong>$37K</strong> (or <strong>$27K</strong> on P100). That is the <strong>~3–4×</strong> headline. It assumes 100% TTS-stage utilization in an AST→LLM→TTS pipeline and listed device prices — your discount schedule and idle mix will move the dollars.
+        </p>
+        <p>
+          <strong>Quality.</strong> DNSMOS drops <strong>0.071</strong>; normalized WER between L40S and P150 outputs is <strong>0.009</strong>. Authors call the DNSMOS gap minor perceptual variation. Bring your own listening panel before you quote “no audible artifacts” into a compliance deck.
+        </p>
+        <p>
+          <strong>Headroom.</strong> One ~<strong>6B</strong> MAC layer at <strong>~31</strong> μs on P150 vs <strong>~60</strong> μs on L40S is a software-limited probe, not a full-graph guarantee. The <strong>8–12×</strong> cost-normalized projection is an extrapolation if more layers get the same treatment — mark it as such.
+        </p>
+
+        <h2>Where it sits next to other boards</h2>
+        <div class="table-wrap" role="region" aria-label="Where Lightning V2 on Tenstorrent sits next to other boards" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Purchase</th>
+                <th>Product</th>
+                <th>What it buys</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Open MoE <em>trainer</em> (last night)</td>
+                <td><a href="/olmo-core-3.html">Ai2 Olmo-core 3</a></td>
+                <td>B300 capacity tax fix; training tok/s</td>
+              </tr>
+              <tr>
+                <td>Persistent CXL media (yesterday AM)</td>
+                <td><a href="/everspin-cxl-persyst-mram.html">Everspin PERSYST</a></td>
+                <td>Byte-addressable MRAM on CXL</td>
+              </tr>
+              <tr>
+                <td><strong>On-prem TTS on Blackhole (this post)</strong></td>
+                <td><strong>Lightning V2 × Tenstorrent</strong></td>
+                <td>Measured L40S cost/concurrency bake-off; BFP8/LoFi co-design; Galaxy rack path</td>
+              </tr>
+              <tr>
+                <td>Decision-model flood (Oct 1)</td>
+                <td>Clef / Decider / Strands</td>
+                <td>Structured yes/no/choice probs — different lane</td>
+              </tr>
+              <tr>
+                <td>Personal GB10 desk box (today)</td>
+                <td>DGX Spark 64GB</td>
+                <td>Local agent SKU + Sync Cluster — not this rack story</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Do not collapse this into “Tenstorrent is cheaper than NVIDIA.” The claim is narrower: <strong>this</strong> diffusion TTS, under <strong>these</strong> concurrency/latency points, on <strong>P100/P150</strong>, vs <strong>L40S</strong> list economics — then a Galaxy Blackhole path for denser on-prem voice.
+        </p>
+
+        <h2>Caveats</h2>
+        <ol>
+          <li>
+            <strong>Vendor bake-off.</strong> Latency, concurrency, DNSMOS, and dollar gains are Smallest.ai’s. Independent reproductions on your stack are not this post.
+          </li>
+          <li>
+            <strong>P100 latency is carried.</strong> Paper states Lightning V2 is single-chip and does not use QSFP; P100 latency equals measured P150.
+          </li>
+          <li>
+            <strong>Fleet math is a model.</strong> <strong>550</strong> streams × <strong>5</strong> s audio, 100% TTS utilization, list prices — change any knob and CapEx moves.
+          </li>
+          <li>
+            <strong>Not full-model low precision.</strong> Some layers still refuse LoFi/BFP8 without audible damage; coverage caps exist.
+          </li>
+          <li>
+            <strong>Compiler headroom.</strong> Authors say program configs are sub-optimal; <strong>8–12×</strong> is projected, not shipped system gain.
+          </li>
+          <li>
+            <strong>Galaxy vs card.</strong> Partnership markets Galaxy Blackhole servers; the L40S tables are <strong>P100/P150</strong> card-class. Do not paste <strong>23</strong> PFLOPS rack peak onto the single-stream TTS latency row.
+          </li>
+          <li>
+            <strong>Lightning V3 is future.</strong> Blog says V3 already surpasses V2 in quality/efficiency and is planned for the same co-design path — not this ship.
+          </li>
+        </ol>
+
+        <h2>How I would evaluate</h2>
+        <ol>
+          <li>
+            Read §3–4 of
+            <a href="https://arxiv.org/html/2604.03279v2" target="_blank" rel="noopener noreferrer">arXiv:2604.03279v2</a>
+            for the PCC case and Table 3 before quoting <strong>4×</strong>.
+          </li>
+          <li>
+            Reproduce the single-device concurrency/latency points on a P150 (or QuietBox) with your own 5-second prompts — watch p95, not only mean.
+          </li>
+          <li>
+            Run a blinded listening test next to DNSMOS; treat PCC as a debug aid, not a ship gate.
+          </li>
+          <li>
+            Price a <strong>550</strong>-stream equivalent with <em>your</em> L40S and Blackhole quotes, idle fraction, and power — CapEx tables without OpEx are incomplete for on-prem voice.
+          </li>
+          <li>
+            Keep this board separate from
+            <a href="/olmo-core-3.html">Olmo-core</a>
+            training and from the Oct 1 decision-model flood — this is <strong>waveform inference economics</strong> on Tensix.
+          </li>
+        </ol>
+
+        <h2>Bottom line</h2>
+        <p>
+          On <strong>October 1, 2026</strong>, Tenstorrent and Smallest.ai put <strong>Lightning V2</strong> on Blackhole as a production on-prem voice path, with a paper that pushes <strong>&gt;95%</strong> LoFi and <strong>&gt;80%</strong> BFP8 through a numerically fragile diffusion TTS and still reports DNSMOS <strong>3.801</strong> vs L40S <strong>3.872</strong> (Δ <strong>−0.071</strong>) and normalized WER <strong>0.009</strong>. The durable systems story is the cost table — <strong>250</strong> ms / concurrency <strong>1</strong> on <strong>$1,000–$1,400</strong> P100/P150 vs <strong>300</strong> ms / concurrency <strong>3</strong> on a <strong>$9,000</strong> L40S, extrapolating to roughly <strong>3–4×</strong> lower accelerator CapEx for a <strong>550</strong>-stream model — plus the honest finding that PCC can look perfect while the ear fails. Galaxy Blackhole gives the dense rack SKU (<strong>32</strong> ASICs, <strong>23</strong> PFLOPS Block FP8, <strong>$160K</strong> list) if you outgrow cards. Code path and paper are public; treat projected <strong>8–12×</strong> headroom and Lightning V3 as future work.
+        </p>
+        <p>
+          Create-only. Specs from Tenstorrent’s Oct 1 partnership announcement, Smallest.ai’s Lightning V2 technical post, arXiv:2604.03279v2, and Tenstorrent Galaxy / Blackhole documentation. Update when third-party reproductions, multi-chip Lightning, or Lightning V3-on-Blackhole numbers ship.
+        </p>
+        <p>
+          Sources:
+          <a href="https://tenstorrent.com/en/newsroom/tenstorrent-and-smallestai-partner-to-bring-production-grade-voice-ai-on-prem" target="_blank" rel="noopener noreferrer">Tenstorrent partnership</a>
+          ·
+          <a href="https://smallest.ai/blog/rewriting-tts-inference-economics-lightning-v2-on-tenstorrent-achieves-4-lower-cost-than-nvidia-l40s" target="_blank" rel="noopener noreferrer">Smallest.ai blog</a>
+          ·
+          <a href="https://arxiv.org/abs/2604.03279v2" target="_blank" rel="noopener noreferrer">arXiv:2604.03279v2</a>
+          ·
+          <a href="https://tenstorrent.com/en/hardware/galaxy" target="_blank" rel="noopener noreferrer">Galaxy Blackhole</a>
+          ·
+          <a href="https://docs.tenstorrent.com/aibs/blackhole/specifications.html" target="_blank" rel="noopener noreferrer">Blackhole PCIe specs</a>.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
