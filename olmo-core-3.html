@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Olmo-core 3: Open MoE Training Stack Hits 1.2T on B300 — DDP, Rowwise EP, MXFP8 — Anpoo Sivanadi</title>
+  <meta name="description" content="Ai2 released Olmo-core 3 — open DDP+EP+PP MoE trainer on NVIDIA B300 through 1.20T / 58.4B active, 19.4K → 52K tok/s/GPU at 47B vs the old FSDP path — systems measurements, not next-Olmo weights." />
+  <link rel="canonical" href="https://asivanadi0.github.io/olmo-core-3.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Olmo-core 3: Open MoE Training Stack Hits 1.2T on B300 — DDP, Rowwise EP, MXFP8 — Anpoo Sivanadi" />
+  <meta property="og:description" content="Ai2 released Olmo-core 3 — open DDP+EP+PP MoE trainer on NVIDIA B300 through 1.20T / 58.4B active, 19.4K → 52K tok/s/GPU at 47B vs the old FSDP path — systems measurements, not next-Olmo weights." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/olmo-core-3.html" />
+  <meta property="article:published_time" content="2026-10-01T18:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Olmo-core 3: Open MoE Training Stack Hits 1.2T on B300 — DDP, Rowwise EP, MXFP8</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-01">1 October 2026</time>
+          · Anpoo Sivanadi
+          · based on Ai2’s Oct 1 Olmo-core 3 release and accompanying technical report
+        </p>
+        <p class="dek article-dek">
+          Ai2 released Olmo-core 3 — open DDP+EP+PP MoE trainer on NVIDIA B300 through 1.20T / 58.4B active, 19.4K → 52K tok/s/GPU at 47B vs the old FSDP path — systems measurements, not next-Olmo weights.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          This morning’s
+          <a href="/everspin-cxl-persyst-mram.html">Everspin CXL PERSYST</a>
+          note was a <strong>persistent media</strong> ticket. Last night’s
+          <a href="/coreweave-cognition-vera-rubin.html">CoreWeave × Cognition Vera Rubin</a>
+          was <strong>neocloud production</strong>. Plenty of frontier MoEs ship weights; far fewer ship the trainer that made sparse capacity cheap in wall time. On <strong>October 1, 2026</strong>, Ai2 released <strong>Olmo-core 3</strong> — a redesigned open mixture-of-experts training stack aimed at trillion-parameter MoEs — with a full technical report and code on GitHub. Tonight is that <strong>training-systems</strong> board.
+        </p>
+        <p>
+          Primary:
+          <a href="https://allenai.org/blog/olmocore3" target="_blank" rel="noopener noreferrer">Ai2 blog</a>
+          ·
+          <a href="https://huggingface.co/blog/allenai/olmocore3" target="_blank" rel="noopener noreferrer">HF mirror</a>
+          ·
+          <a href="https://allenai.org/papers/olmocore3" target="_blank" rel="noopener noreferrer">tech report</a>
+          ·
+          <a href="https://github.com/allenai/OLMo-core" target="_blank" rel="noopener noreferrer">GitHub</a>.
+          Numbers below are <strong>Ai2’s</strong> unless noted. Treat tok/s, TFLOP/s, and memory deltas as <strong>systems measurements under the stated configs</strong> (often random routing), not time-to-quality claims.
+        </p>
+
+        <h2>Spec sheet (named numbers)</h2>
+        <div class="table-wrap" role="region" aria-label="Olmo-core 3 named numbers spec sheet" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th></th>
+                <th>Olmo-core 3</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Released</td>
+                <td><strong>October 1, 2026</strong></td>
+              </tr>
+              <tr>
+                <td>What it is</td>
+                <td>Open MoE training stack in Olmo-core (DDP path + EP/PP + distributed optimizer + MXFP8)</td>
+              </tr>
+              <tr>
+                <td>Hardware in benches</td>
+                <td>NVIDIA <strong>B300</strong> (NVL8 nodes; up to <strong>512</strong> GPUs)</td>
+              </tr>
+              <tr>
+                <td>Capacity sweep (fixed ~<strong>3.2B</strong> active, top-<strong>4</strong>)</td>
+                <td>Expert pool <strong>8 → 128</strong>; total <strong>4.6B → 47B</strong>; throughput fell <strong>&lt;5%</strong> (new stack)</td>
+              </tr>
+              <tr>
+                <td>Old vs new on <strong>8× B300</strong>, <strong>47B</strong> MoE</td>
+                <td><strong>19.4K</strong> → <strong>52K</strong> tok/s/GPU (~<strong>2.7×</strong>)</td>
+              </tr>
+              <tr>
+                <td>MXFP8 (controlled <strong>4× B300</strong>)</td>
+                <td>~<strong>21%</strong> higher end-to-end throughput vs BF16; peak active mem <strong>103 → 95 GiB</strong></td>
+              </tr>
+              <tr>
+                <td>Ultra config</td>
+                <td><strong>58.4B</strong> active @ <strong>1.20T</strong> total; <strong>512</strong> GPUs; <strong>858</strong> useful-model TFLOP/s/GPU; MXFP8; EP<strong>8</strong> PP<strong>8</strong></td>
+              </tr>
+              <tr>
+                <td>DeepEP v2 capacity probe</td>
+                <td><strong>2.38T</strong> total params (short capacity test, not sustained training)</td>
+              </tr>
+              <tr>
+                <td>Parallelism</td>
+                <td>Expert parallelism + pipeline parallelism + distributed optimizer</td>
+              </tr>
+              <tr>
+                <td>Notable mechanisms</td>
+                <td>Rowwise EP (NVSHMEM PUT/GET), GPU-resident routing, device-scheduled grouped GEMM, topology-agnostic checkpoints</td>
+              </tr>
+              <tr>
+                <td>License / code</td>
+                <td>Open;
+                  <a href="https://github.com/allenai/OLMo-core" target="_blank" rel="noopener noreferrer">allenai/OLMo-core</a>
+                </td>
+              </tr>
+              <tr>
+                <td>Next model</td>
+                <td>Next-gen Olmo planned as MoE on this stack — planned, not a ship date</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          That is a different purchase sentence from “another open MoE checkpoint.” This one is: <em>can I train sparse capacity without paying a full-reshard FSDP tax every microbatch</em>, and what do Ai2 measure on B300 when they try.
+        </p>
+
+        <h2>What actually changed</h2>
+        <p>
+          Olmo-core’s earlier MoE path inherited the <strong>FSDP</strong> habits of dense Olmo 3: gather and reshard weights around microbatches. For MoE that is painful — stored expert capacity grows with <em>N</em>, while useful arithmetic follows <em>K</em>. Ai2’s framing: a <strong>capacity tax</strong> (storage, grads, optimizer sync following <em>P</em><sub>total</sub>) plus a <strong>runtime tax</strong> (dispatch/combine, uneven GEMMs, host sync).
+        </p>
+        <p>
+          Olmo-core 3’s answer is a <strong>DDP-centered</strong> path: keep the rank-local partition resident across the accumulation window, shard experts with <strong>EP</strong>, layers with <strong>PP</strong>, and FP32 main weights/optimizer state with a <strong>distributed optimizer</strong>. Token rows move to experts; weights stop thrashing through all-gathers every microbatch.
+        </p>
+        <p>
+          The composed result they emphasize: grow the expert pool <strong>8 → 128</strong> at fixed top-<strong>4</strong> and ~<strong>3.2B</strong> active, total capacity <strong>4.6B → 47B</strong>, and keep throughput within <strong>5%</strong>. On eight B300s, the <strong>47B</strong> point lands at <strong>52K</strong> tok/s/GPU vs <strong>19.4K</strong> on the old path — about <strong>2.7×</strong>. That is a systems comparison under their harness, not a claim that Megatron-Core disappeared.
+        </p>
+
+        <h2>Mechanisms worth reading the report for</h2>
+        <p>
+          <strong>Rowwise EP.</strong> Instead of packing peer-contiguous blocks for classic all-to-all, their NVSHMEM path writes each token row straight into the destination expert buffer (PUT/GET). Less permutation tax on the hot path.
+        </p>
+        <p>
+          <strong>GPU-resident routing + grouped GEMM.</strong> Routing metadata stays on device so the CPU is not waiting on host copies for every shape; device-scheduled grouped GEMM eats uneven per-expert batches without padding every expert to the same capacity.
+        </p>
+        <p>
+          <strong>MXFP8.</strong> On a controlled four-GPU B300 bench with uniform expert load, enabling MXFP8 where it helped most bought ~<strong>21%</strong> throughput vs BF16 and cut peak active memory <strong>103 → 95 GiB</strong> — Ai2’s controlled-config systems deltas, not a fleet-wide quality claim. Gains skewed to FFN compute and expert traffic, not attention alone. Ultra’s <strong>858</strong> TFLOP/s/GPU at <strong>1.20T</strong> is reported with MXFP8 and per-layer recompute in the report’s headline panel — MFU denominators use B300 dense BF16 peak even for MXFP8 runs, so do not read that as FP8-peak utilization.
+        </p>
+        <p>
+          <strong>Findings that survived the cut.</strong> Token <strong>gerrymandering</strong>: load-balancing loss can improve while real imbalance worsens. Comm/comp overlap on separate streams is not free — sometimes it slows the kernels it was meant to hide. GEMM time depends on operand <em>values</em>, not only shapes. Scaling expert LRs by sparsity did not help in their tested family.
+        </p>
+
+        <h2>Where it sits next to other open stacks</h2>
+        <div class="table-wrap" role="region" aria-label="Where Olmo-core 3 sits next to other open stacks" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Purchase</th>
+                <th>Product</th>
+                <th>What it buys</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Open MoE <em>weights</em> / model family</td>
+                <td>Prior Olmo / OlmoE releases</td>
+                <td>Checkpoints and recipes</td>
+              </tr>
+              <tr>
+                <td>Established MoE <em>trainer</em></td>
+                <td>NVIDIA Megatron-Core (industry baseline Ai2 names)</td>
+                <td>Production EP/PP/FP8 paths</td>
+              </tr>
+              <tr>
+                <td><strong>Open Olmo-native MoE trainer (this post)</strong></td>
+                <td><strong>Olmo-core 3</strong></td>
+                <td>DDP+EP+PP redesign; B300-measured capacity sweep; MXFP8; public report + code</td>
+              </tr>
+              <tr>
+                <td>Inference disaggregation</td>
+                <td>Cerebras / Trainium decode pools (separate lane)</td>
+                <td>Prefill/decode split at serve time</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Do not collapse this into “another open model drop.” Weights without the trainer leave the capacity tax on your cluster. Megatron-Core remains the industry reference Ai2 itself cites; Olmo-core 3 is the integrated path behind the next Olmo MoE, measured end-to-end on B300.
+        </p>
+
+        <h2>Caveats</h2>
+        <ol>
+          <li>
+            <strong>Random routing for systems refs.</strong> Several headline rates use random routing to approximate balanced load. Production routers are messier; expect lower tok/s until you measure your own routing histogram.
+          </li>
+          <li>
+            <strong>2.38T is a capacity probe.</strong> DeepEP v2 short run — reachable scale, not a sustained Ultra recipe. Do not treat Ultra’s <strong>858</strong> TFLOP/s/GPU as a quality or time-to-convergence claim.
+          </li>
+          <li>
+            <strong>Not a Megatron bake-off.</strong> Ai2 positions against their own FSDP MoE path and discusses Megatron-Core / DeepSpeed-MoE / DeepEP trade-offs in the report. Bring your own apples.
+          </li>
+          <li>
+            <strong>B300 NVL8 topology.</strong> Numbers are for their audited hardware/software; your IB/NVLink map and EP-MP placement will move the operating point.
+          </li>
+          <li>
+            <strong>Next Olmo is still future.</strong> The stack is shipping; the next MoE Olmo weights are not this post. No ship date in the release.
+          </li>
+          <li>
+            <strong>Not an Everspin rematch, not a CoreWeave rematch.</strong> This morning was persistent CXL media; last night was neocloud NVL72 production. Tonight is the <strong>open MoE trainer</strong> board.
+          </li>
+        </ol>
+
+        <h2>How I would evaluate</h2>
+        <ol>
+          <li>
+            Clone
+            <a href="https://github.com/allenai/OLMo-core" target="_blank" rel="noopener noreferrer">OLMo-core</a>
+            and reproduce the eight-GPU capacity sweep shape (fixed active, growing <em>N</em>) on whatever GPU you have — even if absolute tok/s differs, watch the <em>slope</em>.
+          </li>
+          <li>
+            Read Section 14 of the
+            <a href="https://allenai.org/papers/olmocore3" target="_blank" rel="noopener noreferrer">report</a>
+            for the Tiny→Ultra matrix (batch, EP/PP, precision, recompute) before quoting <strong>858</strong> TFLOP/s/GPU.
+          </li>
+          <li>
+            Turn on MXFP8 only after you can match their loss/grad-norm continuation story — throughput without a numerical recipe is just a faster wrong step.
+          </li>
+          <li>
+            Instrument load-balance <em>and</em> hard expert histograms so you catch gerrymandering early.
+          </li>
+          <li>
+            Keep this board separate from inference disaggregation posts — this is <strong>training</strong> sparse capacity on B300 clusters.
+          </li>
+        </ol>
+
+        <h2>Bottom line</h2>
+        <p>
+          On <strong>October 1, 2026</strong>, Ai2 shipped <strong>Olmo-core 3</strong>: an open DDP+EP+PP MoE trainer with rowwise NVSHMEM EP, GPU-resident routing, grouped GEMM, and MXFP8, measured on NVIDIA <strong>B300</strong> up through <strong>1.20T</strong> total / <strong>58.4B</strong> active at <strong>858</strong> useful-model TFLOP/s/GPU on <strong>512</strong> GPUs, with a <strong>2.38T</strong> DeepEP v2 capacity probe. The durable story is the capacity-tax fix — grow experts without collapsing wall-time throughput the way their old FSDP MoE path did (<strong>19.4K → 52K</strong> tok/s/GPU at <strong>47B</strong> on 8× B300) — plus the report’s honest negative results on overlap and token gerrymandering. Code and report are public; next Olmo is planned as MoE on this stack. Those tok/s, TFLOP/s, and MXFP8 deltas are <strong>Ai2 systems measurements</strong> under the stated configs — often random routing — not a sustained Ultra quality claim and not a next-Olmo ship date.
+        </p>
+        <p>
+          Create-only. Specs from Ai2’s Oct 1 Olmo-core 3 release and accompanying technical report. Update when Ai2 publishes sustained Ultra training runs, next-gen Olmo MoE weights, or third-party reproductions on non-B300 fleets.
+        </p>
+        <p>
+          Sources:
+          <a href="https://allenai.org/blog/olmocore3" target="_blank" rel="noopener noreferrer">Ai2 Olmo-core 3</a>
+          ·
+          <a href="https://huggingface.co/blog/allenai/olmocore3" target="_blank" rel="noopener noreferrer">HF blog</a>
+          ·
+          <a href="https://allenai.org/papers/olmocore3" target="_blank" rel="noopener noreferrer">tech report</a>
+          ·
+          <a href="https://github.com/allenai/OLMo-core" target="_blank" rel="noopener noreferrer">GitHub</a>.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
