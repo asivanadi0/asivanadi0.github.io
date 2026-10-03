@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Credo Weaver: HBM4-Class Edge Bandwidth at ~25× Capacity — OmniConnect VSR, No CoWoS — Anpoo Sivanadi</title>
+  <meta name="description" content="Credo’s Oct 2 OmniConnect / Weaver post claims HBM4-class die-edge bandwidth (6.4 vs 6.1 TB/s) at ~25× capacity (4.8 TB vs 192 GB) on organic, no CoWoS — vendor architecture claims, not an independent bring-up." />
+  <link rel="canonical" href="https://asivanadi0.github.io/credo-omniconnect-weaver.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Credo Weaver: HBM4-Class Edge Bandwidth at ~25× Capacity — OmniConnect VSR, No CoWoS — Anpoo Sivanadi" />
+  <meta property="og:description" content="Credo’s Oct 2 OmniConnect / Weaver post claims HBM4-class die-edge bandwidth (6.4 vs 6.1 TB/s) at ~25× capacity (4.8 TB vs 192 GB) on organic, no CoWoS — vendor architecture claims, not an independent bring-up." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/credo-omniconnect-weaver.html" />
+  <meta property="article:published_time" content="2026-10-02T18:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Credo Weaver: HBM4-Class Edge Bandwidth at ~25× Capacity — OmniConnect VSR, No CoWoS</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-02">2 October 2026</time>
+          · Anpoo Sivanadi
+          · based on Credo’s Oct 2 OmniConnect technical post, Weaver / OmniConnect product pages and PDF brief, and the Aug 10, 2026 OCP LSI contribution
+        </p>
+        <p class="dek article-dek">
+          Credo’s Oct 2 OmniConnect / Weaver post claims HBM4-class die-edge bandwidth (6.4 vs 6.1 TB/s) at ~25× capacity (4.8 TB vs 192 GB) on organic, no CoWoS — vendor architecture claims, not an independent bring-up.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          This morning’s
+          <a href="/tenstorrent-lightning-v2.html">Lightning V2 on Tenstorrent</a>
+          note was <strong>on-prem TTS economics</strong> on Blackhole. Last night’s
+          <a href="/olmo-core-3.html">Olmo-core 3</a>
+          was a <strong>training-systems</strong> ticket. Yesterday morning’s
+          <a href="/everspin-cxl-persyst-mram.html">Everspin CXL PERSYST</a>
+          was <strong>persistent media</strong>. Inference fleets still hit a different wall: decode is memory-bound and HBM beachfront is finite. On <strong>October 2, 2026</strong>, Credo published a technical post on <strong>OmniConnect</strong> and the <strong>Weaver</strong> memory fanout gearbox that claims HBM4-class die-edge bandwidth at roughly <strong>25×</strong> the capacity — on organic substrate, without CoWoS.
+        </p>
+        <p>
+          Primary:
+          <a href="https://credosemi.com/blogs/breaking-the-memory-wall-how-omniconnect-decouples-memory-from-compute/" target="_blank" rel="noopener noreferrer">Credo Oct 2 blog</a>
+          ·
+          <a href="https://credosemi.com/products/omniconnect/weaver/" target="_blank" rel="noopener noreferrer">Weaver product</a>
+          ·
+          <a href="https://credosemi.com/products/omniconnect/" target="_blank" rel="noopener noreferrer">OmniConnect</a>
+          ·
+          <a href="https://credosemi.com/wp-content/uploads/Credo-OmniConnect-Weaver.pdf" target="_blank" rel="noopener noreferrer">Weaver brief PDF</a>
+          ·
+          <a href="https://investors.credosemi.com/news-events/news/news-details/2026/Credo-to-Contribute-OmniConnect-Scale-In-Interconnect-Solution-to-the-Open-Compute-Project-to-Address-AI-Inference-Memory-Wall/default.aspx" target="_blank" rel="noopener noreferrer">OCP LSI contribution (Aug 10, 2026)</a>.
+          Numbers below are <strong>Credo’s</strong> unless noted. Treat HBM4 comparisons, beachfront densities, and hybrid leftover-edge examples as <strong>vendor architecture claims under the stated configs</strong>.
+        </p>
+
+        <h2>Spec sheet (named numbers)</h2>
+        <div class="table-wrap" role="region" aria-label="OmniConnect Weaver named numbers spec sheet" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th></th>
+                <th>OmniConnect / Weaver (Credo)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Technical post</td>
+                <td><strong>October 2, 2026</strong> (Weaver targeted <strong>2H 2026</strong>; 112G VSR offered for design-in earlier)</td>
+              </tr>
+              <tr>
+                <td>What it is</td>
+                <td><strong>112G</strong> VSR SerDes + lightweight AXI/FLIT framer; Weaver = LPDDR5X memory fanout <strong>chiplet</strong> (<strong>12</strong> lanes)</td>
+              </tr>
+              <tr>
+                <td>Reach</td>
+                <td>~<strong>250</strong> mm (~10 in) VSR</td>
+              </tr>
+              <tr>
+                <td>Beachfront (blog)</td>
+                <td>LPDDR5X ~<strong>0.18</strong> TB/s/mm; GDDR7 ~<strong>0.4</strong>; HBM4 ~<strong>2.0</strong>; OmniConnect ~<strong>10×</strong> vs parallel LPDDR</td>
+              </tr>
+              <tr>
+                <td>Die-edge vs HBM4 (blog)</td>
+                <td>Bandwidth <strong>6.4</strong> TB/s vs <strong>6.1</strong> TB/s; capacity <strong>4.8</strong> TB vs <strong>192</strong> GB (~<strong>25×</strong>); organic, <strong>no CoWoS</strong></td>
+              </tr>
+              <tr>
+                <td>Product sheet caps</td>
+                <td>Up to <strong>16</strong> TB/s / <strong>6.4</strong> TB; PDF: up to <strong>8</strong> TB/s / <strong>3.2</strong> TB per edge; LPDDR5X PHY <strong>9.6</strong> GT/s</td>
+              </tr>
+              <tr>
+                <td>Latency / energy</td>
+                <td>Blog: ~<strong>50</strong> ns RTT incl. FEC; PHY ~<strong>0.75</strong> pJ/bit. Product: <strong>40</strong> ns RTT; I/O <strong>1.15</strong> pJ/bit</td>
+              </tr>
+              <tr>
+                <td>Hybrid leftover-edge (blog)</td>
+                <td>2 reticle + 8× HBM4 → <strong>288</strong> GB / <strong>22</strong> TB/s; ~<strong>10</strong> mm free edge + Weaver LPDDR6 → <strong>+1.5</strong> TB / <strong>3.7</strong> TB/s → <strong>1.8</strong> TB / <strong>25.7</strong> TB/s</td>
+              </tr>
+              <tr>
+                <td>Open path</td>
+                <td>AXI framer → OCP Open Chiplet Economy <strong>Lightweight Serial Interconnect</strong> Workstream (<strong>Aug 10, 2026</strong>); OCP cites up to <strong>25×</strong> density and <strong>~5%</strong> more BW vs HBM4</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          That is a different purchase sentence from “another CXL pool” or “move the HBM controller into the stack.” This one is: <em>can I attach LPDDR over a short serial beachfront and keep HBM4-class edge bandwidth without advanced packaging</em> — and what does Credo claim when they try.
+        </p>
+
+        <h2>Why decode makes the wall visible</h2>
+        <p>
+          Prefill is mostly compute-bound. Decode flips it: each new token pulls a growing KV cache; only a fraction of the cores stay fed. Credo puts the compounding gap in plain numbers — compute ~<strong>3×</strong> every two years, memory bandwidth closer to <strong>1.6×</strong> over the same window — and sketches serving-instance memory from roughly <strong>0.4</strong> TB (2020 dense) to about <strong>1.2</strong> TB (2023 MoE) toward ~<strong>5</strong> TB for 2026 agentic workloads (~<strong>12×</strong> in six years), with KV catching up to weights. MoE residency, long context, and reasoning-token volume all push capacity and bandwidth at once.
+        </p>
+
+        <h2>Physics Credo is arguing against</h2>
+        <p>
+          <strong>Substrate area.</strong> Side-by-side LPDDR on a typical <strong>100</strong> mm × <strong>100</strong> mm organic tops out around <strong>256</strong> GB in their framing. HBM4 stacks buy peak bandwidth, not multi-terabyte capacity.
+        </p>
+        <p>
+          <strong>Beachfront.</strong> Parallel LPDDR5X at ~<strong>0.18</strong> TB/s/mm and GDDR7 at ~<strong>0.4</strong> lose to HBM4 at ~<strong>2.0</strong> TB/s/mm. Packaging does not grow the perimeter. Once the edge is full, it is full.
+        </p>
+        <p>
+          OmniConnect’s answer: stop assuming memory must sit immediately beside the die. Serialize the link, keep FLIT / FEC / credit flow (drop speed-hopping / renegotiation), and let memory live out to ~<strong>250</strong> mm. Fewer pins → roughly <strong>10×</strong> die-edge density vs parallel LPDDR in their claim. The cost is latency — blog ~<strong>50</strong> ns RTT with FEC; product sheet <strong>40</strong> ns — still a different class from rack CXL, but not free SRAM.
+        </p>
+
+        <h2>Weaver vs HBM4 — and beside it</h2>
+        <p>
+          The Oct 2 comparison that matters for a BOM conversation:
+        </p>
+        <ul>
+          <li>
+            Die-edge bandwidth: Weaver <strong>6.4</strong> TB/s vs HBM4 <strong>6.1</strong> TB/s (OCP Aug release rounds to ~<strong>5%</strong> more BW).
+          </li>
+          <li>
+            Capacity: <strong>4.8</strong> TB vs <strong>192</strong> GB HBM4 (~<strong>25×</strong>) on organic — <strong>no interposer, no CoWoS</strong>.
+          </li>
+          <li>
+            Product-sheet maxima sit higher (<strong>16</strong> TB/s / <strong>6.4</strong> TB); treat those as aggregate / multi-edge caps and keep the <strong>6.4</strong> / <strong>4.8</strong> vs HBM4 pair as today’s named bake-off.
+          </li>
+        </ul>
+        <p>
+          Credo does not pitch a forced HBM replacement. Their hybrid example leaves ~<strong>10</strong> mm of unused edge on a two-reticle / eight-HBM4 package (<strong>288</strong> GB / <strong>22</strong> TB/s) and fills it with Weaver-connected LPDDR6 for <strong>+1.5</strong> TB / <strong>3.7</strong> TB/s → <strong>1.8</strong> TB / <strong>25.7</strong> TB/s combined. They also argue sustained BW vs peak: spill HBM → LPDDR and sustained BW drops ~<strong>10×</strong>; spill to CXL and ~<strong>100×</strong>. A single-hop Weaver pool is their flatter-curve claim for long-context decode — architecture thesis until independent traces land.
+        </p>
+
+        <h2>Where it sits next to other boards</h2>
+        <div class="table-wrap" role="region" aria-label="Where OmniConnect Weaver sits next to other boards" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Purchase</th>
+                <th>Product</th>
+                <th>What it buys</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>On-prem TTS on Blackhole (this AM)</td>
+                <td><a href="/tenstorrent-lightning-v2.html">Lightning V2 × Tenstorrent</a></td>
+                <td>Measured L40S TTS cost/concurrency bake-off</td>
+              </tr>
+              <tr>
+                <td>Open MoE trainer (last night)</td>
+                <td><a href="/olmo-core-3.html">Ai2 Olmo-core 3</a></td>
+                <td>B300 capacity tax fix; training tok/s</td>
+              </tr>
+              <tr>
+                <td>Persistent CXL media (yesterday AM)</td>
+                <td><a href="/everspin-cxl-persyst-mram.html">Everspin PERSYST</a></td>
+                <td>Byte-addressable MRAM on CXL</td>
+              </tr>
+              <tr>
+                <td>Custom HBM base die (shipped)</td>
+                <td><a href="/nvhbm.html">NVIDIA NVHBM</a></td>
+                <td>Move controller into the stack for Fusion partners</td>
+              </tr>
+              <tr>
+                <td>Fabric / storage KV offload (shipped)</td>
+                <td>
+                  <a href="/astera-leo-x-fabric-kv-cache.html">Astera Leo X</a>
+                  ·
+                  <a href="/lightbits-inferra-kv-cache-prefetch.html">Lightbits Inferra</a>
+                </td>
+                <td>Warm TTFT / prefetch beyond HBM — different hop</td>
+              </tr>
+              <tr>
+                <td><strong>Near-package LPDDR fanout (this post)</strong></td>
+                <td><strong>Credo OmniConnect Weaver</strong></td>
+                <td>Claimed HBM4-class edge BW at ~25× capacity on organic; OCP LSI AXI path</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Do not collapse this into “Credo replaces HBM.” The claim is narrower: serialize the beachfront, match ~HBM4 die-edge bandwidth, unlock multi-terabyte LPDDR without CoWoS, optionally fill leftover edge beside HBM, and late-bind DRAM like DIMMs instead of welding capacity at tape-out.
+        </p>
+
+        <h2>Caveats</h2>
+        <ol>
+          <li>
+            <strong>Vendor architecture claims.</strong> Bandwidth, capacity, beachfront, hybrid leftover-edge, and sustained-vs-tiered curves are Credo’s. Independent XPU bring-ups are not this post.
+          </li>
+          <li>
+            <strong>Blog vs product-sheet deltas.</strong> Oct 2 blog: ~<strong>50</strong> ns / ~<strong>0.75</strong> pJ/bit PHY and the <strong>6.4</strong> / <strong>4.8</strong> vs HBM4 pair; product page: <strong>40</strong> ns / <strong>1.15</strong> pJ/bit I/O and up to <strong>16</strong> TB/s / <strong>6.4</strong> TB. Quote the source next to the number.
+          </li>
+          <li>
+            <strong>Weaver availability.</strong> Unveil targeted <strong>2H 2026</strong> for the gearbox; <strong>112G</strong> VSR for design-in. Confirm sampling before a frozen BOM.
+          </li>
+          <li>
+            <strong>Not a CXL pool, not NVHBM.</strong> Near-package VSR fanout ≠ rack CXL or
+            <a href="/astera-leo-x-fabric-kv-cache.html">Leo X</a>
+            /
+            <a href="/lightbits-inferra-kv-cache-prefetch.html">Inferra</a>
+            KV offload;
+            <a href="/nvhbm.html">NVHBM</a>
+            moves the controller into the HBM stack — same wall, different layer.
+          </li>
+          <li>
+            <strong>OCP is a contribution path.</strong> Aug <strong>10, 2026</strong> LSI Workstream + intended AXI framer — not a finished multi-vendor ecosystem. Product sheet is LPDDR5X; hybrid example uses LPDDR6 — verify when LPDDR6 PHYs ship.
+          </li>
+        </ol>
+
+        <h2>How I would evaluate</h2>
+        <ol>
+          <li>
+            Read the Oct 2 beachfront and hybrid leftover-edge sections next to the
+            <a href="https://credosemi.com/products/omniconnect/weaver/" target="_blank" rel="noopener noreferrer">Weaver parameter table</a>
+            before quoting <strong>25×</strong> or <strong>6.4</strong> TB/s.
+          </li>
+          <li>
+            Ask for a package diagram with <em>your</em> die-edge budget after HBM, and what Weaver lane count fits.
+          </li>
+          <li>
+            Time a decode-heavy long-context / agent workload sized to force HBM spill on your current tier — that is the cliff Credo is selling against.
+          </li>
+          <li>
+            Price late-bound LPDDR serviceability vs welded HBM yield separately from peak FLOPs.
+          </li>
+          <li>
+            Track the
+            <a href="https://investors.credosemi.com/news-events/news/news-details/2026/Credo-to-Contribute-OmniConnect-Scale-In-Interconnect-Solution-to-the-Open-Compute-Project-to-Address-AI-Inference-Memory-Wall/default.aspx" target="_blank" rel="noopener noreferrer">OCP LSI Workstream</a>
+            for third-party AXI implementations. Keep this board separate from
+            <a href="/tenstorrent-lightning-v2.html">Lightning</a>
+            TTS,
+            <a href="/olmo-core-3.html">Olmo-core</a>
+            training,
+            <a href="/everspin-cxl-persyst-mram.html">Everspin</a>
+            CXL MRAM, and
+            <a href="/astera-leo-x-fabric-kv-cache.html">Leo X</a>
+            /
+            <a href="/lightbits-inferra-kv-cache-prefetch.html">Inferra</a>
+            — this is <strong>near-package memory fanout</strong> math.
+          </li>
+        </ol>
+
+        <h2>Bottom line</h2>
+        <p>
+          On <strong>October 2, 2026</strong>, Credo put a clear systems claim on <strong>OmniConnect</strong> and <strong>Weaver</strong>: serialize the memory beachfront with <strong>112G</strong> VSR SerDes out to ~<strong>250</strong> mm, keep a stripped FLIT/FEC/credit path, and match HBM4 die-edge bandwidth (<strong>6.4</strong> TB/s vs <strong>6.1</strong> TB/s) at roughly <strong>25×</strong> the capacity (<strong>4.8</strong> TB vs <strong>192</strong> GB) on organic packaging without CoWoS — with an optional leftover-edge hybrid that adds <strong>1.5</strong> TB / <strong>3.7</strong> TB/s beside eight HBM4 stacks. Product-sheet caps go to <strong>16</strong> TB/s / <strong>6.4</strong> TB at <strong>40</strong> ns RTT and <strong>1.15</strong> pJ/bit I/O on LPDDR5X. The Aug <strong>10, 2026</strong> OCP LSI Workstream puts the AXI framer on an open path. Treat the sustained-BW cliff argument and LPDDR6 migration as vendor thesis until independent bring-ups show up; the durable ticket is whether leftover die edge and late-bound LPDDR can buy multi-terabyte decode capacity without waiting on another HBM generation.
+        </p>
+        <p>
+          Create-only. Specs from Credo’s October 2, 2026 OmniConnect technical post, Weaver / OmniConnect product pages and PDF brief, and the August 10, 2026 OCP LSI contribution announcement. Update when third-party package bring-ups, LPDDR6 Weaver SKUs, or multi-vendor LSI implementations ship.
+        </p>
+        <p>
+          Sources:
+          <a href="https://credosemi.com/blogs/breaking-the-memory-wall-how-omniconnect-decouples-memory-from-compute/" target="_blank" rel="noopener noreferrer">Credo Oct 2 blog</a>
+          ·
+          <a href="https://credosemi.com/products/omniconnect/weaver/" target="_blank" rel="noopener noreferrer">Weaver</a>
+          ·
+          <a href="https://credosemi.com/products/omniconnect/" target="_blank" rel="noopener noreferrer">OmniConnect</a>
+          ·
+          <a href="https://credosemi.com/wp-content/uploads/Credo-OmniConnect-Weaver.pdf" target="_blank" rel="noopener noreferrer">Weaver PDF</a>
+          ·
+          <a href="https://investors.credosemi.com/news-events/news/news-details/2026/Credo-to-Contribute-OmniConnect-Scale-In-Interconnect-Solution-to-the-Open-Compute-Project-to-Address-AI-Inference-Memory-Wall/default.aspx" target="_blank" rel="noopener noreferrer">OCP LSI Aug 10, 2026</a>.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
