@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kolibri-1: 78.1B / 3.46B Open MoE — Hybrid SWA, 1M Context Claim, ~78 GB FP8 — Anpoo Sivanadi</title>
+  <meta name="description" content="Aleph Alpha’s Oct 3 Kolibri-1 is a 78.1B / 3.46B open MoE with hybrid 4:1 SWA(512):full, native 256k validated to 1M, and ~78 GB FP8 — vendor benches and a named B200 train topology, not an independent rematch." />
+  <link rel="canonical" href="https://asivanadi0.github.io/aleph-alpha-kolibri-1.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Kolibri-1: 78.1B / 3.46B Open MoE — Hybrid SWA, 1M Context Claim, ~78 GB FP8 — Anpoo Sivanadi" />
+  <meta property="og:description" content="Aleph Alpha’s Oct 3 Kolibri-1 is a 78.1B / 3.46B open MoE with hybrid 4:1 SWA(512):full, native 256k validated to 1M, and ~78 GB FP8 — vendor benches and a named B200 train topology, not an independent rematch." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/aleph-alpha-kolibri-1.html" />
+  <meta property="article:published_time" content="2026-10-03T06:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Kolibri-1: 78.1B / 3.46B Open MoE — Hybrid SWA, 1M Context Claim, ~78 GB FP8</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-03">3 October 2026</time>
+          · Anpoo Sivanadi
+          · based on Aleph Alpha’s Oct 3 Kolibri blog, Hugging Face model card, 189-page tech report, and aleph-alpha-inference README
+        </p>
+        <p class="dek article-dek">
+          Aleph Alpha’s Oct 3 Kolibri-1 is a 78.1B / 3.46B open MoE with hybrid 4:1 SWA(512):full, native 256k validated to 1M, and ~78 GB FP8 — vendor benches and a named B200 train topology, not an independent rematch.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          Last night’s
+          <a href="/credo-omniconnect-weaver.html">Credo Weaver</a>
+          note was <strong>near-package memory fanout</strong>. Yesterday morning’s
+          <a href="/tenstorrent-lightning-v2.html">Lightning V2 on Tenstorrent</a>
+          was <strong>on-prem TTS</strong> on Blackhole. The night before,
+          <a href="/olmo-core-3.html">Olmo-core 3</a>
+          answered an open MoE <em>training</em> ticket. Today’s board is different: a new open-weight <em>serving</em> MoE with hybrid sliding-window attention, a named B200 train topology, and an FP8 footprint a cluster operator can place — not another
+          <a href="/aliceai-foundation-80b.html">AliceAI</a>
+          /
+          <a href="/deepseek-v4-1-flash.html">DeepSeek Flash</a>
+          /
+          <a href="/xiaomi-mimo-v2-6-pro.html">MiMo</a>
+          rematch. On <strong>October 3, 2026</strong>, Aleph Alpha released <strong>Kolibri-1</strong>.
+        </p>
+        <p>
+          Primary:
+          <a href="https://aleph-alpha.com/en/blog/kolibri-has-landed-a-sovereign-open-weight-model/" target="_blank" rel="noopener noreferrer">Aleph Alpha blog</a>
+          ·
+          <a href="https://huggingface.co/Aleph-Alpha/Kolibri-1" target="_blank" rel="noopener noreferrer">Hugging Face <code>Aleph-Alpha/Kolibri-1</code></a>
+          ·
+          <a href="https://aleph-alpha.com/downloads/tech-report.pdf" target="_blank" rel="noopener noreferrer">tech report PDF (189 pp)</a>
+          ·
+          <a href="https://github.com/Aleph-Alpha/aleph-alpha-inference" target="_blank" rel="noopener noreferrer">aleph-alpha-inference (vLLM plugin)</a>.
+          Numbers below are <strong>Aleph Alpha’s</strong> unless noted. Treat benches, Pareto charts, and concurrency claims as <strong>vendor measurements under their harness</strong>, not an independent bake-off.
+        </p>
+
+        <h2>Spec sheet (named numbers)</h2>
+        <div class="table-wrap" role="region" aria-label="Kolibri-1 named numbers spec sheet" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th></th>
+                <th>Kolibri-1 (Aleph Alpha)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Released</td>
+                <td><strong>October 3, 2026</strong> (Apache <strong>2.0</strong>; HF <code>Aleph-Alpha/Kolibri-1</code>)</td>
+              </tr>
+              <tr>
+                <td>Arch</td>
+                <td>MoE Transformer; <strong>78.1B</strong> total (<code>78,103,074,560</code>); <strong>3.46B</strong> active / token (<code>3,457,573,120</code>) ≈ <strong>4.4%</strong></td>
+              </tr>
+              <tr>
+                <td>Layers / MoE</td>
+                <td><strong>50</strong> MoE layers; <strong>384</strong> routed experts / layer; top-<strong>6</strong> + <strong>1</strong> shared; expert hidden <strong>512</strong>; width <strong>2560</strong>; GQA <strong>48</strong> / <strong>4</strong></td>
+              </tr>
+              <tr>
+                <td>Attention</td>
+                <td><strong>4:1</strong> SWA(<strong>512</strong>):full — <strong>40</strong> SWA + <strong>10</strong> full (every 5th); RoPE only on SWA; full layers have <strong>no</strong> positional encoding</td>
+              </tr>
+              <tr>
+                <td>Context</td>
+                <td>Native / trained max <strong>262,144</strong> (pretrain <strong>16k</strong> → mid <strong>64k</strong> → LC <strong>256k</strong>); quality + serving validated to <strong>1,048,576</strong>; recommend ≤<strong>262,144</strong> for efficiency / complex tasks</td>
+              </tr>
+              <tr>
+                <td>Train tokens</td>
+                <td>~<strong>24T</strong>: <strong>20T</strong> pretrain + <strong>3.44T</strong> mid + <strong>201B</strong> long-context (blog/tech report often round LC to <strong>200B</strong>)</td>
+              </tr>
+              <tr>
+                <td>Train hardware</td>
+                <td><strong>768×</strong> NVIDIA B200 (96× HGX 8×B200); pretrain <strong>EP8 / FSDP16 / DP6</strong>; mid + LC <strong>FSDP128 / DP6</strong>; Muon + Exact Quantile Balancing; ~<strong>21</strong> days pretrain (<strong>511</strong> h / <strong>392k</strong> GPUh); FLOPS <strong>6.4e23</strong> (HF)</td>
+              </tr>
+              <tr>
+                <td>Reasoning</td>
+                <td>Effort <strong>none / low / medium / high</strong></td>
+              </tr>
+              <tr>
+                <td>Serve footprint</td>
+                <td>~<strong>78 GB</strong> FP8 weights (<code>float8_e4m3fn</code> 128×128 blocks; embeddings / LM head / norms / router <strong>bfloat16</strong>); FP8 KV; min <strong>2×</strong> A100 80 GB / <strong>2×</strong> H100 / <strong>1×</strong> H200 / <strong>1×</strong> B200 / <strong>1×</strong> B300</td>
+              </tr>
+              <tr>
+                <td>Serve path</td>
+                <td><code>aleph-alpha-inference</code> vLLM plugin (pins vLLM <strong>0.29</strong>); <code>--kv-cache-dtype fp8 --reasoning-parser kolibri1 --tool-call-parser kolibri1</code>; beyond 256k: <code>--max-model-len 1048576</code> + HF override</td>
+              </tr>
+              <tr>
+                <td>Vendor benches (high effort, their harness)</td>
+                <td>AIME <strong>2026</strong> EN <strong>96.0</strong>; GPQA Diamond <strong>84.3</strong>; LiveCodeBench v6 <strong>85.9</strong>; TerminalBench <strong>2.1</strong> <strong>27.7</strong></td>
+              </tr>
+              <tr>
+                <td>Foils in their tables</td>
+                <td>Qwen3.6-<strong>35B-A3B</strong>; Nemotron 3 Super <strong>120B-A12B</strong>; Mistral Small 4 <strong>119B-A6B</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          That is a different purchase sentence from “another open MoE leaderboard dump.” This one is: <em>can I load a documented open MoE with hybrid SWA, named B200 topology, and a ~78 GB FP8 weight file onto a small GPU set with a vLLM plugin that already knows the reasoning / tool parsers</em> — and what does Aleph Alpha publish when they try.
+        </p>
+
+        <h2>What the architecture is selling</h2>
+        <p>
+          <a href="/olmo-core-3.html">Olmo-core 3</a>
+          was a <strong>trainer</strong> story.
+          <a href="/naive-n0-5-flash.html">Naive-N0.5-Flash</a>
+          was a <strong>decode</strong> story — zero full-attention layers, SWA+DSA, native 1M. Kolibri sits on the serving side of that second camp, but it does <strong>not</strong> delete full attention. It keeps a <strong>4:1</strong> hybrid: forty layers look only <strong>512</strong> tokens back; ten layers see the full context. Decode FLOPs and KV traffic in the SWA layers stay bounded as context grows; the full layers carry long-range state. RoPE lives only on the SWA blocks, which is how they claim extension past the <strong>256k</strong> trained window without YaRN-style scaling — validated, they say, to <strong>1,048,576</strong>.
+        </p>
+        <p>
+          The MoE side is sparse capacity: <strong>384</strong> narrow experts, top-<strong>6</strong>, plus one shared expert, <strong>3.46B</strong> active of <strong>78.1B</strong> total. Blog sizing: they preferred many small experts over fewer wide ones, and sized down from a <strong>123B</strong> candidate because two H100s held only <strong>3</strong> concurrent <strong>256k</strong> queries versus <strong>18</strong> concurrent and <strong>28%</strong> faster decode on <strong>78B</strong>. That is a <em>serving</em> argument, not a leaderboard argument.
+        </p>
+
+        <h2>Train recipe with named topology</h2>
+        <p>
+          The durable systems detail is the topology. Pretrain: <strong>768</strong> B200s, <strong>EP8</strong> inside the node (NVLink Gen5), <strong>FSDP16 × DP6</strong> across the SuperPOD — dense shards over <strong>EP×FSDP = 128</strong> GPUs per replica, experts over <strong>FSDP = 16</strong>. Mid and long-context drop EP and run <strong>FSDP128 / DP6</strong>. Token budget: <strong>20T</strong> at <strong>16k</strong>, <strong>3.44T</strong> at <strong>64k</strong>, <strong>~201B</strong> at <strong>256k</strong>. Optimizer: Muon on 2-D backbone weights; Exact Quantile Balancing for routing. HF lists energy ~<strong>9.5×10²</strong> MWh for pre/mid/LC (excludes SFT/RL) and knowledge cutoff <strong>EN/DE June 18, 2026</strong>. Post-train adds reasoning effort <strong>none / low / medium / high</strong> plus tool calling via the Kolibri parsers — cite SFT/RL scale claims as vendor process numbers.
+        </p>
+
+        <h2>Vendor benches — attribute, do not rematch</h2>
+        <p>
+          Aleph Alpha’s English table (highest reasoning effort, their harness) puts Kolibri at AIME <strong>2026</strong> <strong>96.0</strong>, GPQA Diamond <strong>84.3</strong>, LiveCodeBench v6 <strong>85.9</strong>, TerminalBench <strong>2.1</strong> <strong>27.7</strong>, beside Qwen3.6-35B-A3B, Nemotron 3 Super, and Mistral Small 4. Their blog frames a quality-vs-throughput Pareto frontier for English and German at <strong>8×</strong> B200. I am <strong>not</strong> claiming a rematch against
+          <a href="/aliceai-foundation-80b.html">AliceAI-Foundation-80B</a>,
+          <a href="/deepseek-v4-1-flash.html">DeepSeek-V4.1-Flash</a>, or
+          <a href="/xiaomi-mimo-v2-6-pro.html">MiMo-V2.6-Pro</a>.
+          Kolibri’s useful distinction is the <strong>open train recipe + hybrid SWA serve path + ~78 GB FP8 residency</strong>.
+        </p>
+
+        <h2>Where it sits next to other boards</h2>
+        <div class="table-wrap" role="region" aria-label="Where Kolibri-1 sits next to other boards" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Purchase</th>
+                <th>Product</th>
+                <th>What it buys</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Near-package LPDDR fanout (last night)</td>
+                <td><a href="/credo-omniconnect-weaver.html">Credo Weaver</a></td>
+                <td>Claimed HBM4-class edge BW at ~25× capacity</td>
+              </tr>
+              <tr>
+                <td>On-prem TTS on Blackhole (yesterday AM)</td>
+                <td><a href="/tenstorrent-lightning-v2.html">Lightning V2 × Tenstorrent</a></td>
+                <td>Measured L40S TTS cost/concurrency bake-off</td>
+              </tr>
+              <tr>
+                <td>Open MoE <em>trainer</em> (night before)</td>
+                <td><a href="/olmo-core-3.html">Ai2 Olmo-core 3</a></td>
+                <td>B300 capacity tax fix; training tok/s</td>
+              </tr>
+              <tr>
+                <td>Persistent CXL media</td>
+                <td><a href="/everspin-cxl-persyst-mram.html">Everspin PERSYST</a></td>
+                <td>Byte-addressable MRAM on CXL</td>
+              </tr>
+              <tr>
+                <td>Zero-full-attn SWA/DSA decode (shipped)</td>
+                <td><a href="/naive-n0-5-flash.html">Naive-N0.5-Flash</a></td>
+                <td>Native 1M with <strong>no</strong> full-attention layers</td>
+              </tr>
+              <tr>
+                <td><strong>Open serving MoE + full train recipe (this post)</strong></td>
+                <td><strong>Aleph Alpha Kolibri-1</strong></td>
+                <td><strong>78.1B/3.46B</strong>, <strong>4:1</strong> SWA(512), <strong>1M</strong> validated, <strong>EP8/FSDP16/DP6</strong> on <strong>768</strong> B200, ~<strong>78 GB</strong> FP8 + vLLM plugin</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Do not collapse this into “another European open model press release.” The fleet-operator claim is narrower: documented hybrid attention, an FP8 weight file that fits a dual-H100 / single-B200 class box, a vLLM plugin with reasoning and tool parsers, and a tech report that names the train topology.
+        </p>
+
+        <h2>Caveats</h2>
+        <ol>
+          <li>
+            <strong>Vendor harness.</strong> AIME / GPQA / LiveCodeBench / TerminalBench and the Pareto charts are Aleph Alpha’s. Independent reproductions are not this post.
+          </li>
+          <li>
+            <strong>1M is validated extension, not the daily default.</strong> Trained native max is <strong>262,144</strong>; they recommend ≤ that (~<strong>256k</strong>) for latency, throughput, and complex tasks. The <strong>1,048,576</strong> path needs the <code>--max-model-len</code> / HF override flags.
+          </li>
+          <li>
+            <strong>LC token rounding.</strong> HF card: <strong>201B</strong> long-context tokens; blog and tech report often say <strong>200B</strong>. Quote the source next to the number.
+          </li>
+          <li>
+            <strong>Not Naive’s architecture.</strong> Kolibri keeps <strong>10</strong> full-attention layers.
+            <a href="/naive-n0-5-flash.html">Naive-N0.5-Flash</a>
+            deleted full attention entirely (SWA+DSA). Same long-context problem family; different mechanism.
+          </li>
+          <li>
+            <strong>Plugin pin.</strong> <code>aleph-alpha-inference</code> currently targets vLLM <strong>0.29</strong>. Pin the container / wheel pair before you freeze a serve image.
+          </li>
+          <li>
+            <strong>EU / sovereignty framing is product marketing</strong> — orthogonal to whether the MoE hits your concurrency target.
+          </li>
+        </ol>
+
+        <h2>How I would evaluate</h2>
+        <ol>
+          <li>
+            Read Table 2 / §2.1 in the
+            <a href="https://aleph-alpha.com/downloads/tech-report.pdf" target="_blank" rel="noopener noreferrer">tech report</a>
+            and the HF architecture block before quoting <strong>4:1</strong> SWA or <strong>3.46B</strong> active.
+          </li>
+          <li>
+            Bring up <code>Aleph-Alpha/Kolibri-1</code> with the published vLLM flags on <strong>2×</strong> H100 or <strong>1×</strong> B200; measure TTFT and tok/s at <strong>64k / 256k</strong> with reasoning <strong>none</strong> vs <strong>high</strong>.
+          </li>
+          <li>
+            Re-run <strong>your</strong> AIME/GPQA/code suite; do not paste their TerminalBench <strong>27.7</strong> into a capacity plan.
+          </li>
+          <li>
+            Stress KV at long context with FP8 KV on and off; watch residency next to the ~<strong>78 GB</strong> weight floor.
+          </li>
+          <li>
+            Keep this board separate from Credo’s beachfront math, Lightning’s TTS CapEx table, and Olmo-core’s trainer tok/s — this is <strong>open MoE serve residency + hybrid SWA</strong>.
+          </li>
+        </ol>
+
+        <h2>Bottom line</h2>
+        <p>
+          On <strong>October 3, 2026</strong>, Aleph Alpha shipped <strong>Kolibri-1</strong>: an Apache <strong>2.0</strong> English–German MoE with <strong>78.1B</strong> total / <strong>3.46B</strong> active, <strong>50</strong> layers of <strong>384</strong> experts (top-<strong>6</strong> + <strong>1</strong> shared), hybrid <strong>4:1</strong> SWA(<strong>512</strong>):full attention, native <strong>256k</strong> validated to <strong>1,048,576</strong>, and a published train recipe on <strong>768</strong> B200s (<strong>EP8 / FSDP16 / DP6</strong>, ~<strong>24T</strong> tokens). Serving is concrete — ~<strong>78 GB</strong> FP8 weights, FP8 KV, a vLLM plugin with Kolibri reasoning and tool parsers, and min footprints down to dual-H100 / single-B200 class. Vendor benches (AIME <strong>2026</strong> EN <strong>96.0</strong>, GPQA Diamond <strong>84.3</strong>, LiveCodeBench v6 <strong>85.9</strong>, TerminalBench <strong>2.1</strong> <strong>27.7</strong>) are theirs; treat the Qwen3.6 / Nemotron Super / Mistral Small 4 columns the same way. Next to last night’s memory-fanout board and yesterday’s TTS ASIC board, this is the open <strong>serving</strong> MoE ticket with a full train recipe — not another AliceAI / DeepSeek Flash / MiMo rematch.
+        </p>
+        <p>
+          Create-only. Specs from Aleph Alpha’s October 3, 2026 blog, Hugging Face model card, 189-page tech report, and aleph-alpha-inference README. Update when third-party serve traces, multi-node EP bake-offs, or independent bench reproductions ship.
+        </p>
+        <p>
+          Sources:
+          <a href="https://aleph-alpha.com/en/blog/kolibri-has-landed-a-sovereign-open-weight-model/" target="_blank" rel="noopener noreferrer">Aleph Alpha Kolibri blog</a>
+          ·
+          <a href="https://huggingface.co/Aleph-Alpha/Kolibri-1" target="_blank" rel="noopener noreferrer">HF Kolibri-1</a>
+          ·
+          <a href="https://aleph-alpha.com/downloads/tech-report.pdf" target="_blank" rel="noopener noreferrer">tech report PDF</a>
+          ·
+          <a href="https://github.com/Aleph-Alpha/aleph-alpha-inference" target="_blank" rel="noopener noreferrer">aleph-alpha-inference</a>.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
