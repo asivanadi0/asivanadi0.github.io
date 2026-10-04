@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dist-MoE: Meta’s Blackwell SM100 MoE Kernels — BF16 / MXFP8 Train, NVFP4 Infer — Anpoo Sivanadi</title>
+  <meta name="description" content="Meta’s Oct 3 dist-moe v0.1.0 is CuTe DSL distributed MoE kernels for Blackwell SM100 — BF16 / MXFP8 E4M3 train+infer, NVFP4 infer-only — Meta’s docs, not a published throughput rematch." />
+  <link rel="canonical" href="https://asivanadi0.github.io/meta-dist-moe.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Dist-MoE: Meta’s Blackwell SM100 MoE Kernels — BF16 / MXFP8 Train, NVFP4 Infer — Anpoo Sivanadi" />
+  <meta property="og:description" content="Meta’s Oct 3 dist-moe v0.1.0 is CuTe DSL distributed MoE kernels for Blackwell SM100 — BF16 / MXFP8 E4M3 train+infer, NVFP4 infer-only — Meta’s docs, not a published throughput rematch." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/meta-dist-moe.html" />
+  <meta property="article:published_time" content="2026-10-03T18:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Dist-MoE: Meta’s Blackwell SM100 MoE Kernels — BF16 / MXFP8 Train, NVFP4 Infer</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-03">3 October 2026</time>
+          · Anpoo Sivanadi
+          · based on Meta’s Oct 3 dist-moe v0.1.0 PyPI upload and meta-pytorch/dist_moe README/docs
+        </p>
+        <p class="dek article-dek">
+          Meta’s Oct 3 dist-moe v0.1.0 is CuTe DSL distributed MoE kernels for Blackwell SM100 — BF16 / MXFP8 E4M3 train+infer, NVFP4 infer-only — Meta’s docs, not a published throughput rematch.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          This morning’s
+          <a href="/aleph-alpha-kolibri-1.html">Kolibri-1</a>
+          note was an open <em>serving</em> MoE — weights, hybrid SWA, a named B200 train recipe, and a ~78 GB FP8 footprint a cluster operator can place. Last night’s
+          <a href="/credo-omniconnect-weaver.html">Credo Weaver</a>
+          was <strong>near-package memory fanout</strong>.
+          <a href="/tenstorrent-lightning-v2.html">Lightning V2 on Tenstorrent</a>
+          was <strong>on-prem TTS</strong>.
+          <a href="/olmo-core-3.html">Olmo-core 3</a>
+          answered an open MoE <em>training</em> ticket. Tonight is the complementary <em>kernel infra</em> board under routed experts: on <strong>October 3, 2026</strong>, Meta uploaded <strong><code>dist-moe</code> v0.1.0</strong> to PyPI — CuTe DSL distributed Mixture-of-Experts kernels for NVIDIA <strong>SM100+</strong> (Blackwell).
+        </p>
+        <p>
+          Primary:
+          <a href="https://pypi.org/project/dist-moe/" target="_blank" rel="noopener noreferrer">PyPI <code>dist-moe</code></a>
+          ·
+          <a href="https://github.com/meta-pytorch/dist_moe" target="_blank" rel="noopener noreferrer">GitHub <code>meta-pytorch/dist_moe</code></a>
+          ·
+          <a href="https://github.com/meta-pytorch/dist_moe/tree/main/docs" target="_blank" rel="noopener noreferrer">docs</a>.
+          Specs below are <strong>Meta’s</strong> (README / docs / package metadata) unless noted. There are <strong>no</strong> published throughput benches in this drop — I am not inventing tok/s, TFLOP/s, or rematch tables.
+        </p>
+
+        <h2>Spec sheet (named numbers)</h2>
+        <div class="table-wrap" role="region" aria-label="Dist-MoE named numbers spec sheet" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th></th>
+                <th>Dist-MoE (<code>dist-moe</code> v0.1.0)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Uploaded</td>
+                <td><strong>2026-10-03T02:42:57Z</strong> (PyPI sdist)</td>
+              </tr>
+              <tr>
+                <td>Author / license</td>
+                <td>Meta Platforms, Inc.; <strong>BSD-3-Clause</strong></td>
+              </tr>
+              <tr>
+                <td>What it is</td>
+                <td>CuTe DSL distributed MoE kernels for NVIDIA <strong>SM100+</strong>; fused token dispatch + grouped expert GEMMs + token combine</td>
+              </tr>
+              <tr>
+                <td>Caller owns</td>
+                <td>Top-k expert IDs + scores; activations / weights passed into <code>routed_experts</code></td>
+              </tr>
+              <tr>
+                <td>Dist-MoE owns</td>
+                <td>Comm buffers, activation planning, scratch, graph-stable ops via <code>routed_experts</code></td>
+              </tr>
+              <tr>
+                <td>BF16</td>
+                <td><strong>Standard</strong> pipeline — <strong>train + infer</strong></td>
+              </tr>
+              <tr>
+                <td>MXFP8 E4M3</td>
+                <td><strong>Staged</strong> or <strong>Mega</strong> — <strong>train + infer</strong></td>
+              </tr>
+              <tr>
+                <td>NVFP4</td>
+                <td><strong>Staged</strong> or <strong>Mega</strong> — <strong>inference only</strong> (<code>Config(inference=True)</code>, <code>num_activation_slots=0</code>, prepared weights)</td>
+              </tr>
+              <tr>
+                <td>Validated stack</td>
+                <td>Linux <strong>ARM64</strong>; Blackwell <strong>SM100</strong>; Python <strong>3.12</strong>; PyTorch <strong>2.14.0+cu130</strong>; CUDA toolkit <strong>13.0.3.0</strong>; NVRTC <strong>13.0.88</strong>; CUDA Python <strong>13.4.1</strong>; NCCL <strong>2.30.7</strong>; Triton <strong>3.8.0</strong>; CUTLASS DSL <strong>4.6.1</strong></td>
+              </tr>
+              <tr>
+                <td>Runtime contract</td>
+                <td>No CPU fallback; import does <strong>not</strong> init CUDA or a process group; tests need <strong>≥2</strong> Blackwell GPUs</td>
+              </tr>
+              <tr>
+                <td>Context</td>
+                <td>Collective create; sequentially reusable; <strong>not</strong> reentrant; fixed <code>num_local_input_tokens</code> physical shape (pad if fewer); unequal token counts across EP ranks → <strong>device trap</strong></td>
+              </tr>
+              <tr>
+                <td>Pipeline</td>
+                <td>publish rows → route on GPU → <strong>W13</strong> → SwiGLU → <strong>W2</strong> → combine; <strong>FPROP</strong> / <strong>DGRAD</strong> / <strong>WGRAD</strong></td>
+              </tr>
+              <tr>
+                <td>Soft / hard capacity</td>
+                <td>Soft: <code>activation_slot_capacity_factor</code> (recompute on exhaustion); hard: <code>device_scratch_capacity_factor</code> / VMM <code>total_scratch_capacity_factor</code></td>
+              </tr>
+              <tr>
+                <td>Dependencies (PyPI)</td>
+                <td><code>torch&gt;=2.14</code>, <code>nvidia-cutlass-dsl</code>, <code>triton</code>, <code>cuda-python</code>, <code>apache-tvm-ffi</code> (+ packaging)</td>
+              </tr>
+              <tr>
+                <td>Primary author ack</td>
+                <td>Shikai Li et al.; open-sourced by Sanket Purandare</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          That is a different purchase sentence from “another open MoE checkpoint” or “another trainer drop.” This one is: <em>can I fuse dispatch, grouped expert GEMM, and combine on Blackwell with a named precision matrix and a context that owns the EP scratch</em> — and what does Meta document when they ship v0.1.0.
+        </p>
+
+        <h2>What it is selling</h2>
+        <p>
+          <a href="/aleph-alpha-kolibri-1.html">Kolibri</a>
+          answered the <strong>weights + serve path</strong> question.
+          <a href="/olmo-core-3.html">Olmo-core</a>
+          answered the <strong>trainer</strong> question. Dist-MoE sits one layer down: the <strong>kernels</strong> that execute routed experts once you already have IDs and scores.
+        </p>
+        <p>
+          The execution model is explicit. One call takes four caller-owned inputs (activations, top-k expert IDs, scores, expert weights) and one Dist-MoE-owned <strong>context</strong>. The hot path is:
+        </p>
+        <pre><code>caller routing
+  x_TD + expert IDs + scores
+        |
+        v
+publish rows -&gt; route on GPU -&gt; W13 -&gt; SwiGLU -&gt; W2 -&gt; combine
+        |                                           |
+        +------ context-owned communication --------+
+                    and temporary memory</code></pre>
+        <p>
+          Forward expert GEMM is <strong>FPROP</strong>. Backward splits into <strong>DGRAD</strong> (input grads) and <strong>WGRAD</strong> (weight grads). BF16 leaves <code>block_scaled=None</code>; activations and weights enter expert GEMMs in BF16 with FP32 accumulate. MXFP8 E4M3 quantizes activations after routing and accepts prepared weights; <strong>staged</strong> keeps distributed W13 and SwiGLU/W2 separate, <strong>Mega</strong> fuses both projections into a chunked pipeline. NVFP4 is infer-only and refuses a training context — you must set <code>inference=True</code>, zero activation slots, and prepare weights before the call.
+        </p>
+        <p>
+          Features Meta documents in this release (without claiming benches): prepared MXFP8/NVFP4 weights; activation slots; plain or clamped SwiGLU; fused post-expert RMSNorm; clip stats; in-place WGRAD accumulation into <code>parameter.grad</code>; VMM host-backed scratch; CUDA graphs + non-strict <code>make_fx</code>. Explicitly <strong>not</strong> supported: full <code>torch.compile</code>, strict export, NVFP4 training, MXFP8 E5M2, MXFP4, A8W4, expert borrowing, activation rings, communication quantization, interleaved Mega inference weights, TLX / hierarchical execution, synchronous block-scaled backends.
+        </p>
+
+        <h2>Where it sits next to other boards</h2>
+        <div class="table-wrap" role="region" aria-label="Where Dist-MoE sits next to other boards" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Purchase</th>
+                <th>Product</th>
+                <th>What it buys</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Open <em>serving</em> MoE weights (this AM)</td>
+                <td><a href="/aleph-alpha-kolibri-1.html">Kolibri-1</a></td>
+                <td>78.1B/3.46B, hybrid SWA, ~78 GB FP8 + vLLM plugin</td>
+              </tr>
+              <tr>
+                <td>Near-package LPDDR fanout (last night)</td>
+                <td><a href="/credo-omniconnect-weaver.html">Credo Weaver</a></td>
+                <td>Claimed HBM4-class edge BW at ~25× capacity</td>
+              </tr>
+              <tr>
+                <td>On-prem TTS on Blackhole</td>
+                <td><a href="/tenstorrent-lightning-v2.html">Lightning V2 × Tenstorrent</a></td>
+                <td>Measured L40S TTS cost/concurrency bake-off</td>
+              </tr>
+              <tr>
+                <td>Open MoE <em>trainer</em></td>
+                <td><a href="/olmo-core-3.html">Ai2 Olmo-core 3</a></td>
+                <td>B300 capacity tax fix; training tok/s</td>
+              </tr>
+              <tr>
+                <td>Persistent CXL media</td>
+                <td><a href="/everspin-cxl-persyst-mram.html">Everspin PERSYST</a></td>
+                <td>Byte-addressable MRAM on CXL</td>
+              </tr>
+              <tr>
+                <td>Zero-full-attn SWA/DSA decode</td>
+                <td><a href="/naive-n0-5-flash.html">Naive-N0.5-Flash</a></td>
+                <td>Native 1M with <strong>no</strong> full-attention layers</td>
+              </tr>
+              <tr>
+                <td><strong>Blackwell MoE <em>kernels</em> (this post)</strong></td>
+                <td><strong>Meta Dist-MoE</strong></td>
+                <td><strong>SM100+</strong> fused dispatch + grouped GEMM + combine; BF16/MXFP8 train+infer; NVFP4 infer</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Do not collapse this into “another Meta PyTorch release” or an Olmo/Kolibri rematch. Different layer: <strong>kernels</strong> vs <strong>trainer</strong> vs <strong>weights</strong>. Dist-MoE assumes you already routed; it does not replace Megatron-Core schedules or ship a checkpoint.
+        </p>
+
+        <h2>Caveats</h2>
+        <ol>
+          <li>
+            <strong>ARM64 + Blackwell-only validated stack.</strong> Meta’s documented runtime is Linux ARM64, SM100-class Blackwell, Python 3.12, PyTorch 2.14.0+cu130, CUDA 13.0.3.0 toolkit, and the NCCL / Triton / CUTLASS DSL pins above. Other hosts are outside the published validation box.
+          </li>
+          <li>
+            <strong>Fixed token shape.</strong> <code>Config.num_local_input_tokens</code> is a physical shape, not a soft max. Every rank and every invocation must pass exactly that many rows — pad and zero-score if you have fewer. Unequal physical counts across EP ranks trigger a <strong>device-side trap</strong> that terminates the iteration and invalidates the CUDA context; it is not a recoverable Python error.
+          </li>
+          <li>
+            <strong>No CPU fallback.</strong> Import does not initialize CUDA or a process group, but execution has no CPU path. Tests require at least two supported Blackwell GPUs.
+          </li>
+          <li>
+            <strong>NVFP4 train unsupported.</strong> NVFP4 is inference-only in this release. Training stays on BF16 Standard or MXFP8 E4M3 Staged/Mega.
+          </li>
+          <li>
+            <strong>Not a Megatron / Olmo-core rematch.</strong> Dist-MoE is the fused kernel layer under routed experts.
+            <a href="/olmo-core-3.html">Olmo-core 3</a>
+            is a trainer stack with B300 systems numbers.
+            <a href="/aleph-alpha-kolibri-1.html">Kolibri-1</a>
+            is open serving weights. Different boards; do not paste Dist-MoE into a tok/s bake-off column Meta did not publish.
+          </li>
+          <li>
+            <strong>Context lifetime.</strong> Contexts are collective to create, sequentially reusable, and not reentrant. Training-context <code>torch.no_grad()</code> evaluation is not the same as <code>Config(inference=True)</code>. CUDA-graph topologies differ across those modes and must be captured separately.
+          </li>
+          <li>
+            <strong>Soft vs hard memory.</strong> Activation-slot overflow selects recomputation. Total scratch overflow is fatal — the overflowing rank prints required vs available rows and traps before publishing unsafe routing metadata; peers may time out. Plan with <code>plan_memory</code> before <code>create_context</code>.
+          </li>
+        </ol>
+
+        <h2>How I would evaluate</h2>
+        <ol>
+          <li>
+            Read the
+            <a href="https://github.com/meta-pytorch/dist_moe" target="_blank" rel="noopener noreferrer">BF16 quickstart</a>
+            and the precision guides under
+            <a href="https://github.com/meta-pytorch/dist_moe/tree/main/docs" target="_blank" rel="noopener noreferrer"><code>docs/</code></a>
+            before quoting Staged vs Mega or NVFP4 constraints.
+          </li>
+          <li>
+            Stand up the validated stack (ARM64 + ≥2 Blackwell GPUs + the pinned PyTorch/CUDA/NCCL/Triton/CUTLASS DSL set) and run <code>tests/test_dist_moe.py</code> — configuration, kernels, autograd, non-strict <code>make_fx</code>, CUDA graphs, two-rank execution.
+          </li>
+          <li>
+            Call <code>plan_memory(config, ep_size=...).explain()</code> and watch balanced/device/total rows plus soft activation-slot vs hard scratch limits before you size production EP.
+          </li>
+          <li>
+            Exercise BF16 train → MXFP8 train → NVFP4 infer with prepared weights; confirm <code>inference=True</code> + zero slots on the NVFP4 path.
+          </li>
+          <li>
+            Keep this board separate from Kolibri’s serve residency, Olmo-core’s trainer tok/s, Credo’s beachfront math, and Lightning’s TTS CapEx table — this is <strong>SM100 MoE kernel infra</strong>.
+          </li>
+        </ol>
+
+        <h2>Bottom line</h2>
+        <p>
+          On <strong>October 3, 2026</strong>, Meta shipped <strong><code>dist-moe</code> v0.1.0</strong>: CuTe DSL distributed MoE kernels for NVIDIA <strong>SM100+</strong>, fused token dispatch + grouped expert GEMMs + token combine, with caller-provided top-k IDs/scores and Dist-MoE-owned comm buffers, activation planning, and scratch via <code>routed_experts</code>. Precision matrix: <strong>BF16</strong> Standard and <strong>MXFP8 E4M3</strong> Staged/Mega for train+infer; <strong>NVFP4</strong> Staged/Mega for inference only. Validated on Linux ARM64 + Blackwell SM100 with Python 3.12 / PyTorch 2.14.0+cu130 / CUDA 13.0.3.0 / NCCL 2.30.7 / Triton 3.8.0 / CUTLASS DSL 4.6.1. No CPU fallback; fixed local token shape; no published throughput benches in this drop. Primary author acknowledgement: Shikai Li et al.; open-sourced by Sanket Purandare. Next to this morning’s open <strong>serving</strong> MoE board, tonight is the complementary <strong>Blackwell kernel</strong> ticket under routed experts — not an Olmo-core trainer rematch and not a Kolibri weights rematch.
+        </p>
+        <p>
+          Create-only. Specs from Meta’s October 3, 2026 <code>dist-moe</code> v0.1.0 PyPI upload and <code>meta-pytorch/dist_moe</code> README/docs. Update when Meta publishes benches, expands the validated host matrix beyond ARM64+SM100, or adds NVFP4 training / full <code>torch.compile</code> support.
+        </p>
+        <p>
+          Sources:
+          <a href="https://pypi.org/project/dist-moe/" target="_blank" rel="noopener noreferrer">PyPI dist-moe</a>
+          ·
+          <a href="https://github.com/meta-pytorch/dist_moe" target="_blank" rel="noopener noreferrer">GitHub meta-pytorch/dist_moe</a>
+          ·
+          <a href="https://github.com/meta-pytorch/dist_moe/tree/main/docs" target="_blank" rel="noopener noreferrer">docs</a>.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
