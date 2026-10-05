@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>vLLM 0.31 Fast Restart: A GPU Weight-Cache Daemon and CRIU Engine Snapshots — Anpoo Sivanadi</title>
+  <meta name="description" content="vLLM v0.31.0 Fast restart: a GPU weight-cache daemon and experimental CRIU engine snapshots — project claims of minutes-to-seconds restarts, with an open fingerprint bug and Kubernetes caveats." />
+  <link rel="canonical" href="https://asivanadi0.github.io/vllm-0-31-fast-restart.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="vLLM 0.31 Fast Restart: A GPU Weight-Cache Daemon and CRIU Engine Snapshots — Anpoo Sivanadi" />
+  <meta property="og:description" content="vLLM v0.31.0 Fast restart: a GPU weight-cache daemon and experimental CRIU engine snapshots — project claims of minutes-to-seconds restarts, with an open fingerprint bug and Kubernetes caveats." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/vllm-0-31-fast-restart.html" />
+  <meta property="article:published_time" content="2026-10-05T06:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>vLLM 0.31 Fast Restart: A GPU Weight-Cache Daemon and CRIU Engine Snapshots</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-05">5 October 2026</time>
+          · Anpoo Sivanadi
+          · based on vLLM’s v0.31.0 release notes, preload docs, and Fast Start / snapshot PRs
+        </p>
+        <p class="dek article-dek">
+          vLLM v0.31.0 Fast restart: a GPU weight-cache daemon and experimental CRIU engine snapshots — project claims of minutes-to-seconds restarts, with an open fingerprint bug and Kubernetes caveats.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          The slowest part of most of my inference rollouts is the gap between a pod getting scheduled and the engine reporting ready: load weights, shard them, run quantization post-processing, compile, warm up, capture graphs. Multiply that by every config change and every crash loop, and you get a lot of expensive GPUs doing nothing.
+        </p>
+        <p>
+          vLLM
+          <a href="https://github.com/vllm-project/vllm/releases/tag/v0.31.0" target="_blank" rel="noopener noreferrer">v0.31.0</a>
+          was published at 06:44 UTC on October 5, 2026 (11:44 PM PT on October 4). The release notes count 717 commits from 307 contributors, 96 of them new. There is plenty for kernel people, including more SM100 work for
+          <a href="/deepseek-v4-1-flash.html">DeepSeek-V4.1-Flash</a>.
+          The part I care about is the one the release calls <strong>Fast restart</strong>: a <code>vllm preload</code> command that keeps post-quantized weights resident in GPU memory across engine restarts, plus experimental initialized-engine snapshots built on CRIU. They are separate mechanisms that I’d deploy differently.
+        </p>
+
+        <h2>Mechanism 1: <code>vllm preload</code> and the <code>ipc_cache</code> loader</h2>
+        <p>
+          The design is laid out in the
+          <a href="https://github.com/vllm-project/vllm/issues/56049" target="_blank" rel="noopener noreferrer">Fast Start tracking issue</a>
+          and the original
+          <a href="https://github.com/vllm-project/vllm/pull/54921" target="_blank" rel="noopener noreferrer">weight daemon PR</a>.
+          A persistent daemon per GPU loads its rank’s shard once, runs quantization post-processing, and exports every parameter and buffer as a CUDA IPC handle. An engine started with <code>--load-format ipc_cache</code> builds its model on the meta device and asks the daemon on its GPU for the tensors over a Unix domain socket. The
+          <a href="https://github.com/vllm-project/vllm/pull/56680" target="_blank" rel="noopener noreferrer">CLI PR</a>
+          wrapped this as one command:
+        </p>
+        <pre><code>vllm preload --model meta-llama/Llama-3.1-8B-Instruct --tensor-parallel-size 4
+vllm serve meta-llama/Llama-3.1-8B-Instruct --tensor-parallel-size 4 --load-format ipc_cache</code></pre>
+        <p>
+          According to the
+          <a href="https://docs.vllm.ai/en/latest/features/preload/" target="_blank" rel="noopener noreferrer">preload docs</a>,
+          restart time drops “from minutes (disk load + quantization processing) to seconds.” That is the project’s claim; I found no benchmark table for the daemon path, so I won’t put a number on it. The 0.31.0 additions are data-parallel support, MTP draft models, a <code>/health</code> endpoint and a readiness wait.
+        </p>
+        <p>
+          From the docs, before you build on it:
+        </p>
+        <ul>
+          <li>
+            <strong>Two modes.</strong> <code>zero_copy</code> (the default) maps the daemon’s allocations directly. The daemon has to outlive the engine, and each GPU holds one copy of the weights. <code>copy</code> clones every tensor into the engine and then releases the daemon’s cache.
+          </li>
+          <li>
+            <strong>Sleep mode conflicts.</strong> In <code>zero_copy</code>, the docs warn against sleep mode (CuMemAllocator weight offloading), because the weights live in the daemon’s IPC allocations.
+          </li>
+          <li>
+            <strong>Fallback is on by default.</strong> If the daemon is missing or the fingerprint doesn’t match, the engine loads from disk. <code>connect_timeout_s</code> defaults to 5.0 and <code>state_timeout_s</code> to 300.0.
+          </li>
+          <li>
+            <strong>Identity.</strong> Socket paths come from the GPU UUID, so they survive <code>CUDA_VISIBLE_DEVICES</code> remapping, and the engine checks that the daemon’s GPU UUID matches its own device.
+          </li>
+          <li>
+            <strong>Trust boundary.</strong> The socket protocol uses pickle. It is restricted to the same user on the same node: a <code>0700</code> directory, <code>0600</code> sockets, and <code>SO_PEERCRED</code> peer-UID checks on Linux. Treat it as a local-only interface.
+          </li>
+          <li>
+            <strong>Lifecycle.</strong> An exclusive lock file per GPU makes a second daemon fail fast. If any rank dies during startup, the launcher exits, and <code>SIGTERM</code> tears down every rank and frees the memory.
+          </li>
+        </ul>
+
+        <h3>The Kubernetes wrinkle</h3>
+        <p>
+          The most useful operator detail isn’t in the release yet.
+          <a href="https://github.com/vllm-project/vllm/pull/60006" target="_blank" rel="noopener noreferrer">PR #60006</a>,
+          opened on October 5 UTC and still open, rewrites the preload guide with Docker and Kubernetes patterns. Its main point: GPU device plugins assign a GPU to one container, so you can’t just run the daemon as a sidecar on the same GPU. The proposed pattern puts the daemon and a <code>vllm serve</code> restart loop in the same container. Startup and liveness probes point at the daemon’s health port, and readiness points at the engine. For two-container Docker setups it lists <code>--ipc=host</code>, <code>--pid=host</code>, a shared socket volume, and the same GPUs, UID and image tag. The reasoning given is that legacy CUDA IPC handles are tied to the exporting process’s PID namespace, and <code>/dev/shm</code> has to be shared. The author says plainly that the Docker and Kubernetes examples have <strong>not</strong> been run on GPU hardware.
+        </p>
+        <p>
+          That changes how I’d write the pod spec. A Deployment rollout that replaces the pod replaces the daemon too, so you’re back to a cold load. The benefit only shows up when the engine process restarts <em>inside</em> a pod that stays alive: an OOM or crash, a flag change pushed through a supervisor, or a canary engine on the same GPUs. You also have to account for memory. A log quoted in
+          <a href="https://github.com/vllm-project/vllm/issues/59647" target="_blank" rel="noopener noreferrer">issue #59647</a>
+          shows the engine reporting that “of the 9.48 GiB utilization budget, 1.12 GiB is externally held.” Your <code>gpu-memory-utilization</code> math now has to cover a second process.
+        </p>
+
+        <h3>Open correctness bug</h3>
+        <p>
+          <a href="https://github.com/vllm-project/vllm/issues/59647" target="_blank" rel="noopener noreferrer">Issue #59647</a>
+          is the reason I’d hold off on using this in a fine-tuning loop. The checkpoint fingerprint hashes only safetensors headers, meaning tensor names, dtypes, shapes and offsets, not weight values. For Qwen3-0.6B, the reporter measured the hashed header at 35,560 bytes of a 1,503,300,328-byte file (0.0024%). If a daemon is holding checkpoint A and you start an engine on checkpoint B with the same layout (a base model and its fine-tune, or step 0 versus step 100), the engine maps A’s weights. Neither process logs a warning, and the API still reports B. A second user reproduced it on 0.30.0 and confirmed that a <em>different</em> layout does fall back to disk. The fix,
+          <a href="https://github.com/vllm-project/vllm/pull/59648" target="_blank" rel="noopener noreferrer">PR #59648</a>,
+          adds file size and the first 1 KiB of each tensor’s data region to the fingerprint. It was still open as of October 4, and its author notes that a change limited to bytes past the first 1 KiB of every tensor still wouldn’t change the key. Until that lands, my rule is one daemon per served checkpoint. After any weight swap, I’d compare a deterministic prompt between <code>ipc_cache</code> and <code>auto</code> before trusting the result.
+        </p>
+
+        <h2>Mechanism 2: <code>vllm snapshot</code> with CRIU</h2>
+        <p>
+          <a href="https://github.com/vllm-project/vllm/pull/51360" target="_blank" rel="noopener noreferrer">PR #51360</a>
+          adds <code>vllm snapshot create | inspect | restore</code>. Create starts the engine, records a one-token oracle, uses sleep level 2 to release weights and KV cache, and then dumps the process tree with CRIU. Restore reloads that state before binding HTTP, replays the oracle, and fails closed if the token, text or log probability doesn’t match.
+        </p>
+        <p>
+          The author’s measured numbers: on one H100 PCIe 80 GB with Qwen3-32B BF16 at TP1, an ordinary warm start took a median 54.70 s against 20.38 s for a snapshot restore, a 62.7% reduction (n=3 per arm). The artifact was about 5.88 GB, and the 65.54 GB model tree stayed outside it. Creating the snapshot took 78.53 s (n=1), so the author puts break-even at the third activation. An independent tester on H20 with Qwen3-8B reported 26.64 s for a warm <code>vllm serve</code> against 7.05 s for a minimized restore (73.6%). A full-state artifact in their test was 52.89 GB and restored in 20.53 s.
+        </p>
+        <p>
+          The supported envelope is narrow, and for Kubernetes it’s the part that matters:
+        </p>
+        <ul>
+          <li>
+            Linux x86-64, one NVIDIA GPU, TP1/PP1/DP1. Arm64 images leave out the snapshot runtime, and so do CUDA 12.x images, because the checkpoint helper needs CUDA 13 headers (<a href="https://github.com/vllm-project/vllm/pull/59118" target="_blank" rel="noopener noreferrer">#59118</a>).
+          </li>
+          <li>
+            Same host and same GPU, with matching driver, kernel, Python, PyTorch, vLLM, model revision and engine arguments. No cross-host migration and no GPU relocation.
+          </li>
+          <li>
+            Root or passwordless <code>sudo</code>. The H200 CI acceptance ran in privileged Docker with <code>kernel.io_uring_disabled=2</code>.
+          </li>
+          <li>
+            The artifact can contain process memory and secrets, so it has to stay private.
+          </li>
+          <li>
+            Creation needs a quiet process tree, so create runs with <code>HF_HUB_OFFLINE=1</code>.
+          </li>
+        </ul>
+        <p>
+          Privileged pods, a node-level sysctl and node-pinned artifacts holding secrets would be a hard security review in most clusters I’ve worked with. Today this is a tool for single-tenant or bare-metal nodes, not a shared serving pool. The PR thread already discusses follow-ups, including cross-host restore and artifacts that break when JIT cache files rotate.
+        </p>
+
+        <h2>Smaller changes operators will notice</h2>
+        <ul>
+          <li>
+            <code>--max-num-active-seqs</code> caps RUNNING admission separately from <code>max_num_seqs</code>.
+          </li>
+          <li>
+            KV offloading checks cgroup memory before allocating shared memory, and UniProc startup threads are bounded by the CPU quota. Both help inside containers with limits.
+          </li>
+          <li>
+            <strong>Breaking:</strong> per-request <code>mm_processor_kwargs</code> and <code>media_io_kwargs</code> are rejected unless the server starts with <code>--trust-request-mm-kwargs</code>. The LoRA path is now part of the prefix-cache block hash.
+          </li>
+          <li>
+            The default image is CUDA 13.0; a <code>-cu129</code> tag is still published.
+          </li>
+        </ul>
+
+        <h2>How I’d use it</h2>
+        <p>
+          For a TP-sharded deployment that restarts its engine often (config iteration, crash recovery, A/B on the same node), I’d run the preload daemon inside the serving container, keep <code>fallback</code> on, and leave room in the memory budget for the externally held weights. I’d also keep it off any pod whose checkpoint changes until #59648 merges. I’d test snapshots on a dedicated TP1 box, because the break-even math there is straightforward. Neither fixes a cold node, where weights still come from storage. Both target the restart loop, which is where a lot of my wasted GPU-minutes go.
+        </p>
+        <p>
+          Last night’s
+          <a href="/meta-tlx-jfa.html">TLX Jagged Flash Attention</a>
+          piece was about making a busy GPU faster. This release is about the minutes before it does any work at all.
+        </p>
+        <p>
+          Create-only. Specs from vLLM’s October 5, 2026 v0.31.0 release notes, preload docs, Fast Start tracking issue, and the snapshot / Kubernetes PRs cited above. Update when the fingerprint fix merges, when the Kubernetes preload guide is GPU-validated, or when the project publishes a daemon bench table.
+        </p>
+        <p>
+          Sources:
+          <a href="https://github.com/vllm-project/vllm/releases/tag/v0.31.0" target="_blank" rel="noopener noreferrer">vLLM v0.31.0</a>
+          ·
+          <a href="https://docs.vllm.ai/en/latest/features/preload/" target="_blank" rel="noopener noreferrer">preload docs</a>
+          ·
+          <a href="https://github.com/vllm-project/vllm/issues/56049" target="_blank" rel="noopener noreferrer">Fast Start tracking issue</a>
+          ·
+          <a href="https://github.com/vllm-project/vllm/pull/54921" target="_blank" rel="noopener noreferrer">weight daemon PR</a>
+          ·
+          <a href="https://github.com/vllm-project/vllm/pull/56680" target="_blank" rel="noopener noreferrer">CLI PR</a>
+          ·
+          <a href="https://github.com/vllm-project/vllm/pull/51360" target="_blank" rel="noopener noreferrer">snapshot PR #51360</a>
+          ·
+          <a href="https://github.com/vllm-project/vllm/issues/59647" target="_blank" rel="noopener noreferrer">issue #59647</a>
+          ·
+          <a href="https://github.com/vllm-project/vllm/pull/59648" target="_blank" rel="noopener noreferrer">PR #59648</a>
+          ·
+          <a href="https://github.com/vllm-project/vllm/pull/60006" target="_blank" rel="noopener noreferrer">PR #60006</a>
+          ·
+          <a href="https://github.com/vllm-project/vllm/pull/59118" target="_blank" rel="noopener noreferrer">PR #59118</a>.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
