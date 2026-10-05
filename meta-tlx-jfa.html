@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TLX JFA: Meta’s Blackwell Attention Kernel — ~13% Fwd / ~50% Bwd vs FA4 on Jagged — Anpoo Sivanadi</title>
+  <meta name="description" content="Meta’s Oct 1 TLX Jagged Flash Attention is a Blackwell B200 kernel for packed jagged / broadcast-Q — Meta’s bf16 benches claim ~+13% forward / ~+50% backward vs May 2026 FA4 on their shapes, not an independent rematch." />
+  <link rel="canonical" href="https://asivanadi0.github.io/meta-tlx-jfa.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="TLX JFA: Meta’s Blackwell Attention Kernel — ~13% Fwd / ~50% Bwd vs FA4 on Jagged — Anpoo Sivanadi" />
+  <meta property="og:description" content="Meta’s Oct 1 TLX Jagged Flash Attention is a Blackwell B200 kernel for packed jagged / broadcast-Q — Meta’s bf16 benches claim ~+13% forward / ~+50% backward vs May 2026 FA4 on their shapes, not an independent rematch." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/meta-tlx-jfa.html" />
+  <meta property="article:published_time" content="2026-10-04T18:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>TLX JFA: Meta’s Blackwell Attention Kernel — ~13% Fwd / ~50% Bwd vs FA4 on Jagged</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-04">4 October 2026</time>
+          · Anpoo Sivanadi
+          · based on Meta’s Oct 1 PyTorch blog on TLX Jagged Flash Attention and facebookresearch/ads_model_kernel_library tlx_jfa
+        </p>
+        <p class="dek article-dek">
+          Meta’s Oct 1 TLX Jagged Flash Attention is a Blackwell B200 kernel for packed jagged / broadcast-Q — Meta’s bf16 benches claim ~+13% forward / ~+50% backward vs May 2026 FA4 on their shapes, not an independent rematch.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          Last night’s
+          <a href="/meta-dist-moe.html">Dist-MoE</a>
+          note was Meta’s <strong>Blackwell SM100 MoE kernels</strong> — fused dispatch, grouped expert GEMM, and combine with a named BF16 / MXFP8 / NVFP4 matrix. Yesterday AM’s
+          <a href="/aleph-alpha-kolibri-1.html">Kolibri-1</a>
+          was open <em>serving</em> MoE weights.
+          <a href="/olmo-core-3.html">Olmo-core 3</a>
+          answered the open MoE <em>trainer</em>. Tonight is the complementary <em>attention</em> piece: on <strong>October 1, 2026</strong>, the PyTorch blog published <strong>Optimizing Jagged Flash Attention with TLX</strong> — Meta’s production jagged / broadcast-Q attention kernel for the Generative Ads Model (GEM), rewritten in <strong>TLX</strong> (Triton Low-level Extensions) for NVIDIA <strong>B200</strong>, with a named comparison against open-source FlashAttention-4.
+        </p>
+        <p>
+          Primary:
+          <a href="https://pytorch.org/blog/optimizing-jagged-flash-attention-with-tlx-the-road-toward-sota-fa4-on-blackwell/" target="_blank" rel="noopener noreferrer">PyTorch blog</a>
+          ·
+          <a href="https://github.com/facebookresearch/ads_model_kernel_library/tree/main/tlx_jfa" target="_blank" rel="noopener noreferrer">GitHub <code>tlx_jfa</code></a>.
+          Every number below is Meta’s, from the blog and linked repo, measured on their shapes. Meta did not publish tok/s or MFU, so I don’t either.
+        </p>
+
+        <h2>Spec sheet (named numbers)</h2>
+        <div class="table-wrap" role="region" aria-label="TLX JFA named numbers spec sheet" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th></th>
+                <th>TLX Jagged Flash Attention (JFA)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Published</td>
+                <td><strong>2026-10-01</strong> (PyTorch blog; “Last updated: 2026-10-01”)</td>
+              </tr>
+              <tr>
+                <td>What it is</td>
+                <td>Jagged Flash Attention for Meta GEM on NVIDIA <strong>Blackwell B200</strong>, authored in <strong>TLX</strong></td>
+              </tr>
+              <tr>
+                <td>Workload</td>
+                <td>Packed variable-length (jagged) sequences + offsets; production case <strong>broadcast-Q</strong> (<code>broadcast_q=True</code>) — one dense Q against jagged K/V</td>
+              </tr>
+              <tr>
+                <td>Baseline</td>
+                <td>Open-source FlashAttention-4 (<strong>May 2026</strong> CuteDSL)</td>
+              </tr>
+              <tr>
+                <td>Code size (Meta claim)</td>
+                <td>TLX JFA ~<strong>3.2K</strong> lines Triton-level vs FA4 ~<strong>10K</strong> lines CuteDSL (~<strong>3×</strong> less)</td>
+              </tr>
+              <tr>
+                <td>Jagged comparison (bf16, B200)</td>
+                <td>Forward ~<strong>+13%</strong> avg vs FA4; backward ~<strong>+50%</strong> avg vs FA4</td>
+              </tr>
+              <tr>
+                <td>Dense comparison (bf16, B200)</td>
+                <td>Forward ~<strong>87%</strong> of FA4; backward ~<strong>+17%</strong> vs FA4</td>
+              </tr>
+              <tr>
+                <td>Dense shape cited</td>
+                <td>B=<strong>768</strong>, H=<strong>4</strong>, head_dim=<strong>128</strong></td>
+              </tr>
+              <tr>
+                <td>Precision in main comparison</td>
+                <td><strong>bfloat16</strong></td>
+              </tr>
+              <tr>
+                <td>Structural</td>
+                <td>Warp specialization; explicit SMEM/TMEM; producer/consumer barriers; persistent CTAs; <strong>CLC</strong> (Cluster Launch Control)</td>
+              </tr>
+              <tr>
+                <td>Soft balancing (fwd)</td>
+                <td>Host sort + zigzag tile→SM schedule — Meta claims ~<strong>20%</strong> forward recovery vs naive mapping</td>
+              </tr>
+              <tr>
+                <td>dQ epilogue</td>
+                <td>Multi-stage double-buffered SMEM staging; early TMEM release recovered <strong>+8–11%</strong> tensor-core utilization in waterfall tests</td>
+              </tr>
+              <tr>
+                <td>2-CTA MMA (bwd)</td>
+                <td>Paired-CTA tcgen05 on broadcast-Q HEAD_DIM=<strong>128</strong> — Meta claims ~<strong>+12%</strong> throughput / <strong>−11%</strong> latency vs single-CTA</td>
+              </tr>
+              <tr>
+                <td>Forks documented</td>
+                <td><strong>MXFP8</strong> (E4M3 + E8M0 block scales); <strong>block-sparse</strong> top-k (~<strong>1.3–1.5×</strong> forward vs dense at <strong>0.5</strong> selection)</td>
+              </tr>
+              <tr>
+                <td>Code</td>
+                <td>
+                  <a href="https://github.com/facebookresearch/ads_model_kernel_library/tree/main/tlx_jfa" target="_blank" rel="noopener noreferrer"><code>tlx_jfa</code></a>
+                  under <code>ads_model_kernel_library</code>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          The question this post answers is narrow and useful: can you beat FA4 on the jagged broadcast-Q shapes that dominate a production ads ranking model, in readable TLX rather than 10K lines of CuteDSL? Meta says yes, and shows the work.
+        </p>
+
+        <h2>What it is selling</h2>
+        <p>
+          Dist-MoE sits under <strong>routed experts</strong> once you already have IDs and scores. TLX JFA sits under <strong>attention</strong> on packed jagged sequences — the kernel Meta says is the single slowest piece inside GEM. Padding those sequences to a fixed length can waste up to <strong>50%</strong> of compute (Meta’s earlier GEM writeup, cited from the Oct 1 post). JFA runs FlashAttention directly on contiguous packed Q/K/V plus an offsets tensor, without materializing padded tokens.
+        </p>
+        <p>
+          Plain Triton left on-chip movement and scheduling to the compiler. TLX exposes the knobs Meta needs on Blackwell: explicit SMEM/TMEM allocation, <code>async_task</code> warp specialization, barriers, async TMA / MMA, and Cluster Launch Control. The CTA splits into role-specialized warps — TMA loads, tensor-core matmuls, softmax/correction, epilogue store, plus a dedicated dQ-reduction warp in the backward — so tensor cores stay on back-to-back MMAs while softmax runs concurrently.
+        </p>
+        <p>
+          The production case shapes the design: a single dense Q is broadcast across every sequence in the batch, so the backward <strong>dQ</strong> must be summed across the entire batch. That turns the dQ epilogue into a contended cross-program reduction — the #1 backward bottleneck Meta’s Triton-MPP barrier analysis pinned at roughly <strong>9–11%</strong> lost tensor-core utilization before the multi-stage staging fix.
+        </p>
+
+        <h2>Structural changes and layered opts (Meta’s list)</h2>
+        <p>
+          <strong>Structural:</strong> warp specialization + explicit SMEM/TMEM + barrier pipelining; persistent CTAs (one per SM); triple-buffered K/V; TMEM aliasing across non-overlapping lifetimes.
+        </p>
+        <p>
+          <strong>On top of that structure:</strong>
+        </p>
+        <ol>
+          <li>
+            <strong>Jagged tile scheduling.</strong> Forward: sort tiles by KV workload, zigzag across SMs (~<strong>20%</strong> forward recovery claimed). Backward: precompute valid <code>(batch, head, K/V-block)</code> tiles, round-robin for L2 reuse, pad to cluster size for the 2-CTA path. Residual runtime variance handed to <strong>CLC</strong>.
+          </li>
+          <li>
+            <strong>Multi-stage dQ staging.</strong> Double-buffered SMEM pipeline so one slice’s HBM reduce-add overlaps the next slice’s TMEM→SMEM copy.
+          </li>
+          <li>
+            <strong>Early TMEM release.</strong> Pre-load the last 1–2 dQ slices into registers, free TMEM, let the MMA warp start the next tile’s dQ matmul while stores finish — waterfall tests recovered <strong>+8–11%</strong> TC utilization.
+          </li>
+          <li>
+            <strong>Loop peeling.</strong> Branch-free bulk KV pass + tiny masked tail; Meta’s point is register pressure, not the cheap branch itself.
+          </li>
+          <li>
+            <strong>2-CTA collaborative MMA (backward).</strong> Two CTAs cooperate on a wider matmul over adjacent K/V blocks; Meta claims ~<strong>+12%</strong> throughput / <strong>−11%</strong> latency on broadcast-Q HEAD_DIM=128.
+          </li>
+        </ol>
+
+        <h2>Where it sits next to earlier posts</h2>
+        <div class="table-wrap" role="region" aria-label="Where TLX JFA sits next to other boards" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Layer</th>
+                <th>Project</th>
+                <th>What it gives you</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Blackwell MoE <em>kernels</em> (last night)</td>
+                <td><a href="/meta-dist-moe.html">Meta Dist-MoE</a></td>
+                <td>SM100+ fused dispatch + grouped GEMM + combine; BF16/MXFP8 train+infer; NVFP4 infer</td>
+              </tr>
+              <tr>
+                <td>Open <em>serving</em> MoE weights (yesterday AM)</td>
+                <td><a href="/aleph-alpha-kolibri-1.html">Kolibri-1</a></td>
+                <td>78.1B/3.46B, hybrid SWA, ~78 GB FP8 + vLLM plugin</td>
+              </tr>
+              <tr>
+                <td>Open MoE <em>trainer</em></td>
+                <td><a href="/olmo-core-3.html">Ai2 Olmo-core 3</a></td>
+                <td>B300 capacity tax fix; training tok/s</td>
+              </tr>
+              <tr>
+                <td>Zero-full-attn SWA/DSA decode</td>
+                <td><a href="/naive-n0-5-flash.html">Naive-N0.5-Flash</a></td>
+                <td>Native 1M with <strong>no</strong> full-attention layers</td>
+              </tr>
+              <tr>
+                <td>Near-package LPDDR fanout</td>
+                <td><a href="/credo-omniconnect-weaver.html">Credo Weaver</a></td>
+                <td>Claimed HBM4-class edge BW at ~25× capacity</td>
+              </tr>
+              <tr>
+                <td><strong>Blackwell <em>attention</em> kernels (this post)</strong></td>
+                <td><strong>Meta TLX JFA</strong></td>
+                <td><strong>B200</strong> jagged / broadcast-Q FA; ~<strong>+13%</strong> fwd / ~<strong>+50%</strong> bwd vs FA4; ~3.2K TLX lines</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          This isn’t a Dist-MoE follow-up. Different layer: <strong>attention</strong> vs <strong>MoE</strong>. Dist-MoE assumes you already routed experts. TLX JFA assumes you already packed jagged sequences. Neither ships a checkpoint.
+        </p>
+        <p>
+          Related but separate: Meta’s earlier
+          <a href="https://pytorch.org/blog/tlx-block-attention-a-warp-specialized-blackwell-kernel-for-fixed-block-sparse-self-attention/" target="_blank" rel="noopener noreferrer">TLX Block Attention</a>
+          post (<strong>2026-07-21</strong>) targets <em>fixed</em> block-diagonal attention with different benches (FA2 baselines, fused rotary). The October 1 post is the <strong>jagged / broadcast-Q JFA vs FA4</strong> comparison, and the two shouldn’t be confused.
+        </p>
+
+        <h2>Caveats</h2>
+        <ol>
+          <li>
+            <strong>Jagged production shapes, not a universal FA4 killer.</strong> Headline wins are on jagged broadcast-Q. On dense equal-length shapes, forward is ~<strong>87%</strong> of FA4 while backward still wins (~<strong>+17%</strong>). The jagged +50% backward number is not a dense LLM result.
+          </li>
+          <li>
+            <strong>Vendor / shape-owned benches.</strong> All comparison percentages are Meta’s bf16 B200 measurements against May 2026 open-source FA4 on their shapes and sparsities (0.1 → 0.9 jagged sweep). Re-run on your shapes before you plan capacity.
+          </li>
+          <li>
+            <strong>Blackwell / TLX stack.</strong> Targets B200 with TLX primitives (async TMA/MMA, TMEM, CLC). Ampere / Hopper and plain-Triton-only stacks are outside the published comparison.
+          </li>
+          <li>
+            <strong>Not Dist-MoE.</strong> Dist-MoE is CuTe DSL <strong>MoE</strong> kernels (ARM64 + SM100, named precision matrix, no published throughput benches). TLX JFA is Triton/TLX <strong>attention</strong> with published FA4 comparison percentages. Different API, different layer.
+          </li>
+          <li>
+            <strong>Ads GEM context.</strong> Motivating workload is Meta’s Generative Ads Model (and Kunlun, cited). Uniform dense LLM decode may not share the jagged / broadcast-Q bottleneck.
+          </li>
+          <li>
+            <strong>MXFP8 / sparse forks are not the main comparison table.</strong> Main FA4 comparison is bf16. MXFP8 and block-sparse results are separate forks Meta describes qualitatively — treat as Meta claims on their forks.
+          </li>
+        </ol>
+
+        <h2>How I would evaluate</h2>
+        <ol>
+          <li>
+            Read the
+            <a href="https://pytorch.org/blog/optimizing-jagged-flash-attention-with-tlx-the-road-toward-sota-fa4-on-blackwell/" target="_blank" rel="noopener noreferrer">Oct 1 PyTorch post</a>
+            — especially the jagged vs dense charts and the broadcast-Q dQ discussion — before quoting any percentage.
+          </li>
+          <li>
+            Clone
+            <a href="https://github.com/facebookresearch/ads_model_kernel_library/tree/main/tlx_jfa" target="_blank" rel="noopener noreferrer"><code>tlx_jfa</code></a>
+            and pin the TLX / Triton / CUDA stack the repo documents; do not assume Dist-MoE’s ARM64+cu130 pins apply.
+          </li>
+          <li>
+            Reproduce the jagged broadcast-Q sweep (sparsity 0.1 / 0.5 / 0.9) and the dense B=768 H=4 head_dim=128 case against the same May 2026 FA4 reference; log NCU tensor-core / TMEM counters the way the post describes.
+          </li>
+          <li>
+            Exercise MXFP8 and block-sparse forks only after the bf16 jagged path is clean.
+          </li>
+          <li>
+            Keep this separate from Dist-MoE’s MoE precision matrix, Kolibri’s serve residency, Olmo-core’s trainer tok/s, and Naive-N0.5-Flash’s zero-full-attn decode path — this is <strong>Blackwell jagged attention</strong>.
+          </li>
+        </ol>
+
+        <h2>Bottom line</h2>
+        <p>
+          If you run Blackwell training stacks and your attention traffic is jagged or broadcast-Q, Meta published the comparison numbers: TLX JFA claims ~<strong>+13%</strong> forward and ~<strong>+50%</strong> backward vs May 2026 FA4 on those shapes, in ~<strong>3.2K</strong> lines of readable TLX instead of ~<strong>10K</strong> CuteDSL, with open code under <code>tlx_jfa</code>. Last night answered MoE kernels. Tonight answers attention. Same generation, different layer — and the layer most GEM-like ranking models actually stall on.
+        </p>
+        <p>
+          Create-only. Specs from Meta’s October 1, 2026 PyTorch blog on Optimizing Jagged Flash Attention with TLX and the <code>facebookresearch/ads_model_kernel_library</code> <code>tlx_jfa</code> tree. Update when third-party rematches, tok/s, or MFU numbers ship.
+        </p>
+        <p>
+          Sources:
+          <a href="https://pytorch.org/blog/optimizing-jagged-flash-attention-with-tlx-the-road-toward-sota-fa4-on-blackwell/" target="_blank" rel="noopener noreferrer">PyTorch blog</a>
+          ·
+          <a href="https://github.com/facebookresearch/ads_model_kernel_library/tree/main/tlx_jfa" target="_blank" rel="noopener noreferrer">GitHub <code>tlx_jfa</code></a>.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
