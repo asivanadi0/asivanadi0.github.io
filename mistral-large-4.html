@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mistral Large 4: 1.05T Parameters, 49B Active, and What It Takes to Serve It — Anpoo Sivanadi</title>
+  <meta name="description" content="Mistral’s October 6 Large 4 is a 1.05T / 49B-active open-weight multimodal MoE with a 1M-token context — public-preview API today, weights and a custom license still October 27." />
+  <link rel="canonical" href="https://asivanadi0.github.io/mistral-large-4.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Mistral Large 4: 1.05T Parameters, 49B Active, and What It Takes to Serve It — Anpoo Sivanadi" />
+  <meta property="og:description" content="Mistral’s October 6 Large 4 is a 1.05T / 49B-active open-weight multimodal MoE with a 1M-token context — public-preview API today, weights and a custom license still October 27." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/mistral-large-4.html" />
+  <meta property="article:published_time" content="2026-10-06T06:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Mistral Large 4: 1.05T Parameters, 49B Active, and What It Takes to Serve It</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-06">6 October 2026</time>
+          · Anpoo Sivanadi
+          · based on Mistral’s Large 4 docs, VentureBeat’s coverage, and The Next Web
+        </p>
+        <p class="dek article-dek">
+          Mistral’s October 6 Large 4 is a 1.05T / 49B-active open-weight multimodal MoE with a 1M-token context — public-preview API today, weights and a custom license still October 27.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          Mistral put
+          <a href="https://docs.mistral.ai/models/mistral-large-4-0" target="_blank" rel="noopener noreferrer">Mistral Large 4</a>
+          into public preview on October 6, 2026. The model page describes it as an open-weight, general-purpose multimodal model with a "granular Mixture-of-Experts architecture," <strong>49B active parameters, 1.05T total parameters, and a 1.6B vision encoder</strong>, with a <strong>1M-token</strong> context window. It takes text and images in and produces text out, which Guillaume Lample confirmed to
+          <a href="https://venturebeat.com/technology/mistral-debuts-large-4-le-chonk-a-1-trillion-parameter-text-output-model-with-high-benchmarks-planned-for-open-weights-release" target="_blank" rel="noopener noreferrer">VentureBeat</a>.
+        </p>
+        <p>
+          You can call it through Mistral’s API today. You can’t download it yet. Per
+          <a href="https://thenextweb.com/news/mistral-releases-large-4-a-1-trillion-parameter-open-weight-ai-model" target="_blank" rel="noopener noreferrer">The Next Web</a>
+          and VentureBeat, the weights are scheduled for <strong>October 27</strong>, after a roughly three-week preview in which reinforcement learning continues on the checkpoint. The docs page lists both weights and license as "Coming soon." VentureBeat reports the license will be a custom Mistral license rather than Apache 2.0.
+        </p>
+        <p>
+          That makes it the second very large open-weight MoE in two days announced before its weights ship, after
+          <a href="/reflection-beam-501b.html">Reflection’s Beam</a>
+          yesterday. Since Mistral’s own charts compare the two, I’m reading them side by side.
+        </p>
+
+        <h2>The shape of the model</h2>
+        <p>
+          What Mistral has actually published so far is thin on architecture. There’s no expert count, no top-k, no layer count, and no attention layout. Here’s what is known, next to the two closest reference points:
+        </p>
+        <div class="table-wrap" role="region" aria-label="Mistral Large 4 comparison with Large 3 and Reflection Beam" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th></th>
+                <th>Mistral Large 3</th>
+                <th>Reflection Beam</th>
+                <th>Mistral Large 4</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Total params</td>
+                <td>675B</td>
+                <td>501B</td>
+                <td>1.05T</td>
+              </tr>
+              <tr>
+                <td>Active params</td>
+                <td>41B</td>
+                <td>23B</td>
+                <td>49B</td>
+              </tr>
+              <tr>
+                <td>Total ÷ active (my arithmetic)</td>
+                <td>~16.5×</td>
+                <td>~21.8×</td>
+                <td>~21.4×</td>
+              </tr>
+              <tr>
+                <td>Context</td>
+                <td>—</td>
+                <td>1M</td>
+                <td>1M</td>
+              </tr>
+              <tr>
+                <td>Training hardware (vendor-stated)</td>
+                <td>~3,000 H200</td>
+                <td>6,144 GB300 (pretrain) + 10.5K GB300 (RL)</td>
+                <td>~4,000 Grace Blackwell</td>
+              </tr>
+              <tr>
+                <td>Weights</td>
+                <td>Apache 2.0, released</td>
+                <td>"Later this month," Apache 2.0</td>
+                <td>Oct 27, custom license</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Large 3 figures come from Mistral’s
+          <a href="https://mistral.ai/news/mistral-3/" target="_blank" rel="noopener noreferrer">Mistral 3 announcement</a>.
+          Beam’s come from
+          <a href="https://reflection.ai/blog/introducing-beam" target="_blank" rel="noopener noreferrer">Reflection’s post</a>.
+        </p>
+        <p>
+          Two things stand out. First, Mistral grew total parameters by about 55% over Large 3 while growing active parameters by only about 20%, so the model got sparser. It’s now at roughly the same sparsity ratio as Beam. "Granular MoE" usually means many small experts with more of them routed per token, which fits that direction, but I won’t guess at the actual numbers until the model card is out.
+        </p>
+        <p>
+          Second, 49B active is more than twice Beam’s 23B. On a first-order decode estimate (about 2 × active parameters FLOPs per generated token), each Large 4 token costs roughly 2.1× a Beam token. That’s the same rough formula Reflection used for its own efficiency claim. Whether Large 4 makes that back by solving tasks in fewer tokens is exactly the kind of thing the preview benchmarks can’t tell you.
+        </p>
+
+        <h2>Training scale and power</h2>
+        <p>
+          Mistral says Large 4 was trained from scratch over about two months on roughly 4,000 NVIDIA Grace Blackwell GPUs in its own European data centers, and TNW reports the training drew about 10 megawatts. The same capacity now serves the preview.
+        </p>
+        <p>
+          Some arithmetic of my own, all approximate:
+        </p>
+        <ul>
+          <li>
+            <strong>GPU-time.</strong> 4,000 GPUs for two months is about 8,000 GPU-months. Beam’s pretraining was under four weeks on 6,144 GB300s, so under about 5,700 GPU-months, plus another ~9,700 GPU-months of RL on 10.5K GB300s. Mistral’s RL is still running, so its total isn’t final. These also aren’t the same GPUs: Mistral says "Grace Blackwell" without naming GB200 or GB300, and Reflection says GB300.
+          </li>
+          <li>
+            <strong>Power per GPU.</strong> 10 MW across 4,000 GPUs is about 2.5 kW per GPU, all-in. A GB200 NVL72 rack is commonly cited around 120–130 kW for 72 GPUs, or about 1.7–1.8 kW per GPU at the rack. The gap is plausible for cooling, storage, networking and facility overhead. Either way, it’s a useful number for anyone sizing a sovereign or on-prem training site, because "4,000 Blackwell GPUs" turns into "about 10 MW," not 6 or 7.
+          </li>
+        </ul>
+        <p>
+          Mistral pitches 4,000 GPUs as modest next to the large US labs. The more useful takeaway is that this tier of model fits in a single ~10 MW facility.
+        </p>
+
+        <h2>Serving it: where the weights will fit</h2>
+        <p>
+          The docs table lists GPU RAM as "N/A" for now, so this section is my own arithmetic, not a Mistral figure. It counts weights only, before KV cache and activations:
+        </p>
+        <ul>
+          <li>
+            <strong>BF16:</strong> about 2.1 TB. That doesn’t fit on any single 8-GPU node I know of. It means multi-node, or a rack-scale NVLink domain like NVL72.
+          </li>
+          <li>
+            <strong>FP8:</strong> about 1.05 TB. An 8× B200 node (8 × 180 GB, about 1.44 TB) holds it with roughly 390 GB left for KV cache. An 8× H200 node (about 1.13 TB) technically holds the weights with almost nothing left over, which makes it impractical for real context lengths. An 8× GB300 or 8× MI355X node (288 GB per GPU, about 2.3 TB) is comfortable.
+          </li>
+          <li>
+            <strong>FP4 (NVFP4 or MXFP4):</strong> roughly 0.55–0.6 TB once you count block scales. That fits on 8× H200 with real headroom, assuming a quality-preserving FP4 checkpoint or recipe exists at launch.
+          </li>
+        </ul>
+        <p>
+          The 1M context is the part that will decide real hardware plans, and Mistral hasn’t said how attention is laid out. If it’s all global attention with standard grouped-query KV, 1M tokens of KV per sequence at this width would be enormous. If it uses sliding-window or interleaved local/global layers, like Beam and Kolibri, the picture changes a lot. Until the config file ships, nobody outside Mistral can size KV per token, and that’s the number I’d want first.
+        </p>
+        <p>
+          With 49B active and over a terabyte of experts, this is also an expert-parallel deployment by default. The usual questions apply: router load balance under real traffic, all-to-all cost over scale-out versus inside an NVLink domain, and whether prefill/decode disaggregation pays off for your request mix. When Large 3 launched, NVIDIA worked with Mistral on Blackwell attention and MoE kernels, disaggregated serving and speculative decoding for GB200 NVL72. I’d expect similar day-zero work this time, but Mistral hasn’t named any inference engine for Large 4.
+        </p>
+
+        <h2>API pricing</h2>
+        <p>
+          The docs list per-million-token prices of <strong>$1.36 input, $0.14 cached input, and $4.18 output</strong> at the standard tier, with a second column at exactly half that ($0.68 / $0.07 / $2.09). That lines up with Mistral’s batch API, which the docs describe as a 50% discount. The cached-input price is about a 90% discount on fresh input, which matters a lot for agent loops that resend a long system prompt and tool schema every turn.
+        </p>
+
+        <h2>The benchmarks, with the caveats attached</h2>
+        <p>
+          Mistral calls these results preliminary and expects them to move before the weights ship. The headline numbers from its charts, as reported by VentureBeat and TNW:
+        </p>
+        <ul>
+          <li>
+            <strong>DeepSWE v1.1:</strong> Large 4 at 62%, GLM-5.3 at 61%, DeepSeek V4 Pro 0813 at 57%, Qwen 3.8 Max at 51%, Beam at 44%.
+          </li>
+          <li>
+            <strong>Finch (FinWorkBench):</strong> 67%, tied with DeepSeek V4 Pro and ahead of GLM-5.3 at 65%. Mistral Medium 3.5 sits at 37%.
+          </li>
+          <li>
+            <strong>Harvey Legal Agent Benchmark:</strong> 15%, ahead of Kimi K3 at 13%.
+          </li>
+          <li>
+            <strong>Visual grounding:</strong> 73% on DIOR-RSVG against 68% for GPT-6 Astra, and 42% for both on Dense200.
+          </li>
+        </ul>
+        <p>
+          VentureBeat did the cross-checking that matters. Beam’s 44% matches Reflection’s own 44.4%. But the public DeepSWE leaderboard, which takes each model’s best published harness, puts GLM-5.3 and Kimi K3 around 69% and several closed models around 74%. So 62% is competitive under Mistral’s setup, not a lead across every model-and-harness pairing. The Harvey competitor numbers match Vals.ai’s public leaderboard, which makes that one the cleanest comparison. VentureBeat couldn’t find public sources for some of the Finch and visual-grounding competitor scores. Mistral also says Large 4 beats the top open models from Kimi, DeepSeek and Meta on cyber tasks, but hasn’t published numbers for that yet.
+        </p>
+
+        <h2>What I’d test after October 27</h2>
+        <ol>
+          <li>
+            <strong>The config file.</strong> Expert count, top-k, shared experts, layer count, attention pattern, KV heads and head dimension. That’s enough to compute KV bytes per token and decide whether 1M context is a real serving mode or a spec-sheet number.
+          </li>
+          <li>
+            <strong>FP8 on one B200 node versus FP4 on one H200 node.</strong> Same prompts, same harness, quality deltas on coding and long-context retrieval, plus decode tokens/s at batch 1 and at a saturating batch.
+          </li>
+          <li>
+            <strong>Tokens per solved task.</strong> Against Beam on the same agentic coding tasks. Beam is cheaper per token. If Large 4 needs meaningfully fewer tokens per solved task, that narrows the gap.
+          </li>
+          <li>
+            <strong>Expert load on real traffic.</strong> Per-expert token counts for coding versus multilingual chat, before choosing an expert-parallel width.
+          </li>
+          <li>
+            <strong>Cache hit rate in agent loops.</strong> At $0.14 versus $1.36, prefix caching dominates API cost for long-running agents, and self-hosted prefix caching should earn the same advantage.
+          </li>
+        </ol>
+        <p>
+          For now, Large 4 is a priced API model with a published size, a date for its weights, and a preliminary benchmark sheet. The training numbers are useful today, especially the "about 10 MW for 4,000 GPUs" figure. The serving story starts on October 27.
+        </p>
+        <p>
+          Create-only. Specs from Mistral’s Large 4 docs, VentureBeat’s coverage, and The Next Web. Update when the weights, license, or model card ship.
+        </p>
+        <p>
+          Sources:
+          <a href="https://docs.mistral.ai/models/mistral-large-4-0" target="_blank" rel="noopener noreferrer">Mistral Large 4 docs</a>
+          ·
+          <a href="https://venturebeat.com/technology/mistral-debuts-large-4-le-chonk-a-1-trillion-parameter-text-output-model-with-high-benchmarks-planned-for-open-weights-release" target="_blank" rel="noopener noreferrer">VentureBeat</a>
+          ·
+          <a href="https://thenextweb.com/news/mistral-releases-large-4-a-1-trillion-parameter-open-weight-ai-model" target="_blank" rel="noopener noreferrer">The Next Web</a>
+          ·
+          <a href="https://mistral.ai/news/mistral-3/" target="_blank" rel="noopener noreferrer">Mistral 3 announcement</a>
+          ·
+          <a href="https://reflection.ai/blog/introducing-beam" target="_blank" rel="noopener noreferrer">Reflection: Introducing Beam</a>.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
