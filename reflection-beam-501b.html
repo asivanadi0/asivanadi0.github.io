@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Reflection’s Beam: A 501B Open-Weight MoE, and the GB300 Cluster Numbers Behind It — Anpoo Sivanadi</title>
+  <meta name="description" content="Reflection’s October 5 Beam is a 501B / 23B-active sparse MoE for coding, reasoning and agentic work — self-reported GB300 cluster numbers, with weights and the tech report still later this month." />
+  <link rel="canonical" href="https://asivanadi0.github.io/reflection-beam-501b.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Reflection’s Beam: A 501B Open-Weight MoE, and the GB300 Cluster Numbers Behind It — Anpoo Sivanadi" />
+  <meta property="og:description" content="Reflection’s October 5 Beam is a 501B / 23B-active sparse MoE for coding, reasoning and agentic work — self-reported GB300 cluster numbers, with weights and the tech report still later this month." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/reflection-beam-501b.html" />
+  <meta property="article:published_time" content="2026-10-05T18:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Reflection’s Beam: A 501B Open-Weight MoE, and the GB300 Cluster Numbers Behind It</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-05">5 October 2026</time>
+          · Anpoo Sivanadi
+          · based on Reflection’s October 5 Beam announcement and TechCrunch’s coverage
+        </p>
+        <p class="dek article-dek">
+          Reflection’s October 5 Beam is a 501B / 23B-active sparse MoE for coding, reasoning and agentic work — self-reported GB300 cluster numbers, with weights and the tech report still later this month.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          Reflection AI
+          <a href="https://reflection.ai/blog/introducing-beam" target="_blank" rel="noopener noreferrer">announced Beam</a>
+          on October 5, 2026. It is a sparse mixture-of-experts model with 501 billion total parameters and 23 billion active per token, text-only, aimed at coding, reasoning and agentic work. The weights are not out yet. The blog says Beam is "undergoing final red-teaming and evaluations," that a select group gets early access, and that the weights, technical report and model card follow "later this month" under Apache 2.0. When I checked Hugging Face this evening, there was nothing to pull.
+        </p>
+        <p>
+          So this isn’t a "download it and run it" post. I’m writing it anyway because the announcement is unusually specific about the infrastructure that produced the model: how many GPUs, how long, how often things broke, how fast weights moved across the fleet, and how much capacity was lost. Most model launches give you a benchmark table and a vibe. This one gives you numbers an operator can compare against their own cluster.
+        </p>
+
+        <h2>The model, as described</h2>
+        <p>
+          From the
+          <a href="https://reflection.ai/blog/introducing-beam" target="_blank" rel="noopener noreferrer">Reflection post</a>
+          and
+          <a href="https://techcrunch.com/2026/10/05/reflection-debuts-beam-a-open-weight-ai-model-to-rival-chinese-models-at-lower-compute-cost/" target="_blank" rel="noopener noreferrer">TechCrunch’s coverage</a>:
+        </p>
+        <ul>
+          <li>
+            <strong>501B total / 23B active</strong>, sparse MoE with fine-grained routed experts. The expert count and top-k aren’t given.
+          </li>
+          <li>
+            <strong>52 layers</strong> (from the residual-stream figure caption), with interleaved local and global attention.
+          </li>
+          <li>
+            <strong>23.8 trillion</strong> pretraining tokens; the effective context is extended to <strong>1M tokens</strong> during midtraining.
+          </li>
+          <li>
+            Numerics choices: SandwichNorm, elementwise attention gating, a depth-based residual scaling scheme, and <strong>FP32 residual accumulation</strong>.
+          </li>
+          <li>
+            Load balancing builds on auxiliary-loss-free balancing, with cosine decay on expert-bias updates plus sequence-level balancing. Reflection says the busiest expert’s load, averaged across MoE layers, is <strong>1.04×</strong> at the end of pretraining.
+          </li>
+        </ul>
+        <p>
+          For scale, TechCrunch puts GLM-5.2 at roughly 744B total and 40B active. Reflection’s headline claim is that Beam scores comparably to GLM-5.2 on advanced reasoning while using "3–4× less inference compute."
+        </p>
+
+        <h2>Read the efficiency claim carefully</h2>
+        <p>
+          That 3–4× figure isn’t a serving measurement, and the post says so. It is estimated as FLOPs ≈ 2 × active parameters × mean generated tokens per attempt. That counts reasoning and answer tokens and excludes prefill, context-dependent attention and serving overhead. Other models’ eval numbers come from Artificial Analysis and DataCurve. It’s a fair first-order way to compare reasoning models, since active parameters times tokens drives decode cost. But a long agentic trajectory at 256K or 1M context spends real time on attention and KV cache, and this formula leaves both out. I’d treat it as "Beam uses fewer tokens at a smaller active size," not as a cost-per-task number.
+        </p>
+        <p>
+          The benchmark table is also vendor-reported, with many cells marked NR. On Reflection’s own numbers, Beam reports 80.9 on SWE-bench Verified, 80.1 on Terminal-Bench 2.1 (GLM-5.2 at 81.0, DeepSeek V4.1 Flash at 90.6), and 90.5 on GPQA Diamond. The post itself says frontier open models like Kimi K3 "remain ahead on raw capability." TechCrunch notes that none of these scores had been independently verified. I’m not going to rank anything on that table until the weights are public and third parties have run it.
+        </p>
+
+        <h2>The part I actually care about: the training fleet</h2>
+        <p>
+          <strong>Pretraining.</strong> Reflection says Beam was pretrained end to end in under four weeks on 6,144 NVIDIA GB300 GPUs in NVL72 systems. The stack is mostly in-house: a topology-aware, Kubernetes-based scheduler, a node lifecycle system with continuous health monitoring, and a silent data corruption (SDC) detector that can trigger semi-autonomous rewinds and restarts. The run needed <strong>nine</strong> semi-automatic rewinds, attributed either to non-deterministic gradient-norm spikes or to suspected SDCs. Goodput, defined as the share of wall-clock time spent on steps kept in the final model, "reached 92.3% towards the end." I’d note the wording: that is the late-run figure, not the average over the whole run.
+        </p>
+        <p>
+          Two things stand out to me. First, SDC is named right alongside gradient spikes as a reason to rewind a frontier run. If you operate large training runs without a detector, some of your unexplained loss spikes may be exactly this. Second, they define goodput as retained steps over wall clock. That’s the honest definition, because work lost to a rewind counts against you, and it’s the one I’d want vendors and neoclouds to quote.
+        </p>
+        <p>
+          <strong>Reinforcement learning.</strong> The RL campaign ran on <strong>10.5K GB300 GPUs for four weeks</strong> and generated more than <strong>100 million rollouts</strong> with a 256K maximum context. About <strong>1.3 billion</strong> sandboxes were used for training and grading. The operational detail:
+        </p>
+        <ul>
+          <li>
+            <strong>Average 110K concurrent rollouts</strong>, fully asynchronous, with each token tagged by the policy version that produced it. Reflection says learning stayed stable with one-day-old samples, <strong>107 weight versions</strong> behind the current policy.
+          </li>
+          <li>
+            <strong>Inference-to-training GPU ratios from 3.9:1 to 5.4:1.</strong> Most of the RL fleet was doing inference. The trainer was resized across five GPU mesh configurations within one lineage without losing state.
+          </li>
+          <li>
+            <strong>Weight distribution: a median of about 12 seconds</strong> for new weights to reach the inference fleet. Weights move across racks over RoCE and are then shared within the rack over NVLink. Compared with every replica pulling directly, Reflection says this cut cross-rack traffic by <strong>75%</strong> and made fleet-wide adoption <strong>2.2× faster</strong>.
+          </li>
+          <li>
+            <strong>71 inference incidents</strong> were handled without stopping the training run. Median recovery was <strong>eight minutes</strong>, and lost capacity was <strong>0.02%</strong> of elapsed serving GPU-minutes.
+          </li>
+          <li>
+            <strong>Sandboxes:</strong> up to <strong>170K</strong> concurrent, more than <strong>one billion</strong> creation requests across <strong>20+ clusters, two clouds and four regions</strong>, with <strong>90%</strong> ready in under <strong>10 seconds</strong>.
+          </li>
+          <li>
+            <strong>Trainer packing</strong> kept batches <strong>99.99%</strong> full on average. Per-GPU trainer throughput stayed within <strong>1.5%</strong> as mean rollout length grew almost <strong>70%</strong>.
+          </li>
+        </ul>
+        <p>
+          All of these are self-reported, and there’s no tech report yet to check the methods against. Even so, they’re the right metrics to publish, and they point at the bottlenecks I’d expect in any agentic RL setup. The 3.9–5.4:1 ratio says plainly that agentic RL is an inference-serving problem with a trainer attached. The 12-second weight push is the number that sets how stale your rollouts get. And the sandbox numbers (170K concurrent, 90% under 10 s) show that the CPU-side container fleet is as much a scheduling problem as the GPUs.
+        </p>
+        <p>
+          The weight-distribution design is also the same pattern I’d reach for when serving: send one copy per rack over the scale-out network, then share it within the rack over NVLink, rather than having every replica pull from object storage or the trainer. It’s a different problem from the one in this morning’s
+          <a href="/vllm-0-31-fast-restart.html">vLLM 0.31 fast-restart post</a>,
+          which keeps weights resident on a single node. Both treat getting weights onto GPUs as a cost worth engineering down.
+        </p>
+
+        <h2>What’s missing</h2>
+        <ul>
+          <li>
+            <strong>No weights, model card or tech report yet.</strong> No precision for the released checkpoint, no expert count or top-k, no KV-cache layout for the local/global attention mix, and no head dimensions. All of that drives the serving plan.
+          </li>
+          <li>
+            <strong>No serving numbers.</strong> No tokens/s, no TTFT, no minimum hardware. The post promises "integration with a broad range of open source libraries" at launch, but names none.
+          </li>
+          <li>
+            <strong>Benchmarks and efficiency are vendor-reported</strong>, and the efficiency estimate excludes prefill and attention by construction.
+          </li>
+          <li>
+            <strong>Goodput is a late-run figure</strong>, and "under four weeks" is approximate.
+          </li>
+        </ul>
+
+        <h2>What I’d test when the weights land</h2>
+        <ol>
+          <li>
+            <strong>Footprint.</strong> My own arithmetic, not a vendor figure: 501B parameters is about 501 GB at one byte per weight before KV cache, so a single 8-GPU H200- or Blackwell-class node looks plausible at FP8, while BF16 at roughly 1 TB gets tight once KV cache is added. I’d check whatever precision actually ships against that.
+          </li>
+          <li>
+            <strong>Long-context decode.</strong> Interleaved local/global attention should shrink KV growth versus all-global layers. I’d measure KV bytes per token and decode throughput at 128K, 256K and 1M in vLLM and SGLang, once either supports it.
+          </li>
+          <li>
+            <strong>Token efficiency on my own tasks.</strong> Mean generated tokens per solved agentic task at each reasoning-effort setting. That is the input to Reflection’s FLOPs estimate, and I can measure it directly.
+          </li>
+          <li>
+            <strong>Expert-parallel balance.</strong> If the 1.04× peak expert load holds on real traffic, EP all-to-all imbalance should be mild. I’d log per-expert token counts under coding versus chat traffic before choosing an EP width.
+          </li>
+        </ol>
+        <p>
+          Until then, Beam is a well-documented announcement rather than something I can run. The infrastructure numbers are worth reading now. The model can wait for its weights and the tech report.
+        </p>
+        <p>
+          Create-only. Specs from Reflection’s October 5, 2026 Beam announcement and TechCrunch’s coverage. Update when the weights, technical report, or model card ship.
+        </p>
+        <p>
+          Sources:
+          <a href="https://reflection.ai/blog/introducing-beam" target="_blank" rel="noopener noreferrer">Reflection: Introducing Beam</a>
+          ·
+          <a href="https://techcrunch.com/2026/10/05/reflection-debuts-beam-a-open-weight-ai-model-to-rival-chinese-models-at-lower-compute-cost/" target="_blank" rel="noopener noreferrer">TechCrunch</a>.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
