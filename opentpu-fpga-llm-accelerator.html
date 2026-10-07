@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>openTPU: An Agent-Built LLM Accelerator on a Kintex-7 PCIe Card, and What Its Numbers Teach — Anpoo Sivanadi</title>
+  <meta name="description" content="openTPU is a complete Apache 2.0 LLM inference stack on a Kintex-7 PCIe card — SystemVerilog RTL, ISA, bit-exact simulator, and host tools — with self-reported decode numbers that put memory-bound inference on one line." />
+  <link rel="canonical" href="https://asivanadi0.github.io/opentpu-fpga-llm-accelerator.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="openTPU: An Agent-Built LLM Accelerator on a Kintex-7 PCIe Card, and What Its Numbers Teach — Anpoo Sivanadi" />
+  <meta property="og:description" content="openTPU is a complete Apache 2.0 LLM inference stack on a Kintex-7 PCIe card — SystemVerilog RTL, ISA, bit-exact simulator, and host tools — with self-reported decode numbers that put memory-bound inference on one line." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/opentpu-fpga-llm-accelerator.html" />
+  <meta property="article:published_time" content="2026-10-07T06:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>openTPU: An Agent-Built LLM Accelerator on a Kintex-7 PCIe Card, and What Its Numbers Teach</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-07">7 October 2026</time>
+          · Anpoo Sivanadi
+          · based on the openTPU README, ISA reference, tournament doc, and related project docs
+        </p>
+        <p class="dek article-dek">
+          openTPU is a complete Apache 2.0 LLM inference stack on a Kintex-7 PCIe card — SystemVerilog RTL, ISA, bit-exact simulator, and host tools — with self-reported decode numbers that put memory-bound inference on one line.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          Every few months someone posts a “from scratch” AI accelerator, and most of them stop at a simulator screenshot.
+          <a href="https://github.com/FeSens/openTPU" target="_blank" rel="noopener noreferrer">openTPU</a>,
+          from Felipe Sens Bonetto (GitHub <code>FeSens</code>), doesn’t. It’s a complete inference stack in one Apache 2.0 repo: SystemVerilog RTL, an instruction set, a bit-exact Python simulator, a small kernel language with a compiler, a browser profiler, and host tools that drive a real PCIe card. The card produces the same tokens as the simulator, bit for bit, on models people actually run: Qwen3, Qwen3.5, LFM2.5, Gemma 4, SmolLM3 and Phi-4-mini.
+        </p>
+        <p>
+          The second claim is the one that got it passed around this week. The README calls it “an open-source AI accelerator, developed by AI,” built with the same agent loop the author used earlier on RISC-V cores. I’ll get to that. The part I keep coming back to is how plainly the numbers show where LLM decode time goes.
+        </p>
+        <p>
+          One naming note first: this has nothing to do with Google’s TPU. It’s an independent project that borrowed the name.
+        </p>
+
+        <h2>The hardware</h2>
+        <p>
+          The target is an Inspur YPCB-00338, a PCIe card built around a Xilinx Kintex-7 xc7k480t FPGA with two DDR3-1066 channels. Per the README, that gives 17.1 GB/s of peak memory bandwidth and 4 GiB of on-card DRAM. The production bitstream runs at 133.33 MHz. That clock isn’t arbitrary: it’s where the design’s 128-byte memory port matches what the two DDR3 channels can deliver.
+        </p>
+        <p>
+          The machine is deliberately simple. A sequencer issues one instruction per cycle to a handful of units:
+        </p>
+        <ul>
+          <li>a DMA engine that moves data,</li>
+          <li>a matrix unit (four-column systolic in the current image) that multiplies int8 weights streamed from DRAM,</li>
+          <li>an fp32 vector unit,</li>
+          <li>a quantizer that turns results back into int8.</li>
+        </ul>
+        <p>
+          There’s no cache and no hidden scheduling. Every data movement is an instruction, each instruction is eight 32-bit words
+          (<a href="https://github.com/FeSens/openTPU/blob/main/docs/isa.md" target="_blank" rel="noopener noreferrer">ISA doc</a>),
+          and the Python simulator is treated as the spec. Kernels are written in a Python-embedded language (<code>@ol.jit</code>) and compiled to that ISA.
+        </p>
+
+        <h2>The numbers, and why they look the way they do</h2>
+        <p>
+          The README publishes a table measured on the card between September 29 and October 1, using <code>tools/qual/perf.py</code>: 64 greedy decode tokens after a 512-token prompt, with the host’s argmax in the loop. A few rows, device-side decode:
+        </p>
+        <div class="table-wrap" role="region" aria-label="openTPU device-side decode results" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Model</th>
+                <th>Weights</th>
+                <th>Decode</th>
+                <th>DRAM while decoding</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>LFM2.5-230M</td>
+                <td>int8</td>
+                <td>59.0 tok/s</td>
+                <td>14.5 GB/s (85% of peak)</td>
+              </tr>
+              <tr>
+                <td>LFM2.5-230M</td>
+                <td>4-bit, int8 head</td>
+                <td>85.8 tok/s</td>
+                <td>14.1 GB/s (82%)</td>
+              </tr>
+              <tr>
+                <td>Qwen3-0.6B</td>
+                <td>int8</td>
+                <td>21.6 tok/s</td>
+                <td>14.4 GB/s (84%)</td>
+              </tr>
+              <tr>
+                <td>Qwen3-0.6B</td>
+                <td>4-bit, int8 head</td>
+                <td>31.3 tok/s</td>
+                <td>13.9 GB/s (82%)</td>
+              </tr>
+              <tr>
+                <td>Qwen3.5-2B</td>
+                <td>int8</td>
+                <td>8.02 tok/s</td>
+                <td>16.0 GB/s (94%)</td>
+              </tr>
+              <tr>
+                <td>Phi-4-mini (3.8B)</td>
+                <td>4-bit, int8 head</td>
+                <td>6.56 tok/s</td>
+                <td>15.8 GB/s (92%)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Nobody will serve production traffic at 6 tokens a second. The useful column is the last one: across every model and format, the card reads DRAM at 82 to 94% of peak while it decodes. That’s memory-bound decode with nothing hiding it.
+        </p>
+        <p>
+          You can do the arithmetic yourself. Divide bandwidth by token rate and you get the bytes the card reads per token. For Qwen3-0.6B in int8, 14.4 GB/s over 21.6 tok/s is about 0.67 GB per token, roughly one full pass over the weights. Switch to 4-bit and it’s 13.9 over 31.3, about 0.44 GB per token. That’s the README’s “about a third” fewer bytes, and the speedup tracks it almost exactly. Bandwidth stays flat while bytes per token drop, so tokens per second rise.
+        </p>
+        <p>
+          The same reasoning applies to an H100 or an MI355X, only with more zeros. When I size a decode tier, the first question isn’t TFLOPS. It’s how many bytes each token pulls from memory and how close the stack gets to peak bandwidth. openTPU puts both on one line, which most vendor benchmarks don’t.
+        </p>
+        <p>
+          Prefill tells the other half of the story. The 512-token prompt runs at 92 tok/s for Qwen3-0.6B int8, and the README says plainly that prefill is limited by the matrix unit’s multiply rate. Against the previous image (a two-column matrix unit at 120.755 MHz), the current one with a four-column array at 133.33 MHz runs prefill 1.3x to 2.0x faster, while decode moved less than 2.3% in every configuration. Prefill is compute and decode is bandwidth, and here you can watch them come apart.
+        </p>
+
+        <h2>4-bit without hiding the cost</h2>
+        <p>
+          openTPU’s 4-bit format uses FP4 values with two-level block scales, which works out to 4.25 bits per weight, and it keeps the LM head in int8 for accuracy. That buys 40 to 45% faster decode. What I like is the validation tooling. <code>tools/validate.py</code> checks the device against a CPU golden built from the same Hugging Face checkpoint, in fp32, with openTPU’s quantization applied. It reports top-1 agreement and KL divergence against both the quantized golden and the plain fp32 model.
+        </p>
+        <p>
+          It also measures a floor: the golden against itself after a one-ulp nudge to its inputs. On the simulator the device sits at 0.82 to 1.16 times that floor’s KL. The cost of quantization shows up separately, and it isn’t small. For Qwen3-0.6B, 4-bit weights drop top-1 agreement with fp32 to 85.2% (mean KL 0.166), against 92.2% for int8. The README publishes that number instead of burying it. If you’ve ever had to argue about whether a quantized model “matches” the reference, that split between device error and format error is the right way to frame it.
+        </p>
+        <p>
+          On the card itself (build 84989047, October 7), six runs across three models in int8 and 4-bit matched the simulator’s tokens with bit-identical logits on every prompt.
+        </p>
+
+        <h2>MoE models bigger than the card</h2>
+        <p>
+          The 4 GiB limit gets a practical workaround. For mixture-of-experts models that don’t fit, the card does the routing and computes every expert, but it keeps a set of per-layer expert slots in DRAM. The host copies missing experts in from a pool file over PCIe. The results, from the README’s October 1 measurements:
+        </p>
+        <ul>
+          <li>
+            <strong>LFM2.5-8B-A1B</strong> (8.5B total, 1.7B active): 10.6 tok/s, 98.5% of expert uses hit the slots, 5.2 MB streamed per token.
+          </li>
+          <li>
+            <strong>Qwen3.5-35B-A3B</strong> (34.7B total, 3.0B active): 3.95 tok/s, 62% slot hits, 153 MB streamed per token at 1.41 GB/s over PCIe.
+          </li>
+        </ul>
+        <p>
+          By my arithmetic, 153 MB at 1.41 GB/s is about 108 ms of transfer per token, against roughly 253 ms per token at 3.95 tok/s. So PCIe accounts for something like 40% of each token. That’s the expert-offload trade-off in miniature: hit rate decides everything, and a model whose routing spreads across experts pays for it on the link. Anyone planning to put a large MoE on GPUs with too little HBM and lean on host memory should run this math first.
+        </p>
+
+        <h2>The “developed by AI” part</h2>
+        <p>
+          The method lives in
+          <a href="https://github.com/FeSens/openTPU/blob/main/docs/tourney.md" target="_blank" rel="noopener noreferrer"><code>docs/tourney.md</code></a>
+          and comes from the author’s earlier
+          <a href="https://github.com/FeSens/auto-arch-tournament" target="_blank" rel="noopener noreferrer">auto-arch-tournament</a>
+          project, which evolved an RV32IM CPU core. Each hardware component gets its own champion branch. Each round, a hypothesis agent proposes one change, an implementation agent makes it in an isolated git worktree, and the change has to pass gates in order: a sandbox check that only allowed files changed, Verilator lint, bit-exact RTL-versus-simulator tests, a board micro-architecture run, a deterministic Qwen3-0.6B decode proxy (no more than 0.2% extra cycles), and synthesis. Only then is it scored on area or clock speed.
+        </p>
+        <p>
+          The default agent configuration is Claude Opus 5.5 for hypothesis and implementation at high effort, with Codex as an option. Agents run with no network tools and a shell limited to lint, test and read-only commands. The first smoke round, on September 23, cost $1.12 and took 4.7 minutes: the agent replaced the GATHER unit’s chained address multiplies with running-sum registers, taking it from 9 DSP slices to 0 and its estimated fmax from 75 to 128 MHz. The doc budgets $1 to $5 per slot for bigger units.
+        </p>
+        <p>
+          Two details matter. Merging a champion into <code>main</code> is explicitly a human decision, and the gates do the real work. The agents aren’t trusted; the bit-exact tests are. An agent can propose something clever, but nothing that disagrees with the simulator by one bit gets through. That pattern is worth copying well beyond RTL.
+        </p>
+
+        <h2>What it isn’t</h2>
+        <p>
+          These are self-reported numbers on the author’s own board, and I haven’t seen an independent reproduction yet. There’s no GPU comparison in the repo, and there shouldn’t be. Timing barely closes, with +0.032 ns of worst negative slack at 133.33 MHz. The smaller models still read DRAM at only 82 to 85% of peak, which the README lists as the next thing to fix. The validation tool doesn’t cover the MoE models yet.
+        </p>
+
+        <h2>Why I’d spend an evening on it</h2>
+        <p>
+          Everything except the card runs on a laptop. Pull LFM2.5-230M from Hugging Face, run <code>otpu-chat --model lfm2 --backend isa</code> on the simulator, then open a trace in the Lens profiler and watch which unit is busy and which is waiting on DRAM, cycle by cycle. I don’t know a faster way to build intuition for why decode tiers get sized by bandwidth, where 4-bit pays off, and why expert offload lives or dies on hit rate. And if an agent loop with strict gates can keep improving a hardware design, that’s a more interesting result than any number in the table.
+        </p>
+        <p>
+          Create-only. Specs from the openTPU repository and README, architecture tournament doc, ISA reference, MoE expert offload doc, 4-bit format doc, and auto-arch-tournament.
+        </p>
+        <p>
+          Sources:
+          <a href="https://github.com/FeSens/openTPU" target="_blank" rel="noopener noreferrer">openTPU repository and README</a>
+          ·
+          <a href="https://github.com/FeSens/openTPU/blob/main/docs/tourney.md" target="_blank" rel="noopener noreferrer">openTPU architecture tournament doc</a>
+          ·
+          <a href="https://github.com/FeSens/openTPU/blob/main/docs/isa.md" target="_blank" rel="noopener noreferrer">openTPU ISA reference</a>
+          ·
+          <a href="https://github.com/FeSens/openTPU/blob/main/docs/offload.md" target="_blank" rel="noopener noreferrer">openTPU MoE expert offload doc</a>
+          ·
+          <a href="https://github.com/FeSens/openTPU/blob/main/docs/quant.md" target="_blank" rel="noopener noreferrer">openTPU 4-bit format doc</a>
+          ·
+          <a href="https://github.com/FeSens/auto-arch-tournament" target="_blank" rel="noopener noreferrer">auto-arch-tournament</a>.
+        </p>
+        <p>
+          Related:
+          <a href="/vllm-0-31-fast-restart.html">vLLM 0.31 Fast Restart</a>
+          ·
+          <a href="/meta-dist-moe.html">Dist-MoE</a>
+          ·
+          <a href="/nvidia-aicr-v1.html">AICR v1.0</a>.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
