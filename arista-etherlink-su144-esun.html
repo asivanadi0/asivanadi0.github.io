@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Arista Etherlink SU-144: Ethernet Moves Inside the Scale-Up Domain, and the Rack Becomes the Unit — Anpoo Sivanadi</title>
+  <meta name="description" content="Arista’s Etherlink SU-144 puts 144 accelerators in a single-hop Ethernet scale-up domain inside one rack, and up to 1,024 across racks, on OCP ESUN 1.0 — a partner-built reference design, not a SKU." />
+  <link rel="canonical" href="https://asivanadi0.github.io/arista-etherlink-su144-esun.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Arista Etherlink SU-144: Ethernet Moves Inside the Scale-Up Domain, and the Rack Becomes the Unit — Anpoo Sivanadi" />
+  <meta property="og:description" content="Arista’s Etherlink SU-144 puts 144 accelerators in a single-hop Ethernet scale-up domain inside one rack, and up to 1,024 across racks, on OCP ESUN 1.0 — a partner-built reference design, not a SKU." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/arista-etherlink-su144-esun.html" />
+  <meta property="article:published_time" content="2026-10-07T18:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Arista Etherlink SU-144: Ethernet Moves Inside the Scale-Up Domain, and the Rack Becomes the Unit</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-07">7 October 2026</time>
+          · Anpoo Sivanadi
+          · based on Arista’s October 7 press release and engineering blog, the ESUN 1.0 spec, Network World, and SiliconANGLE
+        </p>
+        <p class="dek article-dek">
+          Arista’s Etherlink SU-144 puts 144 accelerators in a single-hop Ethernet scale-up domain inside one rack, and up to 1,024 across racks, on OCP ESUN 1.0 — a partner-built reference design, not a SKU.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          Scale-up networking has been the part of an AI cluster that network teams mostly didn’t own. Inside an NVL72 rack it’s NVLink and NVSwitch, designed and sold with the GPU. Ethernet started at the NIC and went outward. On October 7, ahead of next week’s OCP Global Summit in San Jose, Arista announced a set of rack designs that push Ethernet into that inner domain, under the name
+          <a href="https://www.arista.com/en/company/news/press-release/24818-pr-20261007" target="_blank" rel="noopener noreferrer">Etherlink SU-144</a>.
+        </p>
+        <p>
+          The headline is 144 accelerators in a single-hop Ethernet scale-up domain inside one rack, and up to 1,024 across racks, with AMD, Arm, Broadcom, d-Matrix, Meta, Microsoft, and Qualcomm named as partners. What’s more useful is underneath: the protocol, the three physical layouts, and what’s still only a reference design.
+        </p>
+
+        <h2>What ESUN actually changes on the wire</h2>
+        <p>
+          Etherlink SU-144 is built on ESUN, Ethernet for Scale-Up Networking, an Open Compute Project workstream that started at the 2025 OCP summit with twelve founding members (AMD, Arista, Arm, Broadcom, Cisco, HPE Networking, Marvell, Meta, Microsoft, NVIDIA, OpenAI, Oracle). OCP says it had grown past 175 participating companies by the time the
+          <a href="https://www.opencompute.org/blog/the-ocp-esun-10-specification-has-been-released" target="_blank" rel="noopener noreferrer">ESUN 1.0 specification shipped in March 2026</a>.
+          Meta and Microsoft led the spec.
+        </p>
+        <p>
+          The spec is specific about three things.
+        </p>
+        <p>
+          <strong>A smaller header.</strong> ESUN defines a 4-byte ESUN Header that replaces the IP/UDP stack, which OCP puts at 28 to 48 bytes. Scale-up traffic is dominated by small messages, like tensor-parallel all-reduce fragments and MoE expert-routing payloads, where per-packet overhead is a real fraction of the link.
+        </p>
+        <p>
+          To put a number on it, by my arithmetic: take a 256-byte payload and count the usual Ethernet framing costs on the wire (8 bytes preamble and start delimiter, 14 bytes Ethernet header, 4 bytes FCS, 12 bytes inter-frame gap, 38 bytes in all). With IPv4 plus UDP on top, the payload is about 79.5% of the bits on the wire. With IPv6 plus UDP it’s about 74.9%. With the 4-byte ESUN header it’s about 85.9%. That ignores whatever transport header sits above, so treat it as an upper bound on the gain, not a measured goodput number. Still, six to eleven points of link efficiency on small messages is the kind of thing you’d otherwise pay for with more lanes.
+        </p>
+        <p>
+          <strong>Lossless delivery at the link layer.</strong> The
+          <a href="https://www.opencompute.org/documents/ocp-esun-network-operator-requirements-base-specification-rev-1-0-final-pdf" target="_blank" rel="noopener noreferrer">ESUN base spec</a>
+          requires Priority Flow Control on switches and adds two mechanisms defined by the Ultra Ethernet Consortium. Link Level Retry (LLR) retransmits a frame between the two peers on a link when forward error correction couldn’t fix it, instead of waiting for the endpoints to notice a missing packet and retransmit end to end. Credit Based Flow Control (CBFC) lets a sender transmit only when the receiver has advertised buffer space, which the spec says allows more memory-efficient switch designs than PFC alone. Both are configurable per port.
+        </p>
+        <p>
+          At 200G-per-lane SerDes, FEC alone leaves a tail of uncorrectable frames, and in a scale-up collective one end-to-end retransmit stalls every rank. Fixing it on the hop where it happened costs far less time than an end-to-end timeout and retransmit. The spec is explicit that LLR only covers bit-error drops; congestion drops and anything else still need end-to-end recovery.
+        </p>
+        <p>
+          <strong>Congestion control for multi-hop.</strong> The ESUN header carries ECN, class of service, TTL, and a flow label, so a multi-hop scale-up topology can signal both transient and persistent congestion. That’s what a scale-up domain needs once it stops being a single switch hop, as in the cross-rack design.
+        </p>
+        <p>
+          ESUN is the network-side spec. The endpoint side, how an accelerator turns loads, stores and collectives into packets, is a separate OCP workstream called
+          <a href="https://www.opencompute.org/wiki/Networking/SUE-T" target="_blank" rel="noopener noreferrer">SUE-T</a>,
+          seeded by Broadcom’s Scale-Up Ethernet 1.0 contribution. Arista’s announcement is about switches, racks and diagnostics. It doesn’t ship an endpoint.
+        </p>
+
+        <h2>Three ways to build the rack</h2>
+        <p>
+          Arista’s
+          <a href="https://blogs.arista.com/blog/next-gen-scale-up-networking-for-ai-fabrics" target="_blank" rel="noopener noreferrer">engineering blog</a>,
+          written by Arihant Jain and Vijay Vusirikala, and the analyst briefing
+          <a href="https://siliconangle.com/2026/10/07/arista-takes-ethernet-rack-network-becomes-backplane/" target="_blank" rel="noopener noreferrer">reported by SiliconANGLE</a>
+          describe three physical layouts.
+        </p>
+        <ul>
+          <li>
+            <strong>Orthogonal chassis.</strong> Accelerator blades in front, full-height switch cards in back, connected directly with no backplane and no cables. This is where the 144-XPU single-hop number lives, in a 100 to 400 kW direct liquid cooling envelope. It’s the design aimed at training.
+          </li>
+          <li>
+            <strong>Cabled backplane.</strong> Switches in the middle of the rack, connected to servers with copper cable cartridges. Less dense, more serviceable, and it lets an operator split switch bandwidth between intra-rack and inter-rack links.
+          </li>
+          <li>
+            <strong>Cross-rack.</strong> A dedicated switch rack ties separate accelerator racks together. This is the route to 1,024 XPUs. Vusirikala called it the most flexible and fastest to market, since it skips long co-design with the accelerator vendor, at a cost in interconnect and power. His line on reach was blunt: “Copper runs out of juice very quickly,” so anything beyond two racks needs optics.
+          </li>
+        </ul>
+        <p>
+          That last point is the trade I’d want to model before believing 1,024. A cross-rack scale-up domain on optics adds transceiver power per lane and optical latency on every hop, and it brings optical failure modes into the part of the cluster least tolerant of them. None of that is quantified in the announcement.
+        </p>
+
+        <h2>The scale-out half and the numbers you can check</h2>
+        <p>
+          The scale-out side is more conventional and easier to verify. Arista offers liquid-cooled rack reference designs with 8, 12, or 16 of its 7060EX7 switches, each 102.4 Tbps. Sixteen of those is 1,638 Tbps, which is the “1.6 Pb/s per rack” figure in the release. Arista says next-generation optics, its XPO pluggables or open co-packaged and near-packaged optics, take that to 6.5 Pb/s per rack. Hardev Singh, who runs Arista’s cloud and AI group, told
+          <a href="https://www.networkworld.com/article/4232036/arista-steps-up-its-ethernet-challenge-to-nvidias-ai-scale-up-networking-fabric.html" target="_blank" rel="noopener noreferrer">Network World</a>
+          that “a Tomahawk 7, 200G-based generation” could support that 6.5 figure in a single rack drawing more than 100 kW. The “nearly 50% reduction in overall data center footprint” that follows is Arista’s claim, not something I can check from the outside.
+        </p>
+        <p>
+          The racks include patch panels, cooling manifolds, drip trays with active leak detection, and battery-backed power shelves. The fabric supports UEC features, Multipath Reliable Connection, and multi-plane routing, and it’s meant to sit beside whatever scale-up protocol the compute uses: ESUN, NVLink, NVLink Fusion, or PCIe.
+        </p>
+
+        <h2>Diagnostics are the real product</h2>
+        <p>
+          The part that will decide whether these racks work in production is Netdi, Arista’s Network Diagnostics Infrastructure. Per the blog, it does hardware-level validation, signal integrity analysis, secure boot attestation, and single event upset resiliency, with telemetry covering switches, optics, power shelves, and the liquid cooling plant. It’s NOS-agnostic, so it runs under EOS, SONiC, FBOSS, or another network OS.
+        </p>
+        <p>
+          Jain’s operational argument in the briefing: a 16-switch rack can involve about 2,000 fibers, and assembling that on site invites miswiring, bend-radius violations, and dead optics, so racks should be integrated and tested upstream, then rolled in.
+        </p>
+        <p>
+          From the cluster side, this is what I care about most, because a scale-up domain fails as a unit. If one link in a 144-XPU group flaps, the job sharded across it stalls or restarts, and the scheduler has to know which nodes to cordon. Diagnostic telemetry that can isolate a bad optic or a marginal SerDes lane before the job dies is worth more than a few percent of bandwidth. Whether Netdi exposes that in a form a cluster health system can consume, through gNMI, OpenTelemetry, or something a Kubernetes node-problem detector can read, is the question I’d ask at the booth.
+        </p>
+
+        <h2>What this is not</h2>
+        <p>
+          A few limits are stated plainly in the coverage, and they matter:
+        </p>
+        <ul>
+          <li>
+            <strong>It isn’t a SKU.</strong> Singh told Network World that customers won’t find a rack on Arista’s price list. Arista sells the switches, software, and validation, and the integrated rack comes from partners and system integrators such as Foxconn and Quanta.
+          </li>
+          <li>
+            <strong>It doesn’t touch NVIDIA scale-up.</strong> Vusirikala told SiliconANGLE there is “no near-term opportunity” inside NVIDIA’s scale-up domain because it is proprietary. The market here is AMD Helios, Microsoft Maia, Meta MTIA, Qualcomm, d-Matrix, and other non-NVIDIA accelerators.
+          </li>
+          <li>
+            <strong>There’s no latency number.</strong> No port-to-port figure and no collective benchmark, and for scale-up that’s the number that matters most.
+          </li>
+          <li>
+            <strong>There’s no ship date</strong> for the scale-up racks themselves.
+          </li>
+        </ul>
+
+        <h2>Where I land</h2>
+        <p>
+          The useful signal isn’t that Arista wants a piece of scale-up. It’s that ESUN 1.0 is specific enough, with a 4-byte header, link-level retry, credit-based flow control, and a multi-hop congestion header, that a switch vendor can build three different physical racks against it and partners can build accelerators to the other side. That’s roughly how Ethernet caught up with InfiniBand in scale-out, a debate SiliconANGLE’s Zeus Kerravala calls “largely settled”: not on peak numbers, but on a common spec that many vendors could ship to.
+        </p>
+        <p>
+          If you run clusters on non-NVIDIA accelerators, or expect to in a 2027 build, the questions I’d take to OCP next week are concrete. What’s the measured all-reduce latency across 144 XPUs in the orthogonal chassis, versus across the cross-rack design on optics? What’s the LLR retry rate at 200G per lane in a real liquid-cooled rack? And what does Netdi emit when a link starts to degrade, and how fast? Arista will have a fully assembled liquid-cooled rack at booth E61, and Andy Bechtolsheim is speaking at 1 p.m. on October 13. I’d go for the rack and the telemetry, not the keynote slide.
+        </p>
+        <p>
+          Create-only. Specs from Arista’s October 7, 2026 press release and engineering blog, the OCP ESUN 1.0 specification, Network World, and SiliconANGLE.
+        </p>
+        <p>
+          Sources:
+          <a href="https://www.arista.com/en/company/news/press-release/24818-pr-20261007" target="_blank" rel="noopener noreferrer">Arista press release, Oct 7</a>
+          ·
+          <a href="https://blogs.arista.com/blog/next-gen-scale-up-networking-for-ai-fabrics" target="_blank" rel="noopener noreferrer">Arista engineering blog</a>
+          ·
+          <a href="https://www.opencompute.org/blog/the-ocp-esun-10-specification-has-been-released" target="_blank" rel="noopener noreferrer">OCP ESUN 1.0 specification</a>
+          ·
+          <a href="https://www.opencompute.org/documents/ocp-esun-network-operator-requirements-base-specification-rev-1-0-final-pdf" target="_blank" rel="noopener noreferrer">ESUN base spec</a>
+          ·
+          <a href="https://www.opencompute.org/wiki/Networking/SUE-T" target="_blank" rel="noopener noreferrer">SUE-T</a>
+          ·
+          <a href="https://www.networkworld.com/article/4232036/arista-steps-up-its-ethernet-challenge-to-nvidias-ai-scale-up-networking-fabric.html" target="_blank" rel="noopener noreferrer">Network World</a>
+          ·
+          <a href="https://siliconangle.com/2026/10/07/arista-takes-ethernet-rack-network-becomes-backplane/" target="_blank" rel="noopener noreferrer">SiliconANGLE</a>.
+        </p>
+        <p>
+          Related:
+          <a href="/helios-ualoe.html">Helios UALoE</a>
+          ·
+          <a href="/cornelis-delos-open-scaleup-ualink-esun.html">Cornelis Delos</a>
+          ·
+          <a href="/opentpu-fpga-llm-accelerator.html">openTPU</a>.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
