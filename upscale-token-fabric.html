@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Upscale Token Fabric: SkyFabriX at 115.2 Tbps Meets Spectrum-X Scale-Out Under One OS — Anpoo Sivanadi</title>
+  <meta name="description" content="A day after Arista’s Etherlink SU-144, Upscale published Token Fabric: SkyFabriX at 115.2 Tbps, Spectrum-X scale-out, and one OS for both, with general availability aimed at early 2027." />
+  <link rel="canonical" href="https://asivanadi0.github.io/upscale-token-fabric.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Upscale Token Fabric: SkyFabriX at 115.2 Tbps Meets Spectrum-X Scale-Out Under One OS — Anpoo Sivanadi" />
+  <meta property="og:description" content="A day after Arista’s Etherlink SU-144, Upscale published Token Fabric: SkyFabriX at 115.2 Tbps, Spectrum-X scale-out, and one OS for both, with general availability aimed at early 2027." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/upscale-token-fabric.html" />
+  <meta property="article:published_time" content="2026-10-09T06:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Upscale Token Fabric: SkyFabriX at 115.2 Tbps Meets Spectrum-X Scale-Out Under One OS</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-09T06:00:00-07:00">9 October 2026</time>
+          · Anpoo Sivanadi
+          · based on Upscale’s October 8 Token Fabric release, Network World, the SkyHammer architecture, and the OCP ESUN 1.0 spec
+        </p>
+        <p class="dek article-dek">
+          A day after Arista’s Etherlink SU-144, Upscale published Token Fabric: SkyFabriX at 115.2 Tbps, Spectrum-X scale-out, and one OS for both, with general availability aimed at early 2027.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          A day after
+          <a href="/arista-etherlink-su144-esun.html">Arista pushed Ethernet into the scale-up rack with Etherlink SU-144</a>,
+          Upscale published the other half of that story: not just a reference rack on someone else’s ASICs, but its own scale-up silicon, Spectrum-X scale-out systems, and a single network OS meant to run both. The portfolio is called
+          <a href="https://upscale.com/blogs/upscale-introduces-token-fabric-the-industrys-most-comprehensive-standards-based-networking-portfolio-for-ai-factories" target="_blank" rel="noopener noreferrer">Token Fabric</a>,
+          announced October 8, with early-access programs open now and general availability aimed at early 2027. You’ll see it at OCP 2026 in San Jose at booth Sapphire F5.
+        </p>
+        <p>
+          If you run heterogeneous clusters — AMD Helios, d-Matrix, SambaNova, Meta MTIA-class XPUs next to NVIDIA pods — this is the announcement worth reading carefully. The headline number is real silicon capacity. The open question is the same one I had with Arista: show me latency, show me a failed optic, show me a shippable SKU.
+        </p>
+
+        <h2>Three layers, not three separate RFPs</h2>
+        <p>
+          Token Fabric is Upscale’s name for stitching three things that operators usually buy from different teams:
+        </p>
+        <ul>
+          <li>
+            <strong>Scale-up:</strong> <code>SkyFabriX</code> switch silicon and the switch trays that sit next to accelerators inside a rack or pod.
+          </li>
+          <li>
+            <strong>Scale-out:</strong> Upscale-engineered Ethernet systems built on
+            <a href="https://www.nvidia.com/en-us/networking/spectrumx/" target="_blank" rel="noopener noreferrer">NVIDIA Spectrum-X</a>
+            silicon, from 400G and 800G toward 1.6T.
+          </li>
+          <li>
+            <strong>Operate as one:</strong> <code>SkyOS</code> as the network operating system across both fabrics, and <code>SkyCMD</code> as the orchestration and observability plane.
+          </li>
+        </ul>
+        <p>
+          That split matters. Scale-up is where collectives live — tensor-parallel shards, MoE expert routing, memory-semantic traffic that hates jitter. Scale-out is where jobs span racks and pods on RoCE Ethernet. Most shops still treat those as two networks with two vendors, two NOSes, and two paging trees. Upscale’s pitch, in CEO Barun Kar’s words to
+          <a href="https://www.networkworld.com/article/4232707/upscale-takes-on-ai-networking-silos-with-token-fabric.html" target="_blank" rel="noopener noreferrer">Network World</a>,
+          is that compute ramped and “networking has fallen way behind,” so they want one vertically stacked answer.
+        </p>
+
+        <h2>SkyFabriX: the number and the protocols</h2>
+        <p>
+          The silicon claim is concrete. SkyFabriX is Upscale’s purpose-built scale-up switch chip, based on the
+          <a href="https://upscale.com/blogs/upscale-ai-unveils-skyhammer-tm-architecture" target="_blank" rel="noopener noreferrer">SkyHammer architecture</a>
+          the company outlined earlier in 2026. Rated capacity is <strong>115.2 Tbps</strong>, with a stated roadmap to multi-petabit-per-second designs. Physical variants cover copper and optics — pluggable, near-package optics (NPO), and co-packaged optics (CPO). Trays ship in custom, Open Rack V3 (ORV3), and standard rack form factors so you can pool GPUs and other XPUs into one standards-based scale-up domain.
+        </p>
+        <p>
+          The protocol list is why this sits next to the Arista piece instead of replacing it. SkyFabriX is described as supporting:
+        </p>
+        <ul>
+          <li>
+            <strong>OCP ESUN</strong> (Ethernet for Scale-Up Networking) — the same OCP workstream behind Arista’s SU-144 racks and the
+            <a href="https://www.opencompute.org/news/the-ocp-esun-10-specification-has-been-released/" target="_blank" rel="noopener noreferrer">ESUN 1.0</a>
+            base spec.
+          </li>
+          <li>
+            <strong>UALoE</strong> (UALink over Ethernet).
+          </li>
+          <li>
+            <strong>SUE-T</strong> (Scale-Up Ethernet Transport), the endpoint-side OCP workstream.
+          </li>
+          <li>
+            <strong>Standard Ethernet/IP</strong>, plus evolving <strong>UALink</strong>.
+          </li>
+        </ul>
+        <p>
+          That is a deliberate bet on openness rather than a proprietary domain bus. Network World notes Upscale is contributing into SONiC, SAI extensions for ESUN, the Ultra Ethernet Consortium, and UALink. Scale-up traffic rides ESUN and Ethernet/IP; scale-out rides Ethernet with RoCE. Upscale is not inventing a third fabric that only its chips speak.
+        </p>
+        <p>
+          For an operator, the interesting comparison is not “Arista vs Upscale” as a beauty contest. Arista showed three physical rack layouts and Netdi diagnostics against ESUN. Upscale is shipping (or at least sampling) the <em>switch ASIC</em> that sits in that domain, plus claiming memory-semantic communication and deterministic latency — without publishing a port-to-port number yet.
+        </p>
+
+        <h2>Spectrum-X on the outside, SkyOS in the middle</h2>
+        <p>
+          On scale-out, Upscale does not reinvent NVIDIA’s Ethernet stack. It builds systems around Spectrum-X at 400G and 800G with a 1.6T roadmap, the same silicon path Upscale announced it would pursue in
+          <a href="https://upscale.com/blogs/upscale-ai-supercharges-open-heterogeneous-scale-out-ai-clusters-with-nvidia-ethernet-switch-silicon" target="_blank" rel="noopener noreferrer">March</a>.
+          Gilad Shainer, NVIDIA’s networking SVP, is quoted in the Token Fabric release backing that choice for “open and heterogeneous AI infrastructure.”
+        </p>
+        <p>
+          Software is where Upscale tries to make two fabrics feel like one computer. SkyOS is the AI-oriented network OS spanning scale-up and scale-out; Network World reports it is based on SONiC and tuned for AI protocols. SkyCMD sits above it as an “agent-native” orchestration and observability layer — Kar’s framing is agents watching cables, optics, and congestion and proposing paths around failures. Marketing language aside, the operational ask is familiar: one control plane that a cluster health system can talk to when a link in a 100k-accelerator train starts to degrade.
+        </p>
+        <p>
+          Consumption is split three ways in the
+          <a href="https://upscale.com/blogs/upscale-introduces-token-fabric-the-industrys-most-comprehensive-standards-based-networking-portfolio-for-ai-factories" target="_blank" rel="noopener noreferrer">official release</a>:
+        </p>
+        <ol>
+          <li>
+            <strong>Full stack</strong> — trays + Spectrum-X systems + SkyOS + SkyCMD, aimed at neoclouds and enterprises without a hyperscaler network org.
+          </li>
+          <li>
+            <strong>Integrated systems</strong> — validated hardware for XPU vendors that do not want to build a network stack, with SkyOS/SkyCMD optional.
+          </li>
+          <li>
+            <strong>Silicon / custom systems + your NOS</strong> — SkyFabriX (and open SAI / SDK) under the customer’s own network OS, aimed at hyperscalers.
+          </li>
+        </ol>
+        <p>
+          That third path is the one I’d watch. If SkyFabriX only lights up under SkyOS, the “open” claim is soft. If a hyperscaler can drop the ASIC under FBOSS, EOS, or their SONiC fork and still get ESUN and UALoE right, the silicon becomes a real alternative to proprietary scale-up domains.
+        </p>
+
+        <h2>Ecosystem quotes that map to real boxes</h2>
+        <p>
+          Two partner lines in the release are useful beyond the press kit.
+        </p>
+        <p>
+          d-Matrix CEO Sid Sheth ties ESUN support on SkyFabriX to putting
+          <a href="/dmatrix-raptor-nvlink-fusion-nvl144.html">memory-centric XPUs</a>
+          into the same data center as GPU fleets for interactive inference. That is the heterogeneous story in one sentence: not “replace NVIDIA,” but “put the specialized accelerator on a fabric the rest of the cluster already understands.”
+        </p>
+        <p>
+          TSMC’s Lucas Tsai is quoted on process and advanced packaging collaboration — expected for a 115.2 Tbps class switch, and a reminder that SkyFabriX still has to clear silicon bring-up, not just a slide. SambaNova’s Rodrigo Liang adds the generic but correct demand signal: tightly coupled accelerator systems need more bandwidth and less latency on the scale-up side as agentic workloads grow.
+        </p>
+
+        <h2>What is still missing</h2>
+        <p>
+          Be as hard on this announcement as on Arista’s.
+        </p>
+        <ul>
+          <li>
+            <strong>No latency number.</strong> “Deterministic, ultra-low-latency” and “native memory-semantic communication” are claims without a microsecond, a hop count, or an all-reduce curve.
+          </li>
+          <li>
+            <strong>No power or port map for the 115.2 Tbps SKU.</strong> Capacity alone does not tell you SerDes rate, radix, or watts per Tbps.
+          </li>
+          <li>
+            <strong>GA is early 2027.</strong> Early access and joint validation are underway; that is not the same as a rack you can PO today.
+          </li>
+          <li>
+            <strong>Spectrum-X scale-out is not a differentiator by itself.</strong> Plenty of vendors build on Spectrum-X. The bet is the <em>combination</em> with SkyFabriX and one OS.
+          </li>
+          <li>
+            <strong>“Customer wins” are unnamed</strong> in the public materials I read. Treat traction claims as unverified until a neocloud or XPU partner publishes a design win.
+          </li>
+        </ul>
+        <p>
+          Also keep funding out of the technical read. Upscale has raised on the order of half a billion dollars and NVIDIA joined a June round; that explains why a startup can field both an ASIC and a Spectrum-X systems line, but it does not prove the fabric.
+        </p>
+
+        <h2>Where I land</h2>
+        <p>
+          Token Fabric is the logical next move after ESUN 1.0: someone has to put a purpose-built scale-up switch behind the open header, LLR, and credit-based flow control that
+          <a href="https://www.opencompute.org/documents/ocp-esun-network-operator-requirements-base-specification-rev-1-0-final-pdf/" target="_blank" rel="noopener noreferrer">OCP already specified</a>,
+          then operate that domain with the same team that runs the RoCE scale-out. Upscale is trying to be that someone, while leaning on NVIDIA for the outer Ethernet and on TSMC for the die.
+        </p>
+        <p>
+          If you are planning a 2027 heterogeneous build —
+          <a href="/helios-ualoe.html">Helios / UALoE</a>,
+          <a href="/cornelis-delos-open-scaleup-ualink-esun.html">open UALink / ESUN scale-up</a>,
+          d-Matrix, or mixed GPU/XPU pods — the questions I’d take to Sapphire F5 are concrete:
+        </p>
+        <ol>
+          <li>
+            What is measured hop latency and all-reduce time across a SkyFabriX domain at the advertised 115.2 Tbps configuration, copper vs NPO/CPO?
+          </li>
+          <li>
+            Can SkyFabriX run under a customer NOS with the open SAI path, or does ESUN/UALoE only work under SkyOS?
+          </li>
+          <li>
+            What does SkyCMD emit when a scale-up link starts to error — gNMI? OpenTelemetry? Something a Kubernetes node-problem detector can consume?
+          </li>
+          <li>
+            Which XPU NICs are validated today beyond the press quotes — d-Matrix, SambaNova, others — and at what link rate?
+          </li>
+        </ol>
+        <p>
+          Arista showed the rack shapes. Upscale is claiming the ASIC and the unified OS. Until the latency and telemetry rows are filled in, treat Token Fabric as a serious standards-based roadmap, not a finished fabric. I’ll be at the booth for the silicon bring-up story, not the “tokens per dollar” slide.
+        </p>
+        <p>
+          Related:
+          <a href="/arista-etherlink-su144-esun.html">Arista Etherlink SU-144: Ethernet Moves Inside the Scale-Up Domain, and the Rack Becomes the Unit</a>
+          ·
+          <a href="/cornelis-delos-open-scaleup-ualink-esun.html">Cornelis Active Compute Fabric + Delos Nonstop AI: Open Scale-Up Math Beyond NVLink</a>
+          ·
+          <a href="/whitefiber-continuum-scale-across.html">WhiteFiber Continuum: 136 Tbps Across 83 km — Scale-Across When One Campus Hits the Power Wall</a>
+          ·
+          <a href="/lessengers-3-2t-glass-npo-dow.html">Lessengers’ 3.2T Glass NPO: TGVs, Lens-Free DOW, and the Millimeters-from-ASIC Bet</a>.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
