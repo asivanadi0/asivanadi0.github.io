@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Scality AI Inference Factory: Object Storage Over RDMA as the Shared KV Cache — Anpoo Sivanadi</title>
+  <meta name="description" content="Scality launched AI Inference Factory on October 8: an open-code stack for serving open-weight models on infrastructure you own, with Scality ADI as a shared key-value (KV) cache behind the GPUs." />
+  <link rel="canonical" href="https://asivanadi0.github.io/scality-ai-inference-factory-kv-cache.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Scality AI Inference Factory: Object Storage Over RDMA as the Shared KV Cache — Anpoo Sivanadi" />
+  <meta property="og:description" content="Scality launched AI Inference Factory on October 8: an open-code stack for serving open-weight models on infrastructure you own, with Scality ADI as a shared key-value (KV) cache behind the GPUs." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/scality-ai-inference-factory-kv-cache.html" />
+  <meta property="article:published_time" content="2026-10-09T18:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Scality AI Inference Factory: Object Storage Over RDMA as the Shared KV Cache</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-09T18:00:00-07:00">9 October 2026</time>
+          · Anpoo Sivanadi
+          · based on Scality’s October 8 AI Inference Factory press release, Giorgio Regni’s companion write-up, and StorageReview
+        </p>
+        <p class="dek article-dek">
+          Scality launched AI Inference Factory on October 8: an open-code stack for serving open-weight models on infrastructure you own, with Scality ADI as a shared key-value (KV) cache behind the GPUs.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          <a href="https://www.scality.com/press-releases/ai-inference-factory" target="_blank" rel="noopener noreferrer">Scality</a>
+          launched
+          <a href="https://www.scality.com/ai-inference-factory" target="_blank" rel="noopener noreferrer">AI Inference Factory</a>
+          on October 8: an open-code stack for serving open-weight models on infrastructure you own, with
+          <a href="https://www.solved.scality.com/shared-kv-cache-ai-inference/" target="_blank" rel="noopener noreferrer">Scality ADI</a>
+          as a shared key-value (KV) cache behind the GPUs. The interesting claim is not the on-prem packaging. It is that object storage over RDMA is fast enough to sit in the serving path — 166 ms warm time-to-first-token on a 14K-token restore, 14× faster than recompute on that shape, and 72× on a 438,764-token GLM-5.2 session.
+        </p>
+        <p>
+          That sits next to two posts already on this site:
+          <a href="/astera-leo-x-fabric-kv-cache.html">Astera Leo X</a>
+          (fabric-attached DDR for warm KV) and
+          <a href="/lightbits-inferra-kv-cache-prefetch.html">Lightbits Inferra</a>
+          (prefetch beyond HBM with named TTFT tables). Scality’s bet is a third tier — multi-petabyte object storage, CPU off the data path, any decode GPU able to pick up any returning session.
+        </p>
+
+        <h2>Why the cache left the GPU</h2>
+        <p>
+          Every returning agent session is a choice: recompute the context, or read it back. Scality CTO Giorgio Regni’s
+          <a href="https://www.solved.scality.com/shared-kv-cache-ai-inference/" target="_blank" rel="noopener noreferrer">companion write-up</a>
+          cites a 2026 agentic-workload study where 84.6% to 99.5% of input tokens were cache-reusable turn to turn, and hit rates collapsed from ~98% to 16%–26% once too many concurrent agents crowded the cache. Cloud providers price a cached input token at about a tenth of an uncached one for the same reason: recompute is the expensive path.
+        </p>
+        <p>
+          On your own fleet that cache is hardware you already bought — until it no longer fits. Regni’s lab measured one GLM-5.2 session at <strong>438,764 tokens</strong> producing <strong>189 GB</strong> of KV cache, about <strong>430 KB per token</strong>. With the model loaded across all eight GPUs of their test server, that single session did not fit in leftover HBM. Scale that shape to thousands of concurrent coding-agent sessions and you are in petabyte territory. That is a storage problem dressed up as an inference problem.
+        </p>
+
+        <h2>Architecture: prefill writes, decode reads, ADI in the middle</h2>
+        <p>
+          Inference Factory packages:
+        </p>
+        <ul>
+          <li>
+            Validated open-weight families (Mistral, Gemma, gpt-oss, Qwen, Kimi, GLM, DeepSeek)
+          </li>
+          <li>
+            A serving layer built on <strong>vLLM</strong> and <strong>Dynamo</strong> that splits <strong>prefill</strong> from <strong>decode</strong>
+          </li>
+          <li>
+            A control plane for auth, metering, routing, and SLA-aware scheduling
+          </li>
+          <li>
+            <strong>Scality ADI</strong> underneath for models, enterprise data, and inference state
+          </li>
+          <li>
+            The <strong>Scality AI Connector</strong> between GPUs and ADI
+          </li>
+        </ul>
+        <p>
+          vLLM breaks the KV cache into fixed-size named blocks. ADI stores each block as an object. On a restore, the GPU reserves memory and tells ADI which object to place there. The TLC NVMe drive moves the object into the storage server’s RAM over PCIe, and the NIC writes it straight into GPU memory over RDMA. CPU, kernel, and the usual S3 software path stay off the data plane. Scality says that path hits <strong>97% of network line rate</strong> between GPUs and storage.
+        </p>
+        <p>
+          The control plane is where they cut corners on purpose. Even S3-over-RDMA still pays for request signing, policy checks, XML, and multipart framing on every object. The AI Connector swaps that for a stripped-down control plane with single-pass authentication and no XML/multipart framing, while keeping the object model. StorageReview’s
+          <a href="https://www.storagereview.com/news/scality-ai-inference-factory-kv-cache-object-storage-rdma" target="_blank" rel="noopener noreferrer">write-up</a>
+          walks the same path.
+        </p>
+        <p>
+          Split serving is the payoff. Prefill computes the KV cache for a new prompt and writes it to ADI. Decode reads it back and generates tokens. DistServe (OSDI 2024) measured up to <strong>7.4×</strong> more requests within the same latency targets when prefill and decode no longer share GPUs. Moonshot’s Mooncake reported <strong>75%</strong> more requests on Kimi production traffic with a shared KV pool. Scality’s version of that design uses ADI as the shared pool, so any decode GPU can resume any session and the cache is not capped by one server’s DRAM.
+        </p>
+
+        <h2>The numbers, with the lab caveats attached</h2>
+        <p>
+          All figures below are Scality’s self-reported lab results from the CTO post and the October 8 press release. The lab was deliberately small: <strong>one eight-GPU server</strong>, <strong>five older storage servers</strong>, and <strong>four 100 Gb/s RDMA links</strong>. Scality says the product itself runs on a <strong>400 Gb/s</strong> fabric, and it <strong>does not name the GPU</strong>. Treat these as architecture measurements, not a bake-off against Leo X or Inferra on matched silicon.
+        </p>
+        <div class="table-wrap" role="region" aria-label="Scality AI Inference Factory self-reported lab measurements" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Measurement</th>
+                <th>Result</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Warm TTFT, 14K-token restore from ADI</td>
+                <td><strong>166 ms</strong> (83 ms behind same context from HBM)</td>
+              </tr>
+              <tr>
+                <td>Recompute that 14K context</td>
+                <td><strong>2.3 s</strong> → restore <strong>14×</strong> faster</td>
+              </tr>
+              <tr>
+                <td>GLM-5.2, 438,764-token context</td>
+                <td>Recompute <strong>529 s</strong>, read-back <strong>7.3 s</strong> → <strong>72×</strong></td>
+              </tr>
+              <tr>
+                <td>KV cache held with 8 vLLM instances (1/GPU)</td>
+                <td><strong>8 TB</strong> (~80× one GPU’s memory, ~10× the whole server)</td>
+              </tr>
+              <tr>
+                <td>First-token latency across 69 GB → 8 TB cache sizes</td>
+                <td><strong>355–373 ms</strong>, flat</td>
+              </tr>
+              <tr>
+                <td>Concurrent sessions resumable without recompute</td>
+                <td>Up to <strong>~1,000</strong> (vendor claim at that capacity)</td>
+              </tr>
+              <tr>
+                <td>Gemma-3 27B weight load (54.86 GB) from ADI</td>
+                <td><strong>1.9 s</strong> into one GPU (~10× local NVMe; ~28.9 GB/s on the four-link lab)</td>
+              </tr>
+              <tr>
+                <td>GPU↔storage transfer</td>
+                <td><strong>97%</strong> of network line rate</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Inter-token latency did not move with cache size: the fetch finishes before the first token, and every token after that runs from GPU memory. That is the right property if you want storage in the serving path. Regni’s line is the useful summary: restoring from ADI is the same order of magnitude as GPU memory, and storage is no longer why you keep the KV cache inside the GPU server.
+        </p>
+
+        <h2>Upstream fixes, not a forked stack</h2>
+        <p>
+          Two engineering notes matter more than the marketing slide.
+        </p>
+        <p>
+          First, Scality says vLLM’s KV offload connector was fetching about <strong>five times</strong> the cache blocks each restore needed — a tax anyone paying if they pointed that connector at an object store. They corrected the connector, left the vLLM core alone, and say they committed the fix upstream. Second, they extended the open-source ModelExpress loader to pull weights straight from object storage. The shipping stack, they claim, contains <strong>no Scality forks</strong>.
+        </p>
+        <p>
+          If those commits land and stay, every object store behind that connector benefits. If they only live in Scality’s packaging branch, the “open code” claim is softer than it sounds. Ask for the PR links before you treat the stack as a community contribution story.
+        </p>
+
+        <h2>How I would place this against Leo X and Inferra</h2>
+        <p>
+          <a href="/astera-leo-x-fabric-kv-cache.html">Leo X</a>
+          is fabric-attached DDR next to the GPU domain — CXL/PCIe memory semantics, vendor warm-TTFT gains on H200 math.
+          <a href="/lightbits-inferra-kv-cache-prefetch.html">Inferra</a>
+          is NVMe-class prefetch with named L40S TTFT tables vs recompute. Scality is the capacity end of that spectrum: TLC → HDD → optional tape under one namespace, RDMA into HBM, designed so a returning Monday-morning agent fleet does not thrash eight GPUs’ worth of local cache.
+        </p>
+        <p>
+          They are not substitutes. Leo X wins when you need near-NUMA latency for a hot working set that still fits in tens of terabytes of DDR. Inferra wins when you want a storage-adjacent prefetch path with published L40S numbers. Scality wins when the working set is hundreds of gigabytes per long session and you want any decode GPU in the pool to resume any context without pinning sessions to boxes.
+        </p>
+        <p>
+          What is still missing for an operator ticket:
+        </p>
+        <ul>
+          <li>
+            <strong>Named GPU and matched rematch.</strong> Eight unnamed GPUs on 100 Gb/s links is not a Spectrum-X / NVL72 story.
+          </li>
+          <li>
+            <strong>Independent TTFT curves</strong> against Leo X, Inferra, and host-DRAM offload on the same model and context lengths.
+          </li>
+          <li>
+            <strong>Failure modes.</strong> What happens when a storage server dies mid-restore? How is block checksumming done on the RDMA path?
+          </li>
+          <li>
+            <strong>Power and $/TB</strong> for the ADI tier that actually holds the 8 TB (and the 1.9 PB extrapolation).
+          </li>
+        </ul>
+
+        <h2>What ships</h2>
+        <p>
+          Inference Factory is available now as a software license or fully managed service. It deploys on standard Dell, HPE, Lenovo, and Supermicro servers. Harnesses Scality names as compatible include OpenCode, Hermes, Goose, LangGraph, and Pydantic AI; the press kit also says Claude Code and Codex keep working once you retarget the endpoint. ADI already claims <strong>12+ EB</strong> in production across <strong>70+</strong> countries as Scality’s existing object fleet — useful as proof they can operate storage at that scale, not as an inference SLO.
+        </p>
+        <p>
+          If you run disaggregated prefill/decode today and your KV offload still dies on recompute cliffs, this is the October 8 announcement to put on the whiteboard next to Leo X and Inferra — with the lab caveats written in permanent marker.
+        </p>
+        <p>
+          Related:
+          <a href="/astera-leo-x-fabric-kv-cache.html">Astera Leo X: Fabric-Attached DDR for KV Cache — 62% Faster Warm TTFT on H200 Math</a>
+          ·
+          <a href="/lightbits-inferra-kv-cache-prefetch.html">Lightbits Inferra: KV Cache Prefetch Beyond HBM — Named TTFT Tables on L40S Math</a>
+          ·
+          <a href="/vllm-0-31-fast-restart.html">vLLM 0.31 Fast Restart: A GPU Weight-Cache Daemon and CRIU Engine Snapshots</a>
+          ·
+          <a href="/upscale-token-fabric.html">Upscale Token Fabric: SkyFabriX at 115.2 Tbps Meets Spectrum-X Scale-Out Under One OS</a>.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
