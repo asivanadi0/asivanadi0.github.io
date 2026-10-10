@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RTX Spark N1X: The Windows Numbers That Matter Are TDP, Memory Ceiling, and Prefill — Anpoo Sivanadi</title>
+  <meta name="description" content="On October 7, NVIDIA and Microsoft opened Windows pre-orders for RTX Spark laptops (availability October 16; compact desktops in November) and previewed DGX Station for Windows for Q4." />
+  <link rel="canonical" href="https://asivanadi0.github.io/rtx-spark-n1x-windows.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="RTX Spark N1X: The Windows Numbers That Matter Are TDP, Memory Ceiling, and Prefill — Anpoo Sivanadi" />
+  <meta property="og:description" content="On October 7, NVIDIA and Microsoft opened Windows pre-orders for RTX Spark laptops (availability October 16; compact desktops in November) and previewed DGX Station for Windows for Q4." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/rtx-spark-n1x-windows.html" />
+  <meta property="article:published_time" content="2026-10-10T06:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>RTX Spark N1X: The Windows Numbers That Matter Are TDP, Memory Ceiling, and Prefill</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-10T06:00:00-07:00">10 October 2026</time>
+          · Anpoo Sivanadi
+          · based on NVIDIA’s October 7 Windows event, the RTX Spark specs page, StorageReview, Microsoft’s Surface and MXC posts, and ASUS
+        </p>
+        <p class="dek article-dek">
+          On October 7, NVIDIA and Microsoft opened Windows pre-orders for RTX Spark laptops (availability October 16; compact desktops in November) and previewed DGX Station for Windows for Q4.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          On October 7,
+          <a href="https://blogs.nvidia.com/blog/local-ai-rtx-spark-microsoft-windows-event/" target="_blank" rel="noopener noreferrer">NVIDIA</a>
+          and Microsoft opened Windows pre-orders for
+          <a href="https://www.nvidia.com/en-us/products/rtx-spark/" target="_blank" rel="noopener noreferrer">RTX Spark</a>
+          laptops (availability October 16; compact desktops in November) and previewed
+          <a href="https://blogs.nvidia.com/blog/local-ai-rtx-spark-microsoft-windows-event/" target="_blank" rel="noopener noreferrer">DGX Station for Windows</a>
+          for Q4. The useful release is not the “1 petaflop FP4” slide. It is the first public split of
+          <strong><code>N1X</code></strong>
+          power envelopes, how Windows presents the unified memory pool, and a vendor decode/prefill curve for a 137B coding MoE on a laptop.
+        </p>
+        <p>
+          I care about this stack the same way I care about
+          <a href="/halo-station.html">Halo Station</a>
+          and GB10 deskside boxes: if you run local agents or size a small lab, you need watts, addressable bytes, and tokens per second — not another “personal AI PC” paragraph.
+        </p>
+
+        <h2>Two chips, three power envelopes</h2>
+        <p>
+          NVIDIA’s product table now names the Windows superchip
+          <strong><code>N1X</code></strong>
+          and separates laptop from desktop.
+          <a href="https://www.storagereview.com/news/nvidia-rtx-spark-pre-orders-n1x-laptop-desktop-tdp-mxc-dgx-station-for-windows" target="_blank" rel="noopener noreferrer">StorageReview</a>
+          transcribed the table that matches the
+          <a href="https://www.nvidia.com/en-us/products/rtx-spark/" target="_blank" rel="noopener noreferrer">NVIDIA specs page</a>:
+        </p>
+        <div class="table-wrap" role="region" aria-label="NVIDIA RTX Spark N1X laptop and desktop TDP and memory table" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>SKU</th>
+                <th>GPU</th>
+                <th>CPU</th>
+                <th>TDP</th>
+                <th>Unified LPDDR5X</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Laptop <code>N1X</code></td>
+                <td>6,144-core Blackwell RTX</td>
+                <td>20-core Grace</td>
+                <td>45–80W</td>
+                <td>up to 128GB</td>
+              </tr>
+              <tr>
+                <td>Laptop <code>N1X</code> (cut-down)</td>
+                <td>5,120-core Blackwell RTX</td>
+                <td>18-core Grace</td>
+                <td>45–80W</td>
+                <td>up to 64GB</td>
+              </tr>
+              <tr>
+                <td>Desktop <code>N1X</code></td>
+                <td>6,144-core Blackwell RTX</td>
+                <td>20-core Grace</td>
+                <td>140W</td>
+                <td>up to 128GB</td>
+              </tr>
+              <tr>
+                <td>GB10 (DGX Spark, for contrast)</td>
+                <td>Blackwell</td>
+                <td>20 Arm (10×X925 + 10×A725)</td>
+                <td>140W (240W PSU)</td>
+                <td>64 or 128GB @ 273GB/s</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          The desktop <strong>140W</strong> figure is the same chip-level TDP NVIDIA lists for GB10. Laptop
+          <code>N1X</code>
+          therefore runs at roughly <strong>32%–57%</strong> of that desktop rating while every SKU still markets “up to 1 petaflop” of <strong>sparse</strong> FP4. Microsoft’s Surface footnotes call that number theoretical FP4 with sparsity; NVIDIA still does not publish a dense FP4 figure for
+          <code>N1X</code>.
+        </p>
+        <p>
+          Microsoft’s Surface RTX Spark Dev Box page quotes a <strong>100W</strong> thermal envelope in an aluminum chassis — 40W under NVIDIA’s desktop TDP. Treat that as a chassis design point until review units settle sustained power under a long agent session.
+        </p>
+        <p>
+          Memory bandwidth is another platform delta. Dell’s XPS sheet lists LPDDR5X at <strong>9,400 MT/s</strong>; on a 256-bit interface that is about <strong>300.8 GB/s</strong>, matching NVIDIA’s June ~300 GB/s quote and roughly <strong>10%</strong> above DGX Spark’s <strong>273 GB/s</strong>. CPU↔GPU is
+          <strong><code>NVLink-C2C</code> at 600 GB/s</strong>.
+          Media: 1× 9th-gen NVENC and 1× 6th-gen NVDEC; display path HDMI 2.1b / DisplayPort 2.1b.
+        </p>
+        <p>
+          OEM pre-order lists already show how much of the market sits below the headline: of fifteen marketplace configs StorageReview checked, seven used the <strong>5,120-core</strong> part, with memory at 24 / 32 / 48 / 128GB.
+          <a href="https://press.asus.com/news/press-releases/asus-proart-rtx-spark-p16-p14-ai-pcs/" target="_blank" rel="noopener noreferrer">ASUS</a>
+          opened ProArt P16 / P14 pre-orders October 7 (US units from October 16), starting at <strong>$2,599.99</strong>, with 64GB and 128GB mostly through ASUS eShop / Best Buy / Micro Center for the top bin.
+        </p>
+
+        <h2>Windows does not give the GPU all 128GB</h2>
+        <p>
+          Microsoft’s Surface footnote is explicit: unified memory is dynamically shared, and <strong>the maximum addressable by the GPU is less than the installed total</strong>. A Task Manager capture on a Surface Laptop Ultra with the 6,144-core part (reported by StorageReview from Microsoft/GitHub engineering) showed:
+        </p>
+        <ul>
+          <li>
+            <strong>74.9GB</strong> dedicated GPU memory
+          </li>
+          <li>
+            <strong>35.5GB</strong> shared GPU memory
+          </li>
+          <li>
+            <strong>110GB</strong> total GPU memory
+          </li>
+          <li>
+            <strong>51.5GB</strong> system memory
+          </li>
+        </ul>
+        <p>
+          Dedicated + system ≈ <strong>126.4GB</strong>. Windows is presenting the pool the way it presents a discrete card: a fixed dedicated allocation, with borrow from system memory up to a cap. On that unit the GPU ceiling is <strong>110GB</strong>, about <strong>86%</strong> of 128GB. Weights, KV cache, OS, apps, and the inference runtime all fight for that ceiling.
+        </p>
+        <p>
+          Parameter-count marketing spreads for that reason. NVIDIA says models up to <strong>120B</strong> with <strong>1M</strong> context and cites Qwen 3.8 Flash Next at <strong>125B</strong>. Microsoft says models exceeding 120B, then names <strong>MAI Code 1.1 Flash</strong> at <strong>137B</strong> and DeepSeek V4 Flash at <strong>284B</strong>. Dell has quoted <strong>200B</strong>. The spread is bits-per-weight, not magic silicon.
+        </p>
+        <p>
+          Microsoft’s MAI Code 1.1 Flash numbers are the most complete vendor package:
+        </p>
+        <div class="table-wrap" role="region" aria-label="Microsoft MAI Code 1.1 Flash vendor figures" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Claim</th>
+                <th>Figure</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Architecture</td>
+                <td>137B total / <strong>6.8B</strong> active MoE</td>
+              </tr>
+              <tr>
+                <td>Weight footprint</td>
+                <td><strong>53GB</strong> (~3.3 bits/weight mixed precision; BF16 cloud would be ~274GB)</td>
+              </tr>
+              <tr>
+                <td>Peak memory @ 256K context</td>
+                <td><strong>75.5GB</strong></td>
+              </tr>
+              <tr>
+                <td>SWE-Bench (vendor)</td>
+                <td>quantized on-device <strong>70.8%</strong> vs BF16 cloud <strong>72.6%</strong></td>
+              </tr>
+              <tr>
+                <td>Terminal-Bench 2.1 (vendor)</td>
+                <td>on-device <strong>66.29%</strong> vs cloud <strong>62.9%</strong></td>
+              </tr>
+              <tr>
+                <td>Decode (llama.cpp CUDA + DFlash2 speculative, Surface Laptop Ultra)</td>
+                <td>~<strong>63→39 tok/s</strong> from 2K→256K prompt (chart estimates; no labeled points)</td>
+              </tr>
+              <tr>
+                <td>Prefill</td>
+                <td><strong>923.5 tok/s</strong> @ 64K context; <strong>769.8 tok/s</strong> @ 128K</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Prefill is the agent number. A cold <strong>64K</strong> prompt is ~<strong>71 s</strong> before the first output token; cold <strong>128K</strong> is ~<strong>170 s</strong>. Keeping the model loaded does not make TTFT free.
+        </p>
+        <p>
+          MacBook comparison footnotes (Microsoft-commissioned llama.cpp Qwen3.5 27B Q4_K_M TTFT; NVIDIA ComfyUI FLUX.2 / LTX tests at NVFP4) used <strong>64GB preproduction</strong> RTX Spark systems against an <strong>M5 Pro 64GB</strong>, not M5 Max, and did not publish a matched decode tokens-per-second table. Useful as marketing, not as a bake-off.
+        </p>
+
+        <h2><code>MXC</code>: containment is GA; identity is not</h2>
+        <p>
+          The same event made
+          <a href="https://blogs.windows.com/windowsdeveloper/2026/10/07/microsoft-execution-containers-policy-driven-containment-for-ai-agents/" target="_blank" rel="noopener noreferrer">Microsoft Execution Containers (<code>MXC</code>)</a>
+          generally available on Windows 11. Policy sits <strong>outside</strong> the workload: files (read/write/deny), network, UI, and process launch settings in JSON, mapped onto backends:
+        </p>
+        <div class="table-wrap" role="region" aria-label="Microsoft Execution Containers backends" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Backend</th>
+                <th>Platforms</th>
+                <th>Mechanism</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Process container</td>
+                <td>Win11 / macOS / Linux</td>
+                <td>AppContainer / Seatbelt / Bubblewrap</td>
+              </tr>
+              <tr>
+                <td>Session container</td>
+                <td>Win11 only</td>
+                <td>Separate account/session (desktop, clipboard, UI, input)</td>
+              </tr>
+              <tr>
+                <td>WSL container (WSLc)</td>
+                <td>Win11 only</td>
+                <td>Linux toolchain via WSL</td>
+              </tr>
+              <tr>
+                <td>MicroVM</td>
+                <td>Win11 + Linux (experimental)</td>
+                <td>Hardware-enforced VM</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Modes: <strong>Enforcement</strong>, <strong>Learning</strong> (block + JSON activity report), <strong>Permissive</strong> (allow + record). Activity reports for process containers on Windows only. Entra agent identity and Agent 365 fleet controls for local agents are still “coming soon” — until then, security tools see agent activity under the signed-in user even when the container limits reach.
+        </p>
+        <p>
+          GitHub Copilot’s documented integration uses the <strong>base process container</strong> for shell / local MCP / language servers; built-in file tools stay in the harness (policy-checked, not OS-isolated); remote MCP is outside the local sandbox. NVIDIA wired OpenShell into
+          <code>MXC</code>
+          for file/inference policy, network controls, credentials, and OCSF audit. Agents already listed with
+          <code>MXC</code>
+          support include Copilot, Codex, OpenClaw, Replit, LM Studio, and Unsloth; Claude Code and Hermes are among those coming.
+        </p>
+        <p>
+          For cluster people this is the Windows equivalent of a pod security boundary: useful when the model can shell out, incomplete until identity separates the agent from the human.
+        </p>
+
+        <h2>DGX Station for Windows: GB300 on the enterprise desktop</h2>
+        <p>
+          The Q4 preview is not
+          <code>N1X</code>.
+          It is the <strong>GB300</strong> Grace Blackwell Ultra deskside box under Windows, with Linux toolchains through WSL. StorageReview’s table from NVIDIA’s page:
+        </p>
+        <div class="table-wrap" role="region" aria-label="DGX Station for Windows spec table" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Spec</th>
+                <th>DGX Station for Windows</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>GPU</td>
+                <td>1× Blackwell Ultra, <strong>252GB HBM3e</strong> @ <strong>7.1 TB/s</strong></td>
+              </tr>
+              <tr>
+                <td>CPU</td>
+                <td>Grace, <strong>72</strong> Neoverse V2, <strong>496GB</strong> LPDDR5X @ 396GB/s</td>
+              </tr>
+              <tr>
+                <td>Coherent memory</td>
+                <td>up to <strong>748GB</strong>; <code>NVLink-C2C</code> <strong>900 GB/s</strong></td>
+              </tr>
+              <tr>
+                <td>FP4 Tensor</td>
+                <td><strong>20 PFLOPS</strong> sparse / <strong>15</strong> dense</td>
+              </tr>
+              <tr>
+                <td>Networking</td>
+                <td>ConnectX-8 up to <strong>800 Gb/s</strong> (2× QSFP112 @ 400 Gb/s)</td>
+              </tr>
+              <tr>
+                <td>System power</td>
+                <td><strong>1,600W</strong>; 20A circuit</td>
+              </tr>
+              <tr>
+                <td>Optional viz</td>
+                <td>RTX PRO 2000→6000 Blackwell (GB300 itself has <strong>no RT cores</strong>)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Microsoft frames two uses: a personal frontier box (models up to ~1T parameters in their footnote) and a “Windows token factory” for <strong>32+</strong> concurrent agents on one deskside node. First named systems: Dell Pro Precision with GB300 and HP ZGX Fury AI Station; partners also include ASUS, Gigabyte, MSI, Supermicro.
+        </p>
+        <p>
+          Open question from June still open: which serving stacks run <strong>native</strong> on Windows here vs under WSL, and what WSL costs on a 72-core Grace host with two 400Gb/s ports. That is the first lab ticket when a Windows unit ships.
+        </p>
+
+        <h2>What I would put on the whiteboard</h2>
+        <ol>
+          <li>
+            <strong>Buy the memory bin you need.</strong> 24–48GB SKUs are 27B-class at 4-bit territory once OS + KV land. The 120B+ claims assume <strong>128GB</strong> and aggressive quantization.
+          </li>
+          <li>
+            <strong>Budget the GPU ceiling, not the sticker RAM.</strong> Plan against ~<strong>110GB</strong> addressable on the Surface-class 128GB capture until OEM docs publish their own split.
+          </li>
+          <li>
+            <strong>Measure prefill first</strong> for agent work. Microsoft’s 923.5 / 769.8 tok/s prompt numbers matter more than the ~60 tok/s decode headline.
+          </li>
+          <li>
+            <strong>Do not confuse <code>N1X</code> desktops with DGX Spark clustering.</strong> Surface Dev Box lists USB-C / HDMI / Ethernet and <strong>no ConnectX-7</strong>; GB10 DGX Spark still has the 200Gb/s NIC path for two-box 405B experiments.
+          </li>
+          <li>
+            <strong>Treat <code>MXC</code> as process sandbox GA</strong>, not full agent identity. Wire least-privilege policies in Learning/Permissive before Enforcement.
+          </li>
+        </ol>
+        <p>
+          <a href="https://blogs.windows.com/devices/2026/10/07/pre-order-our-most-powerful-surface-devices-ever/" target="_blank" rel="noopener noreferrer">Surface Laptop Ultra</a>
+          starts at <strong>$2,599</strong>; Surface RTX Spark Dev Box is <strong>$5,999</strong> with 128GB (US Microsoft.com, ships November) — $1,000 above the $4,999 64GB DGX Spark with twice the memory and none of the high-speed clustering ports. OEM laptops from Acer, ASUS, Dell, HP, Lenovo, MSI, Gigabyte fill the rest of the October 16 wave.
+        </p>
+        <p>
+          If you already run GB10 or argue HBM budgets on deskside boxes, this is the October 7 drop to update the comparison table — with TDP ranges, Windows memory accounting, and prefill written in permanent marker next to the sparse FP4 headline.
+        </p>
+        <p>
+          Related:
+          <a href="/halo-station.html">AMD’s Threadripper Halo Station: Spec Sheet, HBM Math, and the DGX Station Bet It Is Making</a>
+          ·
+          <a href="/scality-ai-inference-factory-kv-cache.html">Scality AI Inference Factory: Object Storage Over RDMA as the Shared KV Cache</a>
+          ·
+          <a href="/upscale-token-fabric.html">Upscale Token Fabric: SkyFabriX at 115.2 Tbps Meets Spectrum-X Scale-Out Under One OS</a>
+          ·
+          <a href="/astera-leo-x-fabric-kv-cache.html">Astera Leo X: Fabric-Attached DDR for KV Cache — 62% Faster Warm TTFT on H200 Math</a>.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
