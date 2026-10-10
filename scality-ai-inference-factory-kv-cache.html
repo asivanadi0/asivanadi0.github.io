@@ -81,20 +81,20 @@
             Validated open-weight families (Mistral, Gemma, gpt-oss, Qwen, Kimi, GLM, DeepSeek)
           </li>
           <li>
-            A serving layer built on <strong>vLLM</strong> and <strong>Dynamo</strong> that splits <strong>prefill</strong> from <strong>decode</strong>
+            A serving layer built on <strong><code>vLLM</code></strong> and <strong><code>Dynamo</code></strong> that splits <strong>prefill</strong> from <strong>decode</strong>
           </li>
           <li>
             A control plane for auth, metering, routing, and SLA-aware scheduling
           </li>
           <li>
-            <strong>Scality ADI</strong> underneath for models, enterprise data, and inference state
+            <strong>Scality <code>ADI</code></strong> underneath for models, enterprise data, and inference state
           </li>
           <li>
-            The <strong>Scality AI Connector</strong> between GPUs and ADI
+            The <strong>Scality AI Connector</strong> between GPUs and <code>ADI</code>
           </li>
         </ul>
         <p>
-          vLLM breaks the KV cache into fixed-size named blocks. ADI stores each block as an object. On a restore, the GPU reserves memory and tells ADI which object to place there. The TLC NVMe drive moves the object into the storage server’s RAM over PCIe, and the NIC writes it straight into GPU memory over RDMA. CPU, kernel, and the usual S3 software path stay off the data plane. Scality says that path hits <strong>97% of network line rate</strong> between GPUs and storage.
+          <code>vLLM</code> breaks the KV cache into fixed-size named blocks. <code>ADI</code> stores each block as an object. On a restore, the GPU reserves memory and tells <code>ADI</code> which object to place there. The TLC NVMe drive moves the object into the storage server’s RAM over PCIe, and the NIC writes it straight into GPU memory over RDMA. CPU, kernel, and the usual S3 software path stay off the data plane. Scality says that path hits <strong>97% of network line rate</strong> between GPUs and storage.
         </p>
         <p>
           The control plane is where they cut corners on purpose. Even S3-over-RDMA still pays for request signing, policy checks, XML, and multipart framing on every object. The AI Connector swaps that for a stripped-down control plane with single-pass authentication and no XML/multipart framing, while keeping the object model. StorageReview’s
@@ -102,7 +102,7 @@
           walks the same path.
         </p>
         <p>
-          Split serving is the payoff. Prefill computes the KV cache for a new prompt and writes it to ADI. Decode reads it back and generates tokens. DistServe (OSDI 2024) measured up to <strong>7.4×</strong> more requests within the same latency targets when prefill and decode no longer share GPUs. Moonshot’s Mooncake reported <strong>75%</strong> more requests on Kimi production traffic with a shared KV pool. Scality’s version of that design uses ADI as the shared pool, so any decode GPU can resume any session and the cache is not capped by one server’s DRAM.
+          Split serving is the payoff. Prefill computes the KV cache for a new prompt and writes it to <code>ADI</code>. Decode reads it back and generates tokens. DistServe (OSDI 2024) measured up to <strong>7.4×</strong> more requests within the same latency targets when prefill and decode no longer share GPUs. Moonshot’s Mooncake reported <strong>75%</strong> more requests on Kimi production traffic with a shared KV pool. Scality’s version of that design uses <code>ADI</code> as the shared pool, so any decode GPU can resume any session and the cache is not capped by one server’s DRAM.
         </p>
 
         <h2>The numbers, with the lab caveats attached</h2>
@@ -119,7 +119,7 @@
             </thead>
             <tbody>
               <tr>
-                <td>Warm TTFT, 14K-token restore from ADI</td>
+                <td>Warm TTFT, 14K-token restore from <code>ADI</code></td>
                 <td><strong>166 ms</strong> (83 ms behind same context from HBM)</td>
               </tr>
               <tr>
@@ -131,7 +131,7 @@
                 <td>Recompute <strong>529 s</strong>, read-back <strong>7.3 s</strong> → <strong>72×</strong></td>
               </tr>
               <tr>
-                <td>KV cache held with 8 vLLM instances (1/GPU)</td>
+                <td>KV cache held with 8 <code>vLLM</code> instances (1/GPU)</td>
                 <td><strong>8 TB</strong> (~80× one GPU’s memory, ~10× the whole server)</td>
               </tr>
               <tr>
@@ -143,7 +143,7 @@
                 <td>Up to <strong>~1,000</strong> (vendor claim at that capacity)</td>
               </tr>
               <tr>
-                <td>Gemma-3 27B weight load (54.86 GB) from ADI</td>
+                <td>Gemma-3 27B weight load (54.86 GB) from <code>ADI</code></td>
                 <td><strong>1.9 s</strong> into one GPU (~10× local NVMe; ~28.9 GB/s on the four-link lab)</td>
               </tr>
               <tr>
@@ -154,7 +154,7 @@
           </table>
         </div>
         <p>
-          Inter-token latency did not move with cache size: the fetch finishes before the first token, and every token after that runs from GPU memory. That is the right property if you want storage in the serving path. Regni’s line is the useful summary: restoring from ADI is the same order of magnitude as GPU memory, and storage is no longer why you keep the KV cache inside the GPU server.
+          Inter-token latency did not move with cache size: the fetch finishes before the first token, and every token after that runs from GPU memory. That is the right property if you want storage in the serving path. Regni’s line is the useful summary: restoring from <code>ADI</code> is the same order of magnitude as GPU memory, and storage is no longer why you keep the KV cache inside the GPU server.
         </p>
 
         <h2>Upstream fixes, not a forked stack</h2>
@@ -162,7 +162,7 @@
           Two engineering notes matter more than the marketing slide.
         </p>
         <p>
-          First, Scality says vLLM’s KV offload connector was fetching about <strong>five times</strong> the cache blocks each restore needed — a tax anyone paying if they pointed that connector at an object store. They corrected the connector, left the vLLM core alone, and say they committed the fix upstream. Second, they extended the open-source ModelExpress loader to pull weights straight from object storage. The shipping stack, they claim, contains <strong>no Scality forks</strong>.
+          First, Scality says <code>vLLM</code>’s KV offload connector was fetching about <strong>five times</strong> the cache blocks each restore needed — a tax anyone paying if they pointed that connector at an object store. They corrected the connector, left the <code>vLLM</code> core alone, and say they committed the fix upstream. Second, they extended the open-source ModelExpress loader to pull weights straight from object storage. The shipping stack, they claim, contains <strong>no Scality forks</strong>.
         </p>
         <p>
           If those commits land and stay, every object store behind that connector benefits. If they only live in Scality’s packaging branch, the “open code” claim is softer than it sounds. Ask for the PR links before you treat the stack as a community contribution story.
@@ -192,13 +192,13 @@
             <strong>Failure modes.</strong> What happens when a storage server dies mid-restore? How is block checksumming done on the RDMA path?
           </li>
           <li>
-            <strong>Power and $/TB</strong> for the ADI tier that actually holds the 8 TB (and the 1.9 PB extrapolation).
+            <strong>Power and $/TB</strong> for the <code>ADI</code> tier that actually holds the 8 TB (and the 1.9 PB extrapolation).
           </li>
         </ul>
 
         <h2>What ships</h2>
         <p>
-          Inference Factory is available now as a software license or fully managed service. It deploys on standard Dell, HPE, Lenovo, and Supermicro servers. Harnesses Scality names as compatible include OpenCode, Hermes, Goose, LangGraph, and Pydantic AI; the press kit also says Claude Code and Codex keep working once you retarget the endpoint. ADI already claims <strong>12+ EB</strong> in production across <strong>70+</strong> countries as Scality’s existing object fleet — useful as proof they can operate storage at that scale, not as an inference SLO.
+          Inference Factory is available now as a software license or fully managed service. It deploys on standard Dell, HPE, Lenovo, and Supermicro servers. Harnesses Scality names as compatible include OpenCode, Hermes, Goose, LangGraph, and Pydantic AI; the press kit also says Claude Code and Codex keep working once you retarget the endpoint. <code>ADI</code> already claims <strong>12+ EB</strong> in production across <strong>70+</strong> countries as Scality’s existing object fleet — useful as proof they can operate storage at that scale, not as an inference SLO.
         </p>
         <p>
           If you run disaggregated prefill/decode today and your KV offload still dies on recompute cliffs, this is the October 8 announcement to put on the whiteboard next to Leo X and Inferra — with the lab caveats written in permanent marker.
