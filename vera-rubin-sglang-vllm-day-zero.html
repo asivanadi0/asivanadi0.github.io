@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Vera Rubin Day Zero: What SGLang Changed in the Kernels, and What vLLM Measured on AgentX — Anpoo Sivanadi</title>
+  <meta name="description" content="On October 9, two open serving stacks published the first useful Vera Rubin numbers that are not a keynote slide." />
+  <link rel="canonical" href="https://asivanadi0.github.io/vera-rubin-sglang-vllm-day-zero.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Vera Rubin Day Zero: What SGLang Changed in the Kernels, and What vLLM Measured on AgentX — Anpoo Sivanadi" />
+  <meta property="og:description" content="On October 9, two open serving stacks published the first useful Vera Rubin numbers that are not a keynote slide." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/vera-rubin-sglang-vllm-day-zero.html" />
+  <meta property="article:published_time" content="2026-10-10T18:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Vera Rubin Day Zero: What SGLang Changed in the Kernels, and What vLLM Measured on AgentX</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-10T18:00:00-07:00">10 October 2026</time>
+          · Anpoo Sivanadi
+          · based on LMSYS’s October 9 Vera Rubin post, the vLLM Vera Rubin NVL72 preview, and NVIDIA’s Vera Rubin platform pages
+        </p>
+        <p class="dek article-dek">
+          On October 9, two open serving stacks published the first useful Vera Rubin numbers that are not a keynote slide.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          On October 9, two open serving stacks published the first useful Vera Rubin numbers that are not a keynote slide.
+          <a href="https://www.lmsys.org/blog/2026-10-09-vera-rubin/" target="_blank" rel="noopener noreferrer">LMSYS</a>
+          brought
+          <a href="https://www.lmsys.org/blog/2026-10-09-vera-rubin/" target="_blank" rel="noopener noreferrer">SGLang</a>
+          and Miles up on two early-access Vera Rubin nodes (eight GPUs) and walked the Kimi K3 NVFP4 kernel changes that actually moved the needle. The same day, the
+          <a href="https://vllm.ai/blog/2026-10-09-vera-rubin-preview/" target="_blank" rel="noopener noreferrer">vLLM blog</a>
+          (Inferact, NVIDIA, Red Hat, and the community) said Vera Rubin NVL72 already runs from daily CUDA 13.4 containers and posted early AgentX and MLPerf multiples versus GB200 / GB300.
+        </p>
+        <p>
+          I read these the same way I read
+          <a href="/arista-etherlink-su144-esun.html">Arista Etherlink SU-144</a>
+          and
+          <a href="/upscale-token-fabric.html">Upscale Token Fabric</a>:
+          ignore the PFLOPS banner until someone names shared-memory limits, SM occupancy, collectives, and a workload.
+        </p>
+
+        <h2>What changed in the silicon (for kernel writers)</h2>
+        <p>
+          Vera Rubin sits after Blackwell Ultra (GB300 NVL72). For people who write attention and MoE kernels, the LMSYS team called out three limits that matter on their early nodes:
+        </p>
+        <div class="table-wrap" role="region" aria-label="LMSYS early-node Vera Rubin limits versus Hopper and Blackwell" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Limit</th>
+                <th>Hopper / Blackwell</th>
+                <th>Vera Rubin (LMSYS early nodes)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Shared memory per CTA</td>
+                <td><strong>227 KiB</strong></td>
+                <td><strong>327 KiB</strong></td>
+              </tr>
+              <tr>
+                <td>SMs visible on their nodes</td>
+                <td>—</td>
+                <td><strong>212</strong></td>
+              </tr>
+              <tr>
+                <td>Scale-up fabric</td>
+                <td>NVLink 5-era</td>
+                <td><strong>NVLink 6</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          NVIDIA’s own platform write-ups put a full Rubin GPU at <strong>224</strong> SMs, <strong>HBM4</strong>, and up to <strong>3.6 TB/s</strong> bidirectional NVLink 6 per GPU in an NVL72 domain. The vLLM post frames the rack against GB200 NVL72 as roughly <strong>5×</strong> NVFP4 FLOPS, <strong>~2.4×</strong> HBM bandwidth, and <strong>~1.7×</strong> bidirectional NVLink bandwidth, plus <strong>2×</strong> FP32 and <strong>4×</strong> BF16/FP16 exponential throughput for softmax. Softmax keeping up with faster MMA is not a footnote if your decode path is attention-bound.
+        </p>
+        <p>
+          Those are the knobs. Everything below is what people did with them on day zero.
+        </p>
+
+        <h2>SGLang on Kimi K3 NVFP4: where the percent points came from</h2>
+        <p>
+          Kimi K3 is a <strong>2.8T</strong>-parameter hybrid with a <strong>1M</strong>-token context: <strong>93</strong> attention layers (69 KDA linear-attention + 24 MLA), Attention Residuals banking every attention output, and a LatentMoE FFN with <strong>896</strong> experts, top-16 routing, in a <strong>3584</strong>-d latent space. LMSYS served the NVFP4 checkpoint with RadixArk’s DSpark block speculative decoding (draft then verify every step).
+        </p>
+        <p>
+          <strong>Attention.</strong> On Blackwell, the FP8 MLA kernel had already packed <strong>3</strong> K stages and <strong>2</strong> V stages into 227 KiB of shared memory. Rubin’s 327 KiB bought a fourth K stage and two more V stages. At batch <strong>16</strong> and <strong>128k</strong> context, that deeper pipeline is <strong>16%</strong> faster with bit-identical output. Separately, reordering split-KV reduction to issue all loads before accumulating from registers made full FP8 MLA <strong>20%</strong> faster at batch <strong>1</strong> / 128k. Doubling split-KV from 32 to <strong>64</strong> kept more of the 212 SMs busy on batch-1 decode (<strong>+1.9%</strong> end to end with FP8 KV). Saturating FP8 conversion (clamp to ±448 instead of NaN) made the KV/Q preparation kernel <strong>2.5×</strong> faster.
+        </p>
+        <p>
+          <strong>MoE / collectives.</strong> Every MoE layer ended with four tiny kernels: finalize experts, add shared expert, all-reduce across 8 GPUs, RMSNorm. K3 pays that tax in <strong>92</strong> MoE layers. Folding them into one collective kernel removed <strong>276</strong> launches per decode step and gained <strong>5.9%</strong> end to end. Push-style all-reduce stayed ahead of pull up to <strong>256</strong> rows on Rubin (crossover moved), worth <strong>3.6%</strong> decode throughput at 32 concurrent requests. Moving the latent all-gather GEMM onto <code>mma.m16n8k16</code> for 4–8 rows cut another <strong>1.1%</strong> of step time.
+        </p>
+        <p>
+          <strong>KDA.</strong> The fused verify kernel was barrier-bound: every CTA copied conv weights into shared memory and waited. Keeping weights in registers per warp, dropping CTA barriers for in-warp handoffs, and using idle v-warp time for the output-norm gate made the production verify kernel <strong>20%</strong> faster with bitwise-identical outputs. Teaching gated RMSNorm to read its strided gate without a silent PyTorch copy removed <strong>2.6 µs × 69</strong> copies per step (<strong>−1.8%</strong> decode step time).
+        </p>
+        <p>
+          None of that is a rack-level TCO claim. It is a profile of where Rubin actually pays off on one hard hybrid MoE.
+        </p>
+
+        <h2>Miles: RL on the tray, sandboxes on the Vera CPU</h2>
+        <p>
+          Miles (SGLang for rollout, Megatron for training) ran end to end from a single container once the Rubin-enablement PR landed. On a single tray (<strong>4</strong> GPUs):
+        </p>
+        <ul>
+          <li>
+            <strong>Qwen3-30B-A3B</strong> on GSM8K (256 prompts × 8 samples, up to 1,024 response tokens): reward rose ~<strong>45% → 95%</strong> over 50 rollouts, matching the GB300 reward curve.
+          </li>
+          <li>
+            <strong>DeepSeek-V4-Flash</strong> (4-layer, FP8) on GSM8K: FP8 rollout and training both completed end to end.
+          </li>
+        </ul>
+        <p>
+          Agentic RL used NeMo Gym’s mini-SWE-agent on the tray’s Arm-based <strong>Vera CPU</strong>: <strong>64</strong> sandboxes beside GPUs serving/training <strong>Qwen3.5-35B-A3B</strong>, SWE-bench Verified arm64 images, 8 tasks × 8 attempts from a 64-task pool, up to <strong>64K</strong> tokens per episode. Reward held ~<strong>0.6</strong>, episodes got ~<strong>30%</strong> shorter, and train–rollout KL stayed matched. That is the interesting platform claim: the CPU next to the GPUs is part of the training loop, not just a host.
+        </p>
+        <p>
+          LMSYS also notes Cognition has already deployed Vera Rubin NVL72 on its own SGLang-based stack and reported up to <strong>4.8×</strong> total token throughput versus GB200 NVL72 — private fork and private settings, so treat it as a direction, not a rematch recipe.
+        </p>
+
+        <h2>vLLM: containers today, AgentX and MLPerf as the early scoreboard</h2>
+        <p>
+          vLLM’s day-0 story is usability plus early multiples. Nightly images (<code>vllm/vllm-openai:cu134-nightly</code>) ship on CUDA <strong>13.4</strong> / PyTorch <strong>2.15</strong>. Rubin is a new compile target (<code>sm107</code>), but Blackwell-family (<code>sm100f</code>) kernels already run; FlashInfer <strong>0.7.0</strong> adds Rubin-tuned attention, GEMM, and MoE, plus a Rubin-tuned MiniMax Sparse Attention (MSA) prefill path. Model coverage named on day zero: DeepSeek, Kimi, GLM, MiniMax.
+        </p>
+        <p>
+          The architecture piece I care about is <strong>CUDA 13.4 locality domains</strong>. HBM is non-uniform; locality domains let you place MoE weight shards so each SM group reads the half of <code>W</code> in its own domain. On MiniMax M3 MoE shapes, localized FC1+FC2 was about <strong>1.2×</strong> faster in small-token decode across TP2/TP4/EP2/EP4. Default domain creation can leave you on <strong>200</strong> of <strong>212</strong> SMs; backfill mode (<code>cudaDevSmResourceGroupBackfill</code>) uses all <strong>212</strong>. Even the 200-SM path still won, because decode is weight-load bound.
+        </p>
+        <p>
+          Early scoreboard (vendor / project self-report — early access, expect more):
+        </p>
+        <div class="table-wrap" role="region" aria-label="vLLM early AgentX and MLPerf claims on Vera Rubin NVL72" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Benchmark</th>
+                <th>Claim</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>SemiAnalysis <strong>AgentX</strong>, MiniMax M3 on Vera Rubin NVL72</td>
+                <td>up to <strong>7.84×</strong> throughput per GPU vs GB200 NVL72 at matched interactivity; <strong>5.18×</strong> under a 150 TPS constraint</td>
+              </tr>
+              <tr>
+                <td>MLPerf Inference <strong>v6.1</strong> VLM, Qwen3-VL-235B-A22B (vLLM backend, Dynamo frontend)</td>
+                <td>up to <strong>3.7×</strong> throughput vs GB300 NVL72 across offline / server / interactive</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Operators who want the knobs today: FlashInfer CuTe-DSL NVFP4/MXFP4 GEMM and MoE backends, FP8 KV with FlashInfer / FlashInfer-MLA attention, and the MSA prefill cutlass path documented in the vLLM appendix. Next on their list: sm107 MegaMoE, fuller locality-domain MoE, Kimi K3 KDA/MLA on Rubin, DeepSeek-V4.1-Flash CSA/HCA, MSA decode, and counted-write MoE all-to-all.
+        </p>
+
+        <h2>How I would use this</h2>
+        <p>
+          If you are sizing a Vera Rubin tray or NVL72 for agentic serve, read the LMSYS post for <strong>where kernels spend time</strong> on a hybrid MoE, and the vLLM post for <strong>what is already in a container</strong> and what AgentX/MLPerf currently claim. The 327 KiB shared-memory bump, 212–224 SM occupancy, NVLink 6 collectives, HBM4 bandwidth, and locality-domain MoE are the real platform story — not another “next-gen AI factory” paragraph.
+        </p>
+        <p>
+          Cross-check Cognition’s <strong>4.8×</strong> and vLLM’s <strong>7.84×</strong> carefully: different stacks, different models (Cognition’s private SGLang fork vs MiniMax M3 on AgentX), different interactivity contracts. Both say the same directional thing. Neither replaces a bake-off on your traffic.
+        </p>
+        <p>
+          Sources fetched for this piece:
+          <a href="https://www.lmsys.org/blog/2026-10-09-vera-rubin/" target="_blank" rel="noopener noreferrer">LMSYS SGLang/Miles on Vera Rubin</a>
+          (Oct 9),
+          <a href="https://vllm.ai/blog/2026-10-09-vera-rubin-preview/" target="_blank" rel="noopener noreferrer">vLLM Vera Rubin NVL72 preview</a>
+          (Oct 9), plus NVIDIA’s
+          <a href="https://developer.nvidia.com/blog/inside-the-nvidia-rubin-platform-six-new-chips-one-ai-supercomputer/" target="_blank" rel="noopener noreferrer">Vera Rubin platform</a>
+          and
+          <a href="https://resources.nvidia.com/en-us-dgx-systems/dgx-vera-rubin-nvl72-datasheet" target="_blank" rel="noopener noreferrer">DGX Vera Rubin NVL72</a>
+          pages for the full-SKU SM / NVLink framing.
+        </p>
+        <p>
+          Related:
+          <a href="/rtx-spark-n1x-windows.html">RTX Spark N1X: The Windows Numbers That Matter Are TDP, Memory Ceiling, and Prefill</a>
+          ·
+          <a href="/scality-ai-inference-factory-kv-cache.html">Scality AI Inference Factory: Object Storage Over RDMA as the Shared KV Cache</a>
+          ·
+          <a href="/nvidia-aicr-v1.html">AICR v1.0: NVIDIA Freezes the Contract for GPU Kubernetes Recipes</a>.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
