@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mellum2.1: A 12B MoE Coding Agent Model, and the GGUF Builds That Make It Runnable Tonight — Anpoo Sivanadi</title>
+  <meta name="description" content="On October 8, JetBrains released Mellum2.1, the post-trained successor to the Mellum2 Thinking checkpoint they open-sourced in June." />
+  <link rel="canonical" href="https://asivanadi0.github.io/jetbrains-mellum-2-1-coding-agent.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Mellum2.1: A 12B MoE Coding Agent Model, and the GGUF Builds That Make It Runnable Tonight — Anpoo Sivanadi" />
+  <meta property="og:description" content="On October 8, JetBrains released Mellum2.1, the post-trained successor to the Mellum2 Thinking checkpoint they open-sourced in June." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/jetbrains-mellum-2-1-coding-agent.html" />
+  <meta property="article:published_time" content="2026-10-11T18:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Mellum2.1: A 12B MoE Coding Agent Model, and the GGUF Builds That Make It Runnable Tonight</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-11T18:00:00-07:00">11 October 2026</time>
+          · Anpoo Sivanadi
+          · based on JetBrains’ October 8 Mellum2.1 post, the Hugging Face Mellum2.1 Thinking card, and the GGUF repository
+        </p>
+        <p class="dek article-dek">
+          On October 8, JetBrains released Mellum2.1, the post-trained successor to the Mellum2 Thinking checkpoint they open-sourced in June.
+        </p>
+      </header>
+
+      <div class="article-body prose">
+        <p>
+          On October 8,
+          <a href="https://blog.jetbrains.com/ai/2026/10/mellum2-1-gets-to-work-a-fast-open-model-for-coding-agents/" target="_blank" rel="noopener noreferrer">JetBrains</a>
+          released <strong>Mellum2.1</strong>, the post-trained successor to the Mellum2 Thinking checkpoint they open-sourced in June. The architecture did not move. What moved is everything after pre-training: a summer of reinforcement learning inside real repositories, with shell and file tools, across millions of sandboxed runs. By October 9 the official
+          <a href="https://huggingface.co/JetBrains/Mellum2.1-12B-A2.5B-Thinking-GGUF" target="_blank" rel="noopener noreferrer">GGUF repository</a>
+          was live with named quantizations — the launch post still said “coming soon,” so the artifact trail is what I am reading, not the press tense.
+        </p>
+        <p>
+          I care about this class of model the same way I care about
+          <a href="/vllm-0-31-fast-restart.html">vLLM 0.31</a>
+          and the
+          <a href="/vera-rubin-sglang-vllm-day-zero.html">Vera Rubin day-zero</a>
+          serving notes: small, fast workers you can put next to a bigger planner, under your own keys, on hardware you already own. Mellum2.1 is not a frontier chat model. It is a compact MoE built to explore a repo, edit files, and check its own changes.
+        </p>
+
+        <h2>What did not change: the MoE shape</h2>
+        <p>
+          From the
+          <a href="https://huggingface.co/JetBrains/Mellum2.1-12B-A2.5B-Thinking" target="_blank" rel="noopener noreferrer">Hugging Face card</a>:
+        </p>
+        <div class="table-wrap" role="region" aria-label="Mellum2.1 architecture spec from the Hugging Face card" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Spec</th>
+                <th>Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Total / active parameters</td>
+                <td><strong>12B</strong> / <strong>2.5B</strong></td>
+              </tr>
+              <tr>
+                <td>Layers</td>
+                <td><strong>28</strong></td>
+              </tr>
+              <tr>
+                <td>Hidden size</td>
+                <td><strong>2304</strong></td>
+              </tr>
+              <tr>
+                <td>Dense intermediate</td>
+                <td><strong>7168</strong></td>
+              </tr>
+              <tr>
+                <td>MoE intermediate</td>
+                <td><strong>896</strong></td>
+              </tr>
+              <tr>
+                <td>Experts / activated</td>
+                <td><strong>64</strong> / <strong>8</strong></td>
+              </tr>
+              <tr>
+                <td>Attention (GQA)</td>
+                <td><strong>32</strong> Q / <strong>4</strong> KV</td>
+              </tr>
+              <tr>
+                <td>Context</td>
+                <td><strong>131,072</strong></td>
+              </tr>
+              <tr>
+                <td>Sliding window</td>
+                <td><strong>1,024</strong> on 3 of every 4 layers</td>
+              </tr>
+              <tr>
+                <td>Vocabulary</td>
+                <td><strong>98,304</strong></td>
+              </tr>
+              <tr>
+                <td>Precision</td>
+                <td>bfloat16</td>
+              </tr>
+              <tr>
+                <td>License</td>
+                <td><strong>Apache 2.0</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          That is the same skeleton as Mellum2. Sliding-window attention on three-quarters of the layers keeps decode cost bounded while every fourth layer still sees full context — the same efficiency bet Aleph Alpha made on
+          <a href="/aleph-alpha-kolibri-1.html">Kolibri-1</a>,
+          just at a smaller total parameter count. JetBrains is explicit that the Thinking variant emits chain-of-thought before the final answer; treat that as part of the serving contract when you size <code>max_tokens</code>.
+        </p>
+
+        <h2>What did change: RL as the main stage</h2>
+        <p>
+          The launch post and the card agree on the post-training story. RL stopped being a short final polish and became the main stage. JetBrains added filtered open RL datasets plus in-house tasks across math, competitive programming, science, tool use, and software engineering, and they built infrastructure to run thousands of environments with millions of sandboxes over the training run. For software engineering, the model trains inside real repositories with a shell and file-editing tools and is rewarded when tests pass.
+        </p>
+        <p>
+          That is the difference between “fast autocomplete that cannot navigate a tree” and “a worker you can put under an agent harness.” Mellum2 was fast; Mellum2.1 is the same speed class with agent behavior that actually moves on repository tasks.
+        </p>
+
+        <h2>The self-reported table you should read carefully</h2>
+        <p>
+          JetBrains evaluated Mellum2.1 Thinking, Mellum2 Thinking (re-run on this pipeline), Gemma 4 E4B, and Qwen3.5-9B with the <strong>same</strong> harness. Non-agentic benches use greedy decoding. Agentic benches use Pi v0.73.1 with shell and file tools, each model’s default sampling (temperature <strong>1.0</strong> for Mellum2.1), <strong>114K</strong> context, and up to <strong>16K</strong> tokens per turn. All numbers below are <strong>self-reported</strong>.
+        </p>
+        <div class="table-wrap" role="region" aria-label="JetBrains self-reported Mellum2.1 benchmark table" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Benchmark</th>
+                <th>Mellum2.1</th>
+                <th>Mellum2</th>
+                <th>Gemma 4 E4B</th>
+                <th>Qwen3.5-9B</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>LiveCodeBench v6</td>
+                <td><strong>82.0</strong></td>
+                <td>69.4</td>
+                <td>69.4</td>
+                <td>75.4</td>
+              </tr>
+              <tr>
+                <td>HumanEval+</td>
+                <td><strong>91.5</strong></td>
+                <td>90.9</td>
+                <td>89.1</td>
+                <td>89.6</td>
+              </tr>
+              <tr>
+                <td>MBPP+</td>
+                <td><strong>79.4</strong></td>
+                <td>75.4</td>
+                <td>70.9</td>
+                <td>69.8</td>
+              </tr>
+              <tr>
+                <td>AIME 25/26 (mean)</td>
+                <td>83.3</td>
+                <td>60.1</td>
+                <td>45.0</td>
+                <td><strong>86.7</strong></td>
+              </tr>
+              <tr>
+                <td>GSM-Plus</td>
+                <td>88.3</td>
+                <td>87.1</td>
+                <td>87.4</td>
+                <td><strong>91.4</strong></td>
+              </tr>
+              <tr>
+                <td>SWE-bench Verified</td>
+                <td>47.0</td>
+                <td>2.0</td>
+                <td>23.0</td>
+                <td><strong>50.0</strong></td>
+              </tr>
+              <tr>
+                <td>Terminal-Bench 2.1</td>
+                <td>17.4</td>
+                <td>0.6</td>
+                <td>3.4</td>
+                <td><strong>21.7</strong></td>
+              </tr>
+              <tr>
+                <td>SWE-bench Pro</td>
+                <td>28.0</td>
+                <td>0.0</td>
+                <td>4.0</td>
+                <td><strong>38.0</strong></td>
+              </tr>
+              <tr>
+                <td>BFCL v4</td>
+                <td><strong>62.3</strong></td>
+                <td>49.6</td>
+                <td>52.5</td>
+                <td>58.5</td>
+              </tr>
+              <tr>
+                <td>GPQA Diamond</td>
+                <td>64.6</td>
+                <td>51.0</td>
+                <td>53.1</td>
+                <td><strong>77.8</strong></td>
+              </tr>
+              <tr>
+                <td>HarmBench (↓ better)</td>
+                <td>8.5</td>
+                <td>21.5</td>
+                <td>38.1</td>
+                <td><strong>6.6</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          The agentic rows are the headline. SWE-bench Verified jumps from <strong>2.0</strong> on Mellum2 to <strong>47.0</strong> on Mellum2.1 — still a few points behind Qwen3.5-9B at <strong>50.0</strong>, but in the same band after a summer of RL. Terminal-Bench 2.1 goes from <strong>0.6</strong> to <strong>17.4</strong>. SWE-bench Pro from <strong>0.0</strong> to <strong>28.0</strong>. LiveCodeBench v6 is where Mellum2.1 leads the group at <strong>82.0</strong>.
+        </p>
+        <p>
+          I would not treat these as independent leaderboard submissions. They are useful because the harness is held fixed across four models. If you rematch SWE-bench Verified in your own agent, expect your absolute numbers to move with the harness, not with a blog table.
+        </p>
+
+        <h2>Speed claims, and what is still a chart</h2>
+        <p>
+          The architecture freeze means Mellum2.1 should decode like Mellum2. JetBrains says multi-token prediction (MTP) makes a single request about <strong>1.6×</strong> faster, and that under heavy load Mellum2.1 serves almost <strong>twice</strong> as many tokens as Qwen3.5-9B in their group. Those are relative vendor claims from charts I cannot paste here. Absolute tokens/s on a named GPU are not in the text of the launch post or the model card I fetched. Plan capacity from your own <code>vllm</code> or <code>llama.cpp</code> smoke test, not from “almost 2×.”
+        </p>
+        <p>
+          The MTP head for speculative decoding in vLLM is still listed as coming soon on the BF16 card. The GGUF path is what landed first for local runtimes.
+        </p>
+
+        <h2>Artifacts you can actually pull</h2>
+        <p>
+          <strong>BF16 / safetensors</strong> —
+          <a href="https://huggingface.co/JetBrains/Mellum2.1-12B-A2.5B-Thinking" target="_blank" rel="noopener noreferrer">JetBrains/Mellum2.1-12B-A2.5B-Thinking</a>.
+          Documented vLLM serve:
+        </p>
+        <pre><code>vllm serve JetBrains/Mellum2.1-12B-A2.5B-Thinking \
+  --max-model-len 131072 \
+  --reasoning-parser qwen3 \
+  --enable-auto-tool-choice \
+  --tool-call-parser hermes</code></pre>
+        <p>
+          Drop the tool flags if you only need reasoning. Sampling defaults on the card for a quick chat call: <code>temperature=0.6</code>, <code>top_p=0.95</code>, <code>top_k=20</code>, with a high <code>max_tokens</code> ceiling for Thinking traces.
+        </p>
+        <p>
+          <strong>GGUF</strong> —
+          <a href="https://huggingface.co/JetBrains/Mellum2.1-12B-A2.5B-Thinking-GGUF" target="_blank" rel="noopener noreferrer">JetBrains/Mellum2.1-12B-A2.5B-Thinking-GGUF</a>,
+          one file per quantization. JetBrains publishes KL divergence and top-token match vs BF16 on Wikitext-2 (<code>n_ctx=512</code>):
+        </p>
+        <div class="table-wrap" role="region" aria-label="Mellum2.1 GGUF quantization sizes and KL divergence vs BF16" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>File</th>
+                <th>Size</th>
+                <th>KLD ↓</th>
+                <th>Top-token ↑</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>BF16</td>
+                <td>24.3 GB</td>
+                <td>—</td>
+                <td>—</td>
+              </tr>
+              <tr>
+                <td>Q8_0</td>
+                <td>12.9 GB</td>
+                <td>0.008</td>
+                <td>96.1%</td>
+              </tr>
+              <tr>
+                <td>Q6_K</td>
+                <td>10.9 GB</td>
+                <td>0.020</td>
+                <td>93.9%</td>
+              </tr>
+              <tr>
+                <td>Q4_K_M (recommended)</td>
+                <td>8.1 GB</td>
+                <td>0.075</td>
+                <td>88.0%</td>
+              </tr>
+              <tr>
+                <td>MXFP4_MOE</td>
+                <td>7.0 GB</td>
+                <td>0.115</td>
+                <td>85.6%</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <pre><code>llama-server -hf JetBrains/Mellum2.1-12B-A2.5B-Thinking-GGUF:Q4_K_M \
+  --ctx-size 131072 \
+  --temp 0.6 --top-p 0.95 --top-k 20</code></pre>
+        <p>
+          Ollama one-liner from the same card: <code>ollama run hf.co/JetBrains/Mellum2.1-12B-A2.5B-Thinking-GGUF:Q4_K_M</code>. The OpenAI-compatible endpoint on llama.cpp is <code>http://localhost:8080/v1</code>.
+        </p>
+
+        <h2>How I would wire it</h2>
+        <p>
+          For a cluster that already runs generative serving, I would treat Mellum2.1 as a <strong>sub-agent</strong>, not as the planner: root-cause a failing test, draft a patch, run the suite, report back. Put BF16 under vLLM when you want tool calling and long Thinking traces with Hermes parsing. Put Q4_K_M under llama.cpp on a workstation when the constraint is privacy and laptop RAM, and accept the KLD trade. Keep
+          <a href="/liquid-open-d1-decision-models.html">Liquid open d1</a>
+          for the zero-token typed decisions at the edge of the same agent loop — routing and triage — and reserve Mellum for the repository work that needs shell and files.
+        </p>
+        <p>
+          Do not confuse Apache 2.0 here with every other open card on the site. Mellum2.1 really is Apache. That is rarer than the HF default implies, and it matters if your legal stack is tired of “open until $10M ARR” footnotes.
+        </p>
+        <p>
+          The honest limit: agentic scores are JetBrains’ harness, MTP absolute throughput is still a chart, and the vLLM MTP head is not in the GGUF drop. What you have tonight is a named MoE, a fixed evaluation table, and an 8.1 GB file that serves on your machine. That is enough to decide whether a 2.5B-active coding worker belongs next to your planner — by running it, not by waiting for another keynote.
+        </p>
+        <p>
+          Related:
+          <a href="/liquid-open-d1-decision-models.html">Liquid Open d1: Zero Output Tokens, Named Jetson Latencies, and What a Decision Model Actually Is</a>
+          ·
+          <a href="/claude-haiku-5-5.html">Claude Haiku 5.5: The Price Cut Is Real, but Read the 100K Tier, the Tokenizer, and the Output Bill</a>
+          ·
+          <a href="/reflection-beam-501b.html">Reflection’s Beam: A 501B Open-Weight MoE, and the GB300 Cluster Numbers Behind It</a>.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
