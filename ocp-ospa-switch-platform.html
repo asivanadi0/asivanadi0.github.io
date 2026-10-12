@@ -132,13 +132,7 @@
           <strong>400KHz to 1MHz</strong>
           range as a should, confirmed with the customer. LEDs: System, Power, Fan, and Leak (liquid-cooled only). Intensity is
           <strong>8-bit</strong>
-          per R/G/B channel (
-          <strong>256</strong>
-          levels). Blink states are Solid, FAST (
-          <strong>0.5s</strong>
-          period), and SLOW (
-          <strong>2.0s</strong>
-          period), exposed through the Linux LED class at
+          per R/G/B channel (<strong>256</strong> levels). Blink states are Solid, FAST (<strong>0.5s</strong> period), and SLOW (<strong>2.0s</strong> period), exposed through the Linux LED class at
           <code>/sys/class/leds</code>.
         </p>
         <div class="table-wrap" role="region" aria-label="OSPA recommended front-panel LED color coding from the draft spec" tabindex="0">
@@ -192,10 +186,7 @@
         <p>
           Host software is three layers: IOB FPGA controller drivers (PCIe umbrella plus Linux auxiliary bus, not MFD), Platform Device Discovery from a config file such as
           <code>platform_device.json</code>,
-          and hardware-agnostic services that only see stable symlinks (example:
-          <code>/run/devmap/xcvrs/xcvr_io_1</code>
-          →
-          <code>/dev/i2c-15</code>).
+          and hardware-agnostic services that only see stable symlinks (example: <code>/run/devmap/xcvrs/xcvr_io_1</code> → <code>/dev/i2c-15</code>).
           The IOB ioctl header lives at
           <a href="https://github.com/facebookincubator/fboss.bsp.kmods/blob/main/kmods/lib/fbiob-ioctl.h" target="_blank" rel="noopener noreferrer">fbiob-ioctl.h</a>.
           The drivers are
