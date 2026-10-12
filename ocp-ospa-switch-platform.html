@@ -49,52 +49,51 @@
         <p>
           On October 8, the
           <a href="https://www.opencompute.org/news/introducing-ospa-unifying-the-switch-platform-layer-for-open-networking/" target="_blank" rel="noopener noreferrer">Open Compute Project posted</a>
-          a new in-progress contribution to the Networking Project: the Open Switch Platform Architecture specification. It is a
-          <strong>draft under OCP review</strong>.
-          Meta, Microsoft, and Alibaba initiated it. The
+          a
+          <strong>draft under OCP review</strong>:
+          Open Switch Platform Architecture, a spec of roughly 10,000 words, initiated by Meta, Microsoft, and Alibaba, with collaborative input from Accton, Arista, Celestica, Cisco, DTI, Micas, Nexthop, Nvidia, and Wistron. The
           <a href="https://github.com/opencomputeproject/OCP-switch-platform-architecture" target="_blank" rel="noopener noreferrer">Revision 1.0.0 candidate</a>
-          is on GitHub. Tao Ren, Tian Fang, and Xu Wang (Meta), Ying Xie and Guohan Lu (Microsoft), and Yiyuan Huang and Zhiping Yao (Alibaba) are the named authors. You’ll hear it at the
+          is on GitHub.
+          <a href="https://www.sdxcentral.com/news/network-switches-get-simple-with-meta-microsoft-backed-open-standard/" target="_blank" rel="noopener noreferrer">SDxCentral</a>
+          covered it the same week. You’ll hear it at the
           <a href="https://www.opencompute.org/projects/networking/open-switch-platform-architecture/" target="_blank" rel="noopener noreferrer">OCP Global Summit 2026</a>
-          session, and on
-          <a href="https://www.sdxcentral.com/news/network-switches-get-simple-with-meta-microsoft-backed-open-standard/" target="_blank" rel="noopener noreferrer">SDxCentral</a>.
+          session.
         </p>
         <p>
-          I care about this the same way I cared about
+          SAI, FBOSS, and SONiC already made the data plane portable. What still changes every SKU is the platform layer: how the box inventories a PSU, spins fans, flashes an FPGA, and brings the Host up when the BMC is wedged. That is the software you run before the first packet. I care about this the same way I cared about
           <a href="/arista-etherlink-su144-esun.html">Arista’s Etherlink SU-144 on ESUN</a>
           and
           <a href="/upscale-token-fabric.html">Upscale’s Token Fabric</a>:
-          the fabric story is moving from “which ASIC forwards” to “can I onboard the box without rewriting platform software.” SAI, FBOSS, and SONiC already made the data plane portable. The thing that still changes every SKU is how the switch boots, inventories a PSU, spins fans, and flashes an FPGA. That is OSPA’s layer. Treat it as a draft under OCP review, not a frozen contract.
+          the fabric story is moving from which ASIC forwards to whether you can onboard the box without rewriting platform software. Treat it as a draft under OCP review, not a frozen contract.
         </p>
 
-        <h2>The data plane is not the remaining lock-in</h2>
+        <h2>The remaining lock-in is the platform, not the ASIC</h2>
         <p>
-          Ren’s OCP post is blunt: SAI, and its adoption by FBOSS and SONiC, made forwarding software portable. The switch platform layer is “the final frontier of proprietary fragmentation in open networking.” Device enumeration, thermal control, and firmware updates are still re-implemented for every hardware SKU. Identical ASICs from different manufacturers present completely different platforms to the operating system. That is the inefficiency OSPA is aimed at, and it is why the AI-fabric onboarding story is in the first paragraph.
+          Tao Ren’s OCP post calls the switch platform layer “the final frontier of proprietary fragmentation in open networking.” Device enumeration, thermal control, and firmware updates are still re-implemented for every hardware SKU. Identical ASICs from different manufacturers present completely different platforms to the operating system. OSPA’s answer is a vendor-neutral reference architecture across seven functional areas: Power Management, Hardware Access, Hardware Inventory Management, Environment Monitoring and Control, Firmware Maintenance and Recovery, Debuggability, and Security.
         </p>
         <p>
-          The spec names seven functional areas: Power Management, Hardware Access, Hardware Inventory Management, Environment Monitoring and Control, Firmware Maintenance and Recovery, Debuggability, and Security. Scope is explicit. This is the platform management layer. Routing protocols and forwarding management are out. Pure hardware design details are out. Security is a heading with one sentence: comprehensive security specifications will be defined in subsequent revisions.
+          Scope is explicit. This specification is limited to the switch platform management layer. Routing protocols and forwarding management are out. Pure hardware design details are out. Security is a heading with one sentence: comprehensive security specifications will be defined in subsequent revisions.
         </p>
-
-        <h2>In-Host, not BMC-as-NOS</h2>
         <p>
-          Two architectural models are on the page. In the OOB-Native model, the
+          Two models are on the page. In the OOB-Native model, the
           <code>BMC</code>
           runs fans, sensors, leak detection, inventory, and firmware, and the Host only forwards. OSPA focuses exclusively on the
           <strong>In-Host Model</strong>:
-          the BMC is restricted to power management, Host bring-up, leak protection, and troubleshooting — an independent path to recover an unresponsive Host. Everything else (sensors, fans, inventory, firmware) runs on the Host, in the same software ecosystem as the NOS.
+          the BMC is restricted to essential supervisory tasks — power management, Host bring-up, leak protection, and troubleshooting — serving as an independent mechanism for recovering an unresponsive Host. All remaining platform management services run on the Host, in the same software ecosystem as the NOS.
         </p>
         <p>
-          That split is the boot story in the title. If platform services live on the Host, a new ODM SKU is a configuration file plus drivers the Host already has, not a second BMC personality. The spec still requires OOB Ethernet, serial console, IPMI, USB, and dedicated power-management interconnects between BMC and Host. The BMC can power-cycle the whole switch, the Host plus data plane, or the Host CPU only.
+          If platform services live on the Host, a new ODM SKU is a configuration file plus drivers the Host already has, not a second BMC personality. The spec still requires OOB Ethernet, serial console, IPMI, USB, and dedicated power-management interconnects between BMC and Host. The BMC can power-cycle the whole switch, the Host plus data plane, or the Host CPU only.
         </p>
 
-        <h2>IOB FPGA over PCIe, then a tree of APEs</h2>
+        <h2>IOB FPGA, APE tree, IDPROM</h2>
         <p>
-          The Host-side topology hangs off I/O Bridge (<code>IOB</code>) FPGA(s) on PCIe. Each FPGA aggregates I2C, SPI, GPIO, MDIO, and LED controllers into a memory-mapped, low-latency path. Fragmented sideband buses are the thing this replaces. Output states — optics reset and LPMode, LED levels, GPIO outputs — must survive Host CPU and PCIe link resets and only clear on a switch-level power cycle or an explicit software request.
+          The Host-side topology hangs off I/O Bridge (<code>IOB</code>) FPGA(s) attached over PCIe. Each FPGA aggregates I2C, SPI, GPIO, MDIO, and LED controllers into a memory-mapped, low-latency path, replacing fragmented sideband buses. Output states — optics reset and LPMode, LED levels, GPIO outputs — must survive Host CPU and PCIe link resets and only clear on a switch-level power cycle or an explicit software request.
         </p>
         <p>
-          Inventory is an Atomic Platform Entity (<code>APE</code>) tree. An APE is the smallest unit platform software tracks: a FRU (PSU, fan tray), a standalone PCBA (switch main module), or several boards grouped as one logical APE when they are software-transparent. One Root APE. Children hang off parents. Enumeration is top-down. You do not talk to a child until the parent is up. Hot-swap APEs need a presence GPIO; access when presence is de-asserted is prohibited.
+          Inventory is an Atomic Platform Entity (<code>APE</code>) tree. An APE is the smallest unit of hardware that platform software tracks: a FRU, a standalone PCBA, or several boards grouped as one logical APE when they are software-transparent. APEs form a tree rooted at a single Root APE, with IDPROM requirements at each node, making device enumeration a deterministic top-down traversal. You do not talk to a child until the parent is up. Hot-swap APEs need a presence GPIO; access when presence is de-asserted is prohibited.
         </p>
         <p>
-          IDPROMs identify APEs. The Root APE IDPROM sits on the Host CPU’s embedded I2C/SMBus so it is readable before the rest of the tree. The Platform Identifier IDPROM (product name, serial, asset tag) lives on the chassis or blade, never on a field-swappable part, and must be reachable from both BMC and Host — two copies with identical content are acceptable. Formats are customer-specific:
+          The Root APE IDPROM sits on the Host CPU’s embedded I2C/SMBus so it is readable before the rest of the tree. The Platform Identifier IDPROM (product name, serial, asset tag) lives on the chassis or blade, never on a field-swappable part, and must be reachable from both BMC and Host. Formats are customer-specific:
           <a href="https://facebook.github.io/fboss/docs/platform/meta_eeprom_format_v6/" target="_blank" rel="noopener noreferrer">Meta EEPROM format v6</a>
           or
           <a href="https://opencomputeproject.github.io/onie/design-spec/hw_requirements.html" target="_blank" rel="noopener noreferrer">ONIE TlvInfo</a>.
@@ -105,89 +104,19 @@
         <p>
           The worked example is
           <a href="https://www.opencompute.org/documents/meta-minipack3-design-package-zip" target="_blank" rel="noopener noreferrer">Meta Minipack3</a>.
-          The Main Carrier Board is the root APE. The IOB FPGA on that board is the I2C/SPI/MDIO/GPIO fan-out. Platform Device Discovery reads
-          <code>dmidecode</code>,
-          initializes the MCB IDPROM on the CPU-embedded I2C bus, applies EVT/DVT/PVT and hardware-variant config, then walks children. That is the “boot the same way” claim in operator language: same walk, different JSON.
-        </p>
-
-        <h2>Power that does not wait on software</h2>
-        <p>
-          PSUs are PMBus-observable. FRU PSUs are tool-less and hot-swappable; the PSU fan is the FRU’s problem, not the platform thermal service. Presence and Power_Good go to Host GPIO or CPLD; PSU_PSON goes to the BMC. AC configs must support N+1 redundancy or better with active current sharing. Over-temperature restores automatically once it clears (OTP). Overcurrent (OCP) and overvoltage (OVP) latch off and need a manual power-cycle.
+          The Main Carrier Board is the root APE. The IOB FPGA on that board is the I2C/SPI/MDIO/GPIO fan-out. That is the “boot the same way” claim in operator language: same walk, different JSON.
         </p>
         <p>
           On a switch-level power cycle, the BMC comes up by itself. The Host — CPU, ASICs, optics — stays off or in reset until the BMC, or the Host Bringup watchdog, turns it on. The watchdog’s default timeout is
           <strong>5-minute</strong>.
-          A configurable timeout in non-volatile storage is nice to have. The BMC disables the watchdog once Host power-good asserts. If the Host is already on when the timer expires, the watchdog must not change the power state. First Host power-on: ASICs come out of reset without Host software; optics stay in reset until Host optics management takes them out; the ASIC must always enumerate on PCIe across Host CPU resets without software.
+          The BMC disables the watchdog once Host power-good asserts. If the Host is already on when the timer expires, the watchdog must not change the power state. First Host power-on: ASICs come out of reset without Host software; optics stay in reset until Host optics management takes them out; the ASIC must always enumerate on PCIe across Host CPU resets without software.
         </p>
         <p>
-          Front-panel OOB is two management ports, customer choice:
-          <strong>2x1G RJ45</strong>
-          or
-          <strong>1x1G RJ45 + 1x10G SFP+</strong>.
-          An unmanaged/EEPROM-configured
-          <code>oob_switch</code>
-          (example: Marvell 88E6321) sits between BMC, Host, and those ports. NC-SI is explicitly discouraged. After a power cycle the switch loads EEPROM by itself; BMC or Host reset must not take OOB down. Optics get a dedicated I2C controller each — no muxes — at a minimum
-          <strong>100KHz</strong>,
-          with firmware-upgrade clocks in the
-          <strong>400KHz to 1MHz</strong>
-          range as a should, confirmed with the customer. LEDs: System, Power, Fan, and Leak (liquid-cooled only). Intensity is
-          <strong>8-bit</strong>
-          per R/G/B channel (<strong>256</strong> levels). Blink states are Solid, FAST (<strong>0.5s</strong> period), and SLOW (<strong>2.0s</strong> period), exposed through the Linux LED class at
-          <code>/sys/class/leds</code>.
-        </p>
-        <div class="table-wrap" role="region" aria-label="OSPA recommended front-panel LED color coding from the draft spec" tabindex="0">
-          <table>
-            <thead>
-              <tr>
-                <th>LED</th>
-                <th>OFF</th>
-                <th>Blue (Normal)</th>
-                <th>Amber (Alert)</th>
-                <th>Blink Patterns</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>System Status</td>
-                <td>Initial power-on</td>
-                <td>System healthy; all FRUs present.</td>
-                <td>FRU fault, thermal event, or firmware stale.</td>
-                <td>Fast blink during firmware upgrade.</td>
-              </tr>
-              <tr>
-                <td>Power Status</td>
-                <td>Initial power-on</td>
-                <td>PSUs present/functioning properly.</td>
-                <td>PSU fault, overheat, OVP, or OCP.</td>
-                <td>N/A</td>
-              </tr>
-              <tr>
-                <td>Fan Status</td>
-                <td>Initial power-on</td>
-                <td>Fans present and within RPM range.</td>
-                <td>Fan missing or out-of-range RPM.</td>
-                <td>N/A</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <p>
-          Fans, excluding PSU fans, boot to a platform-validated safe PWM without waiting on the thermal service. A fan watchdog is disabled at power cycle, kicked in normal operation, and on expiry drives those same fans to the safe PWM. ASIC overheat protection is not “trust the die.” An external sensor (example: MAX6581) on the on-die thermal diode alerts a CPLD, which de-asserts the VRM enable. The shutdown latches; ALERT de-assertion must not restore power. Liquid leak detection must work if Host and BMC software are dead: major leak kills Host (CPU, ASICs, optics); BMC stays on auxiliary power to log; the leak LED is hardware-driven.
-        </p>
-
-        <h2>Firmware: SPI, A/B, dual-path — and a ten-row customer list</h2>
-        <p>
-          SPI flash is the preferred upgrade path so
+          PSUs are PMBus-observable. AC configs must support N+1 redundancy or better. SPI flash is the preferred firmware path so
           <code>flashrom</code>
           and
           <code>flashcp</code>
-          work. JTAG is not preferred; there is no standard Linux user-space ABI. I2C is not the primary firmware path except where a device standard forces it (PMBus PSUs, CMIS/SFF optics, small EEPROMs). Critical images get A/B banks and dual-path recovery. Host is the primary updater; BMC recovery is the fail-safe. On Minipack3, IOB FPGA and UEFI/BIOS have an independent BMC path.
-        </p>
-        <p>
-          Host software is three layers: IOB FPGA controller drivers (PCIe umbrella plus Linux auxiliary bus, not MFD), Platform Device Discovery from a config file such as
-          <code>platform_device.json</code>,
-          and hardware-agnostic services that only see stable symlinks (example: <code>/run/devmap/xcvrs/xcvr_io_1</code> → <code>/dev/i2c-15</code>).
-          The IOB ioctl header lives at
+          work. JTAG is not preferred; there is no standard Linux user-space ABI. Critical images get A/B banks and dual-path recovery. Host is the primary updater; BMC recovery is the fail-safe. The IOB ioctl header lives at
           <a href="https://github.com/facebookincubator/fboss.bsp.kmods/blob/main/kmods/lib/fbiob-ioctl.h" target="_blank" rel="noopener noreferrer">fbiob-ioctl.h</a>.
           The drivers are
           <a href="https://github.com/facebookincubator/fboss.bsp.kmods/tree/main/kmods" target="_blank" rel="noopener noreferrer">deployed across over 10 FBOSS platforms</a>.
@@ -195,130 +124,46 @@
           <a href="https://github.com/facebook/fboss/tree/main/fboss/platform/platform_manager" target="_blank" rel="noopener noreferrer">platform_manager</a>.
           The OCP tenets section says the same stack has proven deployment across over 10 production switch platforms, and that a configuration-driven design enables platform onboarding in under one day. Those are the spec’s numbers, not a measurement of my own.
         </p>
-        <div class="table-wrap" role="region" aria-label="OSPA spec version history from the draft GitHub specification" tabindex="0">
-          <table>
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Version #</th>
-                <th>Author</th>
-                <th>Description</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>8/6/2026</td>
-                <td>0.9.0</td>
-                <td>Meta, Microsoft, Alibaba</td>
-                <td>Initial release</td>
-              </tr>
-              <tr>
-                <td>9/13/2026</td>
-                <td>1.0.0</td>
-                <td>Meta, Microsoft, Alibaba; OSPA Working Group</td>
-                <td>Incorporated feedback and improvements from partners</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <p>
-          Revision 0.9.0 is the early vendor review cycle. Named acknowledgements: Accton (Susan Tsao, Brandon Chuang), Arista (Dean Kalla), Celestica (Chun Dong, Krishnakumar Gowravaram), Cisco (Scott Paulsen), Data Touch Innovative Technologies (Kevin Yao), Micas (Tim Zhou, Simon Zhao, William Liu, Eric Xiao, Elen Chen, Ivan Kong, Grant Lai, Gaia Gao, Scott Fan), Nexthop (Ravindra Rama, Michael Chan, Ryan Torres, Gordon Martinez-Piedra, Roger Liao), Nvidia (Mana Palai), Wistron (Kevin Chen). License is Modified Open Web Foundation Agreement 0.9 (OWFa 0.9) as of October 16, 2024, for Meta, Microsoft, and Alibaba. Appendices are non-normative.
-        </p>
-        <p>
-          Appendix D is the honest part of a draft under OCP review: ten items the manufacturer still has to ask the customer.
-        </p>
-        <div class="table-wrap" role="region" aria-label="OSPA Appendix D customer consultation checklist from the draft spec" tabindex="0">
-          <table>
-            <thead>
-              <tr>
-                <th>Item</th>
-                <th>Description</th>
-                <th>Reference Section</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>1</td>
-                <td>Power Supply Unit (PSU) Input Specifications (AC/DC/Voltage)</td>
-                <td>Power Supply Module</td>
-              </tr>
-              <tr>
-                <td>2</td>
-                <td>Front-Panel OOB Ethernet Port Configuration</td>
-                <td>Out-of-band Ethernet Access</td>
-              </tr>
-              <tr>
-                <td>3</td>
-                <td>Front-Panel Serial Port Multiplexing</td>
-                <td>Serial Console Access</td>
-              </tr>
-              <tr>
-                <td>4</td>
-                <td>Optics Initial Power-On State</td>
-                <td>Optical Module Access</td>
-              </tr>
-              <tr>
-                <td>5</td>
-                <td>Optics Firmware Upgrade I2C Bus Speed</td>
-                <td>Optical Module Access</td>
-              </tr>
-              <tr>
-                <td>6</td>
-                <td>Front-Panel LED Operational Logic</td>
-                <td>Front-panel LED Management</td>
-              </tr>
-              <tr>
-                <td>7</td>
-                <td>IDPROM Data Format</td>
-                <td>APE Identification (IDPROM Specification)</td>
-              </tr>
-              <tr>
-                <td>8</td>
-                <td>Hardware Monitoring Sensor Accuracy</td>
-                <td>Hardware Sensors Monitoring</td>
-              </tr>
-              <tr>
-                <td>9</td>
-                <td>Liquid Leak Detection Architecture</td>
-                <td>Liquid Leak Detection</td>
-              </tr>
-              <tr>
-                <td>10</td>
-                <td>Hardware Fault Logger Implementation</td>
-                <td>Hardware Fault Logger</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <p>
-          Add the empty Security chapter and the “please confirm with the customer” notes on LED colors, low-power defaults, and sensor accuracy, and you have a serious reference architecture that is still a draft under OCP review. Join via the GitHub repo or
-          <a href="mailto:ocp-ospa@OCP-All.groups.io">ocp-ospa@OCP-All.groups.io</a>.
-        </p>
 
-        <h2>What I would ask before I treat this as a bring-up contract</h2>
+        <h2>The boot sequence in Section 14.2</h2>
+        <p>
+          The boot sequence in Section 14.2 is the part I would actually implement against. Platform Device Discovery loads a config file such as
+          <code>platform_device.json</code>
+          and walks the APE tree in a fixed order:
+        </p>
+        <div class="table-wrap" role="region" aria-label="OSPA Section 14.2 boot sequence" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>Step</th>
+                <th>What happens</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Platform Identification</strong></td>
+                <td>Retrieve the system name via <code>dmidecode</code> and load the platform-specific device configuration file.</td>
+              </tr>
+              <tr>
+                <td><strong>APE Topology Construction</strong></td>
+                <td>Build a hierarchical inventory of Atomic Platform Entities according to the defined topology.</td>
+              </tr>
+              <tr>
+                <td><strong>Device Enumeration</strong></td>
+                <td>Starting from the Root APE, traverse the hierarchy, read each APE’s IDPROM to verify board revisions, and initialize I/O controllers and client devices.</td>
+              </tr>
+              <tr>
+                <td><strong>Stable Mapping Creation</strong></td>
+                <td>Generate stable symbolic links (e.g. <code>/run/devmap/xcvrs/xcvr_io_1</code> → <code>/dev/i2c-15</code>) so platform services never depend on dynamic Linux device indices.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
         <p>
           SAI made the forwarding API reusable. OSPA is trying to do the same for the software you run before the first packet —
           <a href="/nvidia-aicr-v1.html">the way AICR froze a contract for GPU Kubernetes recipes</a>,
-          except here the unit is a switch SKU, not a cluster recipe. The IOB drivers and Minipack3 walk are the evidence that this is not a greenfield slide. The open questions are the ones the checklist already admits, plus a few I would still ask:
-        </p>
-        <ol>
-          <li>
-            Which non-FBOSS NOS trees — SONiC images in the wild, vendor EOS/NX-OS-class stacks — have loaded an OSPA
-            <code>platform_device.json</code>
-            without a fork of the IOB umbrella driver?
-          </li>
-          <li>
-            Is “onboarding in under one day” measured on a second Minipack3-class board, or on a new ASIC with a new IOB bitstream?
-          </li>
-          <li>
-            When does the Security chapter exist, and does it constrain BMC-to-Host USB gadget and SPI bus switching used for Host recovery?
-          </li>
-          <li>
-            Who ships the first OSPA-labelled AI fabric SKU that is not a Meta Minipack, and at what date relative to this draft under OCP review becoming an approved OCP contribution?
-          </li>
-        </ol>
-        <p>
-          Until those rows fill in, I would read OSPA the way I read ESUN 1.0: a vendor-neutral reference you can design against, with working FBOSS code behind the IOB chapter, and with the Foundation review stamp still on the cover. The useful test is whether the next ODM box boots into the same APE walk.
+          except here the unit is a switch SKU, not a cluster recipe. The IOB drivers and Minipack3 walk are the evidence that this is not a greenfield slide. Until a second ODM SKU boots through that same walk, I would read OSPA the way I read ESUN 1.0: a vendor-neutral reference you can design against, with working FBOSS code behind the IOB chapter, and with the Foundation review stamp still on the cover. Join via the GitHub repo or
+          <a href="mailto:ocp-ospa@OCP-All.groups.io">ocp-ospa@OCP-All.groups.io</a>.
         </p>
         <p>
           Related:
