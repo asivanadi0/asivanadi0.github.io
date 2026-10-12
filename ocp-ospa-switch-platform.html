@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OSPA: Meta, Microsoft and Alibaba Want Every AI Fabric Switch to Boot the Same Way — Anpoo Sivanadi</title>
+  <meta name="description" content="On October 8, OCP posted Open Switch Platform Architecture, a draft under OCP review initiated by Meta, Microsoft, and Alibaba: a vendor-neutral switch platform layer so AI fabric SKUs can boot, inventory, and flash the same way." />
+  <link rel="canonical" href="https://asivanadi0.github.io/ocp-ospa-switch-platform.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="OSPA: Meta, Microsoft and Alibaba Want Every AI Fabric Switch to Boot the Same Way — Anpoo Sivanadi" />
+  <meta property="og:description" content="On October 8, OCP posted Open Switch Platform Architecture, a draft under OCP review initiated by Meta, Microsoft, and Alibaba: a vendor-neutral switch platform layer so AI fabric SKUs can boot, inventory, and flash the same way." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/ocp-ospa-switch-platform.html" />
+  <meta property="article:published_time" content="2026-10-12T06:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>OSPA: Meta, Microsoft and Alibaba Want Every AI Fabric Switch to Boot the Same Way</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-12T06:00:00-07:00">12 October 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>The interesting networking news at this year's OCP Global Summit is not a faster ASIC. It is a spec of roughly 10,000 words about I2C buses, fan watchdogs and EEPROM formats.</p>
+<p>The <a href="https://www.opencompute.org/news/introducing-ospa-unifying-the-switch-platform-layer-for-open-networking/" target="_blank" rel="noopener noreferrer">Open Switch Platform Architecture (OSPA)</a> was announced on October 8 as an in-progress contribution to the OCP Networking Project and is being presented at the summit in San Jose this week (October 12 to 15). Meta, Microsoft and Alibaba started it. Accton, Arista, Celestica, Cisco, Data Touch Innovative Technologies, Micas, Nexthop, NVIDIA and Wistron reviewed it. The draft, Revision 1.0.0 dated September 13, is <a href="https://github.com/opencomputeproject/OCP-switch-platform-architecture" target="_blank" rel="noopener noreferrer">public on GitHub</a> under OWFa 0.9 and is still going through OCP Foundation review.</p>
+<p>I spend a lot of my time on cluster readiness: proving that a GPU node, its NICs and the fabric under it are actually healthy before a scheduler hands it real work. The switch is usually the part of that stack I can see least. OSPA is an attempt to make it as boring and inspectable as a Linux server, and I think it deserves more attention than the switch-silicon launches around it.</p>
+<h2>The problem it is solving</h2>
+<p>SAI and SONiC made the data plane portable years ago. You can run the same NOS across ASICs from different vendors. What never got standardized is everything around the ASIC: how the OS finds the fans, reads the PSUs, upgrades the CPLD, resets a stuck optic, or figures out which board revision it is running on.</p>
+<p>The <a href="https://www.opencompute.org/news/introducing-ospa-unifying-the-switch-platform-layer-for-open-networking/" target="_blank" rel="noopener noreferrer">OCP announcement</a> puts it bluntly: identical ASICs from different manufacturers "present completely different platforms to the operating system," so device enumeration, thermal control and firmware updates get rewritten for every SKU. If you have ever had to explain why a new switch model needs its own platform driver drop before it can join a fabric, this is that problem.</p>
+<p>OSPA's claim is that onboarding a new switch should take one configuration file. The spec says the approach enables "platform onboarding in under one day," and that its reference drivers and platform services are already deployed on more than 10 production switch platforms.</p>
+<h2>The BMC gets demoted</h2>
+<p>The biggest architectural decision is about where platform management runs. The spec describes two models:</p>
+<ul>
+<li><strong>OOB-native:</strong> the BMC owns everything (fans, sensors, inventory, leak detection, firmware) and the host CPU only runs the data plane.</li>
+<li><strong>In-host:</strong> the host CPU runs platform services, and the BMC is a supervisor limited to power management, host bring-up, leak protection and recovery.</li>
+</ul>
+<p>OSPA picks in-host and only specifies that model. The reasoning is maintainability: platform code lives in the same software ecosystem as the NOS, on a CPU with real resources, instead of in a separate BMC firmware image with its own release cadence.</p>
+<p>That is the opposite of what a lot of server fleets have been doing with Redfish-everything BMCs, and it is a deliberate bet. The BMC still has real authority. It must be able to power cycle the whole switch, power cycle the host CPU together with the ASIC and optics, or power cycle only the host CPU while the data plane keeps forwarding. It must retain direct SPI access to the host's flash so it can reflash a corrupted UEFI image. But day-to-day management moves to the host.</p>
+<h2>The I/O Bridge FPGA</h2>
+<p>The piece of hardware that makes in-host management workable is the I/O Bridge (IOB) FPGA. Instead of a nest of sideband buses and muxes, the host talks to one or more FPGAs over PCIe, and each FPGA exposes memory-mapped I2C, SPI, GPIO, MDIO and LED controllers.</p>
+<p>A few requirements in Appendix C stood out to me:</p>
+<ul>
+<li>Each controller gets its own non-overlapping register space and should be independently resettable, so a locked I2C bus on one optic cage does not take down fan control.</li>
+<li>Output states (optics reset and low-power mode, LEDs, GPIO levels) must survive host CPU and PCIe link resets. Only a switch-level power cycle or an explicit software write clears them.</li>
+<li>The Linux driver must use the auxiliary bus framework rather than MFD. A PCIe "umbrella" driver probes the FPGA and creates child devices for each IP block.</li>
+</ul>
+<p>The spec prefers creating those child controllers from userspace via ioctl, so device settings can change without an ACPI table edit or an FPGA reflash. The header is already public in Meta's <a href="https://github.com/facebookincubator/fboss.bsp.kmods/tree/main/kmods" target="_blank" rel="noopener noreferrer">fboss.bsp.kmods repo</a> (<code>kmods/lib/fbiob-ioctl.h</code>), alongside the IOB I2C, SPI, GPIO and MDIO drivers, which the spec says are identical across every FBOSS platform that uses them.</p>
+<h2>Inventory as a tree</h2>
+<p>Hardware inventory is modeled with the Atomic Platform Entity (APE): the smallest piece of hardware software tracks, whether that is a PSU, a fan tray, the switch main board, or a group of software-transparent boards treated as one unit. APEs form a tree with a single root, and enumeration is a strict top-down walk.</p>
+<p>The boot sequence in Section 14.2 is simple enough to fit in a paragraph. Platform software reads the product name from <code>dmidecode -s system-product-name</code>, loads the matching <code>platform_device.json</code>, reads the root APE's IDPROM over the CPU's own SMBus to learn the board revision (EVT, DVT, PVT, re-spins, alternate parts), applies the matching config, brings up the FPGA controllers, then recurses into each child. Hot-swappable APEs must be checked through a presence GPIO before anything touches their bus, and a hot-plug event triggers re-enumeration of only that branch.</p>
+<p>The part I like most is the last step. The discovery service creates stable symlinks such as <code>/run/devmap/xcvrs/xcvr_io_1 -&gt; /dev/i2c-15</code>, and every platform service must use those links instead of raw <code>/dev/i2c-*</code> or <code>hwmon*</code> indices. Anyone who has chased a monitoring agent that broke because a kernel upgrade renumbered I2C adapters knows why that rule exists. The reference implementation is FBOSS's <a href="https://github.com/facebook/fboss/tree/main/fboss/platform/platform_manager" target="_blank" rel="noopener noreferrer">platform_manager</a>, and the spec uses Meta's Minipack3 as its worked example.</p>
+<h2>Safety that does not depend on software</h2>
+<p>AI fabric switches are going into liquid-cooled racks, and OSPA treats that as a first-class concern. Several protections are required to work with no software running at all:</p>
+<div class="table-wrap" role="region" aria-label="OSPA safety requirements" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Mechanism</th>
+<th>What the spec requires</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Host bring-up watchdog</td>
+<td>If the BMC never powers on the host, hardware does it after a 5-minute default timeout</td>
+</tr>
+<tr>
+<td>Boot-time fans</td>
+<td>All system fans default to a validated safe PWM duty cycle before the thermal service starts</td>
+</tr>
+<tr>
+<td>Fan watchdog</td>
+<td>If the thermal service stops kicking it, fans go to a duty cycle safe for maximum load and the watchdog latches as expired</td>
+</tr>
+<tr>
+<td>ASIC overheat</td>
+<td>External sensor (the example is a MAX6581) alerts a CPLD, which drops the ASIC voltage regulator's enable pin; the shutdown latches and a sticky bit records it</td>
+</tr>
+<tr>
+<td>Liquid leak</td>
+<td>A major leak autonomously shuts down host, ASICs and optics; the BMC stays up on auxiliary power to log it; a "leak injection" path must exist for testing</td>
+</tr>
+<tr>
+<td>PSU faults</td>
+<td>Over-temperature auto-recovers; over-current and over-voltage latch off until a manual power cycle</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The ASIC overheat section explains why throttling on the die is not enough: after a coolant flow failure, an overheated ASIC can drop into reset while staying powered and drawing heavy current. Cutting the regulator is the only reliable stop.</p>
+<p>The leak injection requirement is the one I would copy into any rack-scale design review. A safety path you cannot exercise on demand is a safety path you are trusting on faith.</p>
+<h2>Opinions about buses and firmware</h2>
+<p>The spec is not shy. NC-SI for the management network is "explicitly discouraged"; an EEPROM-configured unmanaged switch (the example is a Marvell 88E6321) links the BMC, host and front-panel ports and keeps working through BMC or host resets. Every optical module gets its own I2C controller with no muxes at all. Elsewhere, I2C muxing is limited to a single level, and multi-master I2C is out.</p>
+<p>For firmware, SPI flash is preferred so stock <code>flashrom</code> and <code>flashcp</code> work. JTAG is discouraged for field updates because Linux has no standard userspace ABI for it. I2C is discouraged except where a device standard forces it (PMBus PSUs, CMIS optics). Critical images need A/B banks plus a second recovery path, with the host as the normal update authority and the BMC as the fallback.</p>
+<p>On debuggability, fatal CPU error lines (CATERR# and ERR[2:0]# on Intel, FATAL_ERROR_L and APML_ALERT_L on AMD) must be routed to BMC-visible logic, SEL timestamps must be NTP-synced, and the host must be able to boot even if the BMC's IPMI service is down.</p>
+<h2>What is missing</h2>
+<p>Section 12, Security, is one sentence: comprehensive requirements "will be defined in subsequent revisions." For a document that defines firmware update authority and BMC access to host flash, that is a large gap. Secure boot, image signing and attestation for the IOB FPGA and CPLDs are exactly where vendor platforms diverge most today.</p>
+<p>It is also still a draft under review, and much of the hardware detail ends with "consult the customer," which leaves room for each hyperscaler's flavor to persist. And it covers the in-host model only. Operators who standardized on BMC-centric management will not find their architecture here.</p>
+<h2>Why I care</h2>
+<p>The scale-up and scale-out announcements at OCP this week are about moving more bits between more accelerators. Every one of those fabrics still depends on thousands of switches that need to be inventoried, cooled, patched and recovered without a human at the rack. When that layer differs per vendor, readiness tooling ends up full of per-SKU special cases, and new hardware waits on driver work before it can carry traffic.</p>
+<p>OSPA puts a stable Linux ABI (<code>/dev/i2c-*</code>, libgpiod, <code>hwmon</code>, <code>/sys/class/leds</code>) and a predictable discovery order under all of it. That is the same thing that made Kubernetes node health checks portable across server vendors. If the security section lands and a few non-Meta vendors ship to it, I expect switch bring-up to start looking a lot more like server bring-up, and that would be a real change for anyone operating an AI fabric.</p>
+
+        <p>
+          Related:
+          <a href="/arista-etherlink-su144-esun.html">Arista Etherlink SU-144: Ethernet Moves Inside the Scale-Up Domain, and the Rack Becomes the Unit</a>
+          ·
+          <a href="/upscale-token-fabric.html">Upscale Token Fabric: SkyFabriX at 115.2 Tbps Meets Spectrum-X Scale-Out Under One OS</a>
+          ·
+          <a href="/nvidia-aicr-v1.html">AICR v1.0: NVIDIA Freezes the Contract for GPU Kubernetes Recipes</a>.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
