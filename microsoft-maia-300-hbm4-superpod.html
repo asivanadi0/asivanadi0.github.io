@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Maia 300: Microsoft’s Inference ASIC Puts 288 GB of HBM4 and a 12,288-Chip Ethernet Superpod on the Table — Anpoo Sivanadi</title>
+  <meta name="description" content="Microsoft used the same stage to put numbers on Azure Maia 300, the third generation of its in-house inference accelerator and the first Maia built as a multi-chiplet part." />
+  <link rel="canonical" href="https://asivanadi0.github.io/microsoft-maia-300-hbm4-superpod.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Maia 300: Microsoft’s Inference ASIC Puts 288 GB of HBM4 and a 12,288-Chip Ethernet Superpod on the Table — Anpoo Sivanadi" />
+  <meta property="og:description" content="Microsoft used the same stage to put numbers on Azure Maia 300, the third generation of its in-house inference accelerator and the first Maia built as a multi-chiplet part." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/microsoft-maia-300-hbm4-superpod.html" />
+  <meta property="article:published_time" content="2026-10-13T06:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Maia 300: Microsoft’s Inference ASIC Puts 288 GB of HBM4 and a 12,288-Chip Ethernet Superpod on the Table</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-13T06:00:00-07:00">13 October 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>Most of the OCP Global Summit noise this week is about open racks and faster fabrics. Microsoft used the same stage to put numbers on <a href="https://blogs.microsoft.com/blog/2026/10/12/microsoft-to-expand-azure-maia-system-to-multi-gigawatt-deployments/" target="_blank" rel="noopener noreferrer">Azure Maia 300</a>, the third generation of its in-house inference accelerator and the first Maia built as a multi-chiplet part.</p>
+<p>I care about this drop because it is not another “AI demand is huge” slide. It is a hyperscaler publishing a full inference stack — silicon, tray, rack, and scale-up network — with concrete memory, power, and topology figures, and saying Maia becomes the primary inference system for Microsoft products starting with multi-gigawatt deployments in 2027. Whether you will ever rent a Maia instance is a separate question. The design choices are worth reading if you run long-context or agentic serving on any accelerator.</p>
+<h2>What shipped on paper</h2>
+<p><a href="https://blogs.microsoft.com/blog/2026/10/12/microsoft-to-expand-azure-maia-system-to-multi-gigawatt-deployments/" target="_blank" rel="noopener noreferrer">Scott Guthrie’s announcement</a> and the <a href="https://azure.microsoft.com/en-us/blog/deep-dive-into-azure-maia-300-architecture/" target="_blank" rel="noopener noreferrer">Azure architecture deep dive</a> line up with the <a href="https://www.storagereview.com/news/microsoft-maia-300-hbm4-n2p-chiplet-96-accelerator-rack" target="_blank" rel="noopener noreferrer">StorageReview spec table</a> compiled from the same materials. The headline silicon:</p>
+<div class="table-wrap" role="region" aria-label="Maia 300 comparison table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Spec</th>
+<th>Maia 300</th>
+<th>Maia 200 (prior gen)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Package</td>
+<td>Multi-chiplet, TSMC N2P compute die</td>
+<td>Monolithic N3P</td>
+</tr>
+<tr>
+<td>HBM</td>
+<td>8× HBM4, 288 GB, 18 TB/s</td>
+<td>6× HBM3E, 216 GB, 7.1 TB/s</td>
+</tr>
+<tr>
+<td>SoC TDP</td>
+<td>950 W</td>
+<td>750 W</td>
+</tr>
+<tr>
+<td>FP4 peak</td>
+<td>13.8 POPS</td>
+<td>10.1 POPS</td>
+</tr>
+<tr>
+<td>FP8 peak</td>
+<td>6.9 POPS</td>
+<td>5.1 POPS</td>
+</tr>
+<tr>
+<td>Host</td>
+<td>PCIe Gen6 x16</td>
+<td>(not restated)</td>
+</tr>
+<tr>
+<td>Scale-up BW (bidirectional)</td>
+<td>3.2 TB/s</td>
+<td>2.8 TB/s</td>
+</tr>
+<tr>
+<td>Back-end</td>
+<td>32× 400Gb/s Ethernet via on-die AI network controller</td>
+<td>Two-tier Ethernet + AI transport</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>That is a 2.5× memory-bandwidth jump and a 33% capacity bump for about a 27% TDP rise and a 37% FP4 compute rise. The generation is intentionally skewed toward feeding decode, not toward topping FLOPS charts.</p>
+<p>On the rack side, Microsoft doubles the accelerator count and more than doubles the power envelope:</p>
+<div class="table-wrap" role="region" aria-label="Maia 300 comparison table 2" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Rack / domain</th>
+<th>Maia 300</th>
+<th>Maia 200</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Accelerators per rack</td>
+<td>96 (24× four-accelerator trays)</td>
+<td>48</td>
+</tr>
+<tr>
+<td>Rack power</td>
+<td>167 kW</td>
+<td>64 kW</td>
+</tr>
+<tr>
+<td>Rack HBM capacity</td>
+<td>27.6 TB</td>
+<td>10.4 TB</td>
+</tr>
+<tr>
+<td>Rack HBM bandwidth</td>
+<td>1,728 TB/s</td>
+<td>341 TB/s</td>
+</tr>
+<tr>
+<td>Rack FP4 peak</td>
+<td>1,324 POPS</td>
+<td>485 POPS</td>
+</tr>
+<tr>
+<td>Scale-up domain</td>
+<td>~12,288 accelerators</td>
+<td>~6,000</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Microsoft’s claims against Maia 200 are “up to 7×” rack-scale token throughput in the full 96-accelerator config and “more than 2.5×” performance per watt. Against “leading GPU-based systems,” the company quotes 40% more tokens per megawatt. That last comparison does not name the GPU, the model, or the serving config, so treat it as a positioning number, not a reproducible bench.</p>
+<h2>Why the architecture is interesting</h2>
+<p>Maia’s programming story is Software Defined Locally Accessed Dataflow Architecture (SDLA). Control-path programming is separated from data-path execution; software explicitly places and moves data across local SRAM, DMA engines, compute engines, and the network. Maia 200 introduced that model. Maia 300 stretches it in three ways that matter for long-context decode.</p>
+<p>First, memory layout moves from uniform access to a NUMA organization across chiplets. Each compute region has nearby memory, and SDLA’s DMA and network-on-chip controls are how you keep KV and activations from ping-ponging across the package. StorageReview’s breakdown of the package is a main N2P compute die, two I/O dies, four memory dies, and eight HBM4 stacks — more surfaces for locality bugs if software gets it wrong, and more room to get it right if the toolchain lands.</p>
+<p>Second, precision gets narrower. Enhanced MXFP4 and hardware data-type conversion are aimed at cutting bytes moved per token for both compute and KV-cache storage. Kernels can also treat on-die SRAM as a software-managed scratchpad so HBM is not the only working set. That is the same bet a lot of serving stacks are making in software; Microsoft is baking it into the ISA and the memory hierarchy.</p>
+<p>Third, the network is not a bolt-on NIC story. The on-die AI network controller speaks a custom AI transport over Ethernet. Software sees one communication model from a tray pair all the way to the superpod. Latency domains are explicit: a directly connected accelerator pair is cheapest, anything else in the 96-accelerator rack is one switch hop, and anything across pods is three hops. An accelerator can drive up to 750 GB/s to a peer in the superpod when only a subset of links go cross-rack, and the in-rack versus cross-rack bandwidth split is a job-packing parameter rather than a fixed PCB design.</p>
+<p>That last point is the one I would steal for any MoE serving review. Tensor parallelism can stay inside the rack; expert and pipeline parallelism can span racks; prefill and decode workers can sit on different trays and move KV over the same scale-up fabric instead of bouncing through a host-mediated scale-out NIC. Hot-spare capacity in another rack can absorb a failed tray without leaving the fabric. Whether those semantics survive real failure modes is an operations question Microsoft will have to prove in 2027. On paper, they closed the usual “two networks, two programming models” tax.</p>
+<h2>How the rack is put together</h2>
+<p>The physical packaging matches the software story. Each of the 24 trays carries four accelerators plus host CPU, memory, storage, and cooling — no separate host trays stealing U-space. Six high-radix switch ASICs live in three liquid-cooled switch trays for in-rack connectivity. Power is dual-feed with high-capacity shelves and a 50 V busbar; an automatic transfer switch keeps the rack up on one feed during service. Liquid cooling takes more than 80% of the thermal load from accelerators, voltage regulators, and switch ASICs; air covers memory, storage, and ancillary parts. Microsoft says the rack can attach to facility water or reject heat through a heat exchanger in an air-cooled hall.</p>
+<p>None of that is exotic for a 167 kW AI rack in 2026. What is unusual is how tightly Microsoft couples it to one inference ASIC and one Ethernet-based scale-up story instead of mixing GPU SKUs and a separate InfiniBand or Spectrum-X domain.</p>
+<h2>What is already running, and what is not</h2>
+<p>Maia 200 is in production across the United States, Europe, and Australia. Microsoft says it is serving Copilot and the MAI model team today, with GitHub Copilot and Microsoft Foundry planned by year end, and that it runs OpenAI models, Microsoft’s own MAI models, and leading open-weight families. The company attributes up to 1.7× more tokens per watt on built-in Teams / Copilot / Cowork AI features versus its own GPU infrastructure for those workloads. Again: Microsoft-owned comparison, not a public MLPerf line.</p>
+<p>Maia 300 production deployments start in 2027. It is not offered as an Azure VM SKU you can rent. NVIDIA and AMD remain in Microsoft’s training fleet. So the readers who can validate these numbers first are Microsoft’s own serving teams and anyone who gets early access through a joint product — not an independent neocloud tomorrow morning.</p>
+<h2>How I am reading it</h2>
+<p>Put next to yesterday’s open switch-platform work and the rest of the OCP networking slate, Maia 300 is the other pole of the same week: a closed, co-designed inference factory with open Ethernet as the scale-up medium, versus open platform management on merchant switch silicon. Both are answers to the same pressure — long-context and agentic decode that starve on memory bandwidth and drown in cross-domain networking glue.</p>
+<p>If you size clusters for decode-heavy MoE or multi-step agents, the useful takeaways are concrete:</p>
+<ul>
+<li>Memory bandwidth is the generational bet (2.5×), not FLOPS (roughly +37% FP4).</li>
+<li>96 accelerators in one Ethernet scale-up domain, with a documented path to 12,288, is the topology Microsoft wants software to target.</li>
+<li>Prefill/decode disaggregation and cross-rack spare trays are first-class fabric features, not scheduler hacks on top of a second network.</li>
+<li>The efficiency claims against GPUs are directional until someone outside Microsoft publishes matched configs.</li>
+</ul>
+<p>I will watch for the Ignite follow-ups Microsoft teased for next month, and for whether any of the SDLA / MXFP4 / AI-transport pieces show up in public kernel or collective libraries. Until then, the <a href="https://azure.microsoft.com/en-us/blog/deep-dive-into-azure-maia-300-architecture/" target="_blank" rel="noopener noreferrer">architecture post</a> and the <a href="https://blogs.microsoft.com/blog/2026/10/12/microsoft-to-expand-azure-maia-system-to-multi-gigawatt-deployments/" target="_blank" rel="noopener noreferrer">announcement</a> are the primary sources; the <a href="https://www.storagereview.com/news/microsoft-maia-300-hbm4-n2p-chiplet-96-accelerator-rack" target="_blank" rel="noopener noreferrer">StorageReview write-up</a> is the cleanest secondary table I have seen.</p>
+
+        <p>
+          Related:
+          <a href="/ocp-ospa-switch-platform.html">OSPA: Meta, Microsoft and Alibaba Want Every AI Fabric Switch to Boot the Same Way</a>
+          ·
+          <a href="/arista-etherlink-su144-esun.html">Arista Etherlink SU-144: Ethernet Moves Inside the Scale-Up Domain, and the Rack Becomes the Unit</a>
+          ·
+          <a href="/upscale-token-fabric.html">Upscale Token Fabric: SkyFabriX at 115.2 Tbps Meets Spectrum-X Scale-Out Under One OS</a>.
+        </p>
+
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
