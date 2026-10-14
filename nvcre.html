@@ -4,12 +4,12 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>A first look at NVIDIA Cluster Readiness Engine — Anpoo Sivanadi</title>
-  <meta name="description" content="What NVIDIA Cluster Readiness Engine (NVCRE) v0.6.0 is, how its certification catalog and APIs compose, and how to run your first certification from the official docs." />
+  <meta name="description" content="What NVIDIA Cluster Readiness Engine (NVCRE) v0.7.0 is, how its certification catalog and APIs compose, and how to run your first certification from the official docs." />
   <link rel="canonical" href="https://asivanadi0.github.io/nvcre.html" />
   <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
   <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
   <meta property="og:title" content="A first look at NVIDIA Cluster Readiness Engine — Anpoo Sivanadi" />
-  <meta property="og:description" content="Node Ready is not GPU-cluster ready. How NVCRE v0.6.0 certifies GPU clusters with real NCCL and training workloads." />
+  <meta property="og:description" content="Node Ready is not GPU-cluster ready. How NVCRE v0.7.0 certifies GPU clusters with real NCCL and training workloads." />
   <meta property="og:type" content="article" />
   <meta property="og:url" content="https://asivanadi0.github.io/nvcre.html" />
   <meta property="article:published_time" content="2026-09-02T12:00:00-07:00" />
@@ -38,7 +38,7 @@
         <p class="article-meta">
           <time datetime="2026-09-02">2 September 2026</time>
           · Anpoo Sivanadi
-          · based on <a href="https://github.com/NVIDIA/cluster-readiness-engine/releases/tag/v0.6.0" target="_blank" rel="noopener noreferrer">v0.6.0</a> (5 Oct 2026)
+          · based on <a href="https://github.com/NVIDIA/cluster-readiness-engine/releases/tag/v0.7.0" target="_blank" rel="noopener noreferrer">v0.7.0</a> (12 Oct 2026)
         </p>
         <p class="dek article-dek">
           Node Ready is not the same as GPU-cluster ready. NVCRE runs real
@@ -66,7 +66,7 @@
         </p>
         <p>
           This note is a practitioner reading of the product from the official
-          v0.6.0 README, first-certification guide, certify-a-cluster docs,
+          v0.7.0 README, first-certification guide, certify-a-cluster docs,
           platform-detection, MCP and certification CLI references, metrics,
           deployment guide, and CHANGELOG. It is not a lab write-up of a
           cluster I ran, and it is not a contribution recap.
@@ -87,13 +87,13 @@
           The audience is platform and infrastructure teams that bring up,
           validate, or resell GPU clusters.
         </p>
-        <p>From the v0.6.0 README and release notes:</p>
+        <p>From the v0.7.0 README and release notes:</p>
         <ul>
           <li>A certification catalog with NCCL tests and multi-node training</li>
-          <li>Platform and GPU architecture detection, including RTX PRO 6000 Blackwell</li>
+          <li>Platform and GPU architecture detection, including B300 and RTX PRO 6000 Blackwell</li>
           <li>GPU architecture from DRA <code>gpu.nvidia.com</code> ResourceSlices when no <code>nvidia.com/gpu.product</code> label exists</li>
           <li>Goodput from training logs via configurable LogProfile patterns</li>
-          <li>Per-bus bandwidth from NCCL logs</li>
+          <li>Per-bus bandwidth from NCCL logs, plus record-only <code>BandwidthMeasurement.status.transport</code> (<code>IB</code> or <code>Socket</code>)</li>
           <li>CEL node health checks while workloads run</li>
           <li>Per-node failure reporting with a reason</li>
           <li>Topology-aware grouping and adaptive fault isolation</li>
@@ -102,25 +102,24 @@
           <li>Queue label on the submitted workload object, plus <code>workloadMetadata.labels</code></li>
           <li>Cordoned-node opt-in via <code>target.taintSelectors</code></li>
           <li>Phase-transition Events on Certification, Workflow, Job, and WorkloadRun</li>
-          <li>WorkloadRun for ad-hoc training, NCCL, or custom workloads</li>
+          <li>WorkloadRun for ad-hoc training, NCCL, or custom workloads, including <code>orchestration.placement: Unpinned</code></li>
           <li>The <code>nvcrectl</code> CLI for setup, render, run, report, cleanup, and read-only <code>mcp serve</code></li>
-          <li><code>nvcre_certification_status</code> and <code>nvcre_workflow_status</code> gauges</li>
+          <li><code>nvcre_certification_status</code>, <code>nvcre_workflow_status</code>, and <code>nvcre_job_status</code> gauges (timed-out Jobs report <code>failed</code>)</li>
         </ul>
 
-        <h2>What v0.6.0 actually runs</h2>
+        <h2>What v0.7.0 actually runs</h2>
         <p>
           The first-certification catalog still has eight categories. You can
           list them with <code>kubectl nvcre certification list-categories</code>.
-          v0.6.0 did change product behavior around that catalog: GPU
-          architecture can come from DRA ResourceSlices when no
-          <code>nvidia.com/gpu.product</code> label exists, GCP gets RTX PRO
-          6000 Blackwell overlays, AWS H100 and GB200 keep the EFA stack,
-          <code>certification run --category</code> stores only
-          <code>nvidia.com/gpu.present</code>, and
-          <code>nvcrectl mcp serve</code> exposes read-only certification state.
+          The categories themselves are unchanged from v0.6.0. What moved is
+          where those same entries can run: Nscale NKS on the DRA stack, x86
+          HGX B300, OCI GB200 without a default NIC request, OCI GB300 with an
+          NCCL topology file, and GCP H100 images taken from the installed
+          TCPXO plugin. ADR-091’s per-GPU GEMM entry is a design document, not
+          a shipped catalog category, so it is not in the table below.
         </p>
 
-        <div class="table-wrap" role="region" aria-label="v0.6.0 certification catalog" tabindex="0">
+        <div class="table-wrap" role="region" aria-label="v0.7.0 certification catalog" tabindex="0">
           <table>
             <thead>
               <tr>
@@ -177,31 +176,37 @@
         <p>
           Platform detection covers AWS, GCP, Azure, OCI, nscale, TogetherAI,
           Mistral, Forge, and on-prem. GPU architecture detection covers GB200,
-          GB300, H100, H200, B200, A100, L40S, L40, and RTX PRO 6000 Blackwell.
-          NVCRE tunes workloads from the <code>nvidia.com/gpu.product</code>
-          label and the Node <code>providerID</code>. On a DRA GPU stack that
-          never wrote that product label, it can also read
-          <code>gpu.nvidia.com</code> ResourceSlices. On-prem is the fallback
-          when <code>providerID</code> is empty. On-prem GB200/GB300 still get
-          the override from v0.3.0: arm64 and GPU-present taint tolerations,
-          portable InfiniBand NCCL env without HCA pinning, and a NIC resource
-          request that is auto-detected when exactly one candidate
-          (<code>rdma/*</code> or <code>nvidia.com/mlnxnics</code>) is
-          allocatable at the resolved <code>mlnxPerNode</code> count on every
-          target node. Set <code>nicResourceName</code> when detection is
+          GB300, H100, H200, B200, B300, A100, L40S, L40, and RTX PRO 6000
+          Blackwell. Catalog overrides name GB200, GB300, H100, H200, B200, and
+          B300. NVCRE tunes workloads from the
+          <code>nvidia.com/gpu.product</code> label and the Node
+          <code>providerID</code>. On a DRA GPU stack that never wrote that
+          product label, it can also read <code>gpu.nvidia.com</code>
+          ResourceSlices. On-prem is the fallback when <code>providerID</code>
+          is empty. On-prem GB200/GB300 still get the override from v0.3.0:
+          arm64 and GPU-present taint tolerations, portable InfiniBand NCCL env
+          without HCA pinning, and a NIC resource request that is auto-detected
+          when exactly one candidate (<code>rdma/*</code> or
+          <code>nvidia.com/mlnxnics</code>) is allocatable at the resolved
+          <code>mlnxPerNode</code> count on every target node. On-prem x86 HGX
+          B200/B300 get a smaller override: GPU-taint toleration (any value,
+          including on the MPI launcher) and the same NIC request, with no NCCL
+          environment. Set <code>nicResourceName</code> when detection is
           ambiguous, or for offline <code>nvcrectl certification render</code>
           without <code>--dry-run</code>. Nodes with a <code>metal3://</code>
           providerID detect as Mistral, not on-prem; pass
           <code>--platform onprem</code> on render if you need the generic
-          override.
+          override. An x86 HGX site provisioned that way matches neither the
+          Mistral block (gated on GB300) nor the HGX block (gated on
+          <code>onprem</code>).
         </p>
         <p>
-          v0.6.0 adds GCP overlays for RTX PRO 6000 Blackwell Server Edition on
+          v0.6.0 added GCP overlays for RTX PRO 6000 Blackwell Server Edition on
           NCCL all-reduce, all-gather, all-to-all, and Nemotron 5 8B, with an
-          eight-GPU architecture default. Smaller G4 node shapes need an
-          explicit <code>gpusPerNode</code>. Without that, nodes advertising
-          fewer than eight allocatable GPUs are excluded by the capacity
-          filter.
+          eight-GPU architecture default. Those remain. Smaller G4 node shapes
+          need an explicit <code>gpusPerNode</code>. Without that, nodes
+          advertising fewer than eight allocatable GPUs are excluded by the
+          capacity filter.
         </p>
 
         <div class="table-wrap" role="region" aria-label="Supported platforms and GPU architectures" tabindex="0">
@@ -209,7 +214,7 @@
             <thead>
               <tr>
                 <th>Detection</th>
-                <th>Values in v0.6.0</th>
+                <th>Values in v0.7.0</th>
               </tr>
             </thead>
             <tbody>
@@ -219,11 +224,102 @@
               </tr>
               <tr>
                 <td>GPU architectures</td>
-                <td>GB200, GB300, H100, H200, B200, A100, L40S, L40, RTX PRO 6000 Blackwell</td>
+                <td>GB200, GB300, H100, H200, B200, B300, A100, L40S, L40, RTX PRO 6000 Blackwell</td>
               </tr>
             </tbody>
           </table>
         </div>
+
+        <h2>New certifiable platforms</h2>
+        <p>
+          The v0.7.0 release notes lead with three new places to certify:
+          Nscale NKS, x86 HGX B300, and OCI GB200. OCI GB300, GCP H100 image
+          selection, and on-prem HGX B200 ship in the same release.
+        </p>
+        <p>
+          Nscale NKS is platform <code>nscale</code>, detected from the
+          <code>nscale://</code> providerID, on B200 and GB300. Catalog
+          entries and the WorkloadRun path claim GPUs through a
+          <code>gpu.nvidia.com</code> ResourceClaimTemplate instead of
+          <code>nvidia.com/gpu</code>, and RDMA NICs through an
+          <code>rdma.nscale.com</code> claim sized from <code>mlnxPerNode</code>
+          (8 on B200, 4 on GB300, omitted at 0).
+          <code>diagnostics/dcgm-level4</code> (hostNetwork) and
+          <code>communication/nccl-loopback-nvswitch</code> (NVLink only) claim
+          GPUs alone; level-4 talks to
+          <code>nvidia-dcgm-dra.nvidia-platform.svc:5555</code>. The NCCL
+          profile is InfiniBand with no HCA names pinned and
+          <code>NCCL_NET</code> left unset, so the HPC-X plugin keeps SHARP
+          rather than NCCL’s built-in IB transport. Nscale runs no GPU Feature
+          Discovery, so GB300 uses
+          <code>topology.nks.nscale.com/accelerator-domain</code> wherever
+          other platforms use <code>nvidia.com/gpu.clique</code>.
+          <code>nvcrectl cluster info</code> counts GPUs from ResourceSlices
+          on nodes that advertise no <code>nvidia.com/gpu</code>. v0.6.0
+          detected Nscale from <code>openstack://</code> plus an
+          <code>nscale.com/rdmashare</code> allocatable; that path is gone, so
+          those nodes now get on-prem overlays. Detail is in
+          <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.7.0/docs/designs/085-nscale-nks-dra-support.md" target="_blank" rel="noopener noreferrer">ADR-085</a>.
+        </p>
+        <p>
+          The x86 HGX B300 architecture is <code>b300</code>, product label
+          <code>NVIDIA-B300-SXM6-AC</code>. The catalog defaults table sizes
+          it at eight GPUs and eight NICs per node, <code>--gpu-arch b300</code>
+          is accepted, and the Nemotron 5 8B and 56B entries carry a
+          <code>b300</code> parallelism row. An on-prem override for x86 HGX
+          B200/B300 tolerates the <code>nvidia.com/gpu</code> taint with any
+          value, including on the MPI launcher, and makes
+          <code>nicResourceName</code> and <code>mlnxPerNode</code> request
+          RDMA devices, with NIC auto-detection widened to those four
+          architectures. It sets no NCCL environment: an HGX chassis has no
+          multi-node NVLink, so the NVL72 tuning does not apply. A missing
+          architecture falls back to four GPUs and no NICs; the controllers
+          emit a Warning, reason <code>GPUArchitectureDefaults</code>, and
+          every <code>nvcrectl</code> render path plus
+          <code>nvcrectl cluster info</code> print the same message.
+          <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.7.0/docs/designs/094-hgx-b300-architecture-and-onprem-nic-override.md" target="_blank" rel="noopener noreferrer">ADR-094</a>
+          is the design.
+        </p>
+        <p>
+          OCI GB200 no longer requests <code>nvidia.com/mlnxnics</code> by
+          default. The platform default is <code>mlnxPerNode: 0</code>, and
+          zero now omits the resource and the
+          <code>k8s.v1.cni.cncf.io/networks</code> annotation instead of
+          rendering a count of zero. A site that runs the SR-IOV device plugin
+          sets its own count.
+          <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.7.0/docs/designs/087-mlnx-per-node-zero-opt-out.md" target="_blank" rel="noopener noreferrer">ADR-087</a>
+          is the opt-out. The five NCCL entries and both Nemotron training
+          entries render the RoCEv2 GID index those queue pairs need
+          (<code>NCCL_IB_GID_INDEX=3</code>, and
+          <code>UCX_IB_GID_INDEX=3</code> on the MPI launcher). Clusters that
+          expose Mellanox devices only as host nodes under
+          <code>/dev/infiniband</code> set
+          <code>rdmaDeviceAccess: hostPath</code> on the Certification, or
+          per category under <code>options</code>. That mounts the directory
+          and runs the worker privileged; unset still means
+          <code>devicePlugin</code>.
+          <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.7.0/docs/designs/088-oci-gb200-roce-and-rdma-device-access.md" target="_blank" rel="noopener noreferrer">ADR-088</a>
+          covers the mount.
+        </p>
+        <p>
+          OCI GB300 ships an NCCL topology file in a ConfigMap mounted at
+          <code>/etc/nccl</code> and sets <code>NCCL_TOPO_FILE</code> to it,
+          so each GPU pairs with its own rail. It also stops forcing
+          <code>NCCL_DMABUF_ENABLE=0</code> when MNNVL is off.
+        </p>
+        <p>
+          GCP H100 reads the GKE network names from the target nodes instead
+          of assuming <code>gpu-nic0</code> through <code>gpu-nic7</code>, and
+          picks the NCCL and training images and the
+          <code>tcpxo-daemon</code> from the TCPXO plugin version on those
+          nodes. The release notes say that path was validated on an AICR A3
+          Mega cluster at plugin v1.0.15 and v1.0.16 with no overrides. An
+          explicit <code>image</code> still replaces the chosen one; set it
+          per category under <code>categories[].options.image</code> so a
+          mixed certification does not also replace
+          <code>diagnostics/dcgm-level4</code>’s DCGM image. I did not run
+          that cluster.
+        </p>
 
         <h2>GPU architecture without a product label</h2>
         <p>
@@ -232,10 +328,11 @@
           writes. A cluster that claims GPUs through Dynamic Resource
           Allocation runs no GFD, so no node carried the label and
           certification failed with <code>cannot determine GPU architecture</code>.
-          v0.6.0 reads the architecture from the <code>gpu.nvidia.com</code>
-          ResourceSlices the DRA driver publishes, normalized to the exact
-          string GFD would have written, so a mixed GFD and DRA fleet still
-          passes the homogeneity check. Nothing is written back to the Node.
+          From v0.6.0 the architecture can come from the
+          <code>gpu.nvidia.com</code> ResourceSlices the DRA driver publishes,
+          normalized to the exact string GFD would have written, so a mixed
+          GFD and DRA fleet still passes the homogeneity check. v0.7.0 uses
+          that path on Nscale NKS. Nothing is written back to the Node.
           <code>nvidia.com/gpu.present=true</code> is still required; a cluster
           running only the standalone DRA driver has to set that label itself.
         </p>
@@ -245,9 +342,12 @@
           those nodes unlabeled rather than failing the reconcile. Offline
           <code>nvcrectl certification render</code> and
           <code>workloadrun render</code> have no cluster to read slices from,
-          so they take <code>--gpu-arch</code> (for example <code>gb300</code>
-          or <code>NVIDIA-GB300</code>). That flag cannot be combined with
-          <code>--dry-run</code>, which detects from real nodes.
+          so they take <code>--gpu-arch</code> (for example <code>gb300</code>,
+          <code>b300</code>, or <code>NVIDIA-GB300</code>). That flag cannot
+          be combined with <code>--dry-run</code>, which detects from real
+          nodes. With <code>--dry-run</code>, NIC detection (on-prem
+          GB200/GB300 and HGX B200/B300) and GKE TCPXO network and plugin
+          version detection (GCP H100) run as they do in the controller.
         </p>
         <p>
           <code>nvcrectl certification run --category</code> no longer persists
@@ -285,15 +385,65 @@ WorkloadRun   ──one Workflow from inline spec──────▶ Workflow
           goodput and bandwidth. Bandwidth threshold verdicts are judged on
           the launcher’s complete log, read once when the Job ends, rather
           than on a partial NCCL size sweep.
+          <code>BandwidthMeasurement.status.transport</code> records which
+          NCCL network carried the collective, <code>IB</code> or
+          <code>Socket</code>. The report and <code>--results-file</code> show
+          it per category, group, and clique. Record-only: no verdict reads it.
         </p>
         <p>
           While those workloads run, CEL expressions watch node health. When a
           node fails, the certification result records it with a reason. The
-          first-certification guide names three:
+          first-certification guide names three terminal ones:
           <code>WorkloadFailed</code> (the workload exited badly),
           <code>ThresholdViolation</code> (a performance threshold was missed),
           and <code>HardwareFailureDetected</code> (the node health monitor
-          fired mid-run).
+          fired mid-run). A scheduling stall is a different state: the run is
+          still <code>InProgress</code>, reported as blocked rather than
+          running.
+        </p>
+
+        <h2>Unpinned placement</h2>
+        <p>
+          Default WorkloadRun placement is <code>Pinned</code>: every eligible
+          node is partitioned into groups of <code>numNodes</code>, and each
+          job carries a required <code>kubernetes.io/hostname</code> affinity
+          naming its group. On a 16-node cluster,
+          <code>numNodes: 4</code> still produces four 4-node jobs.
+        </p>
+        <p>
+          <code>orchestration.placement: Unpinned</code> on a WorkloadRun, or
+          on a hand-written Workflow, runs a single job of exactly
+          <code>numNodes</code> nodes and leaves the rest of the target
+          untouched. The scheduler places the pods inside the target. The size
+          is honored or the run fails with reason <code>PartitionError</code>;
+          it is never clamped or auto-selected. Pair it with
+          <code>testScale: full-scale</code> when you want one job.
+          <code>intra-node</code> and <code>intra-rack</code> are rejected
+          beside it. The report prints a <code>Placement</code> line with how
+          many of the target nodes were exercised, and no <code>Scale</code>
+          line.
+        </p>
+        <pre><code>spec:
+  numNodes: 4
+  orchestration:
+    testScale: full-scale
+    placement: Unpinned</code></pre>
+        <p>
+          A Certification has no placement field on purpose. Its verdict
+          covers every node it targets: a PASSED certification means every
+          node you pointed at was tested. Unpinned on that tier would be the
+          first way a Certification could report PASSED while leaving targeted
+          nodes untested. WorkloadRun makes no coverage claim; it reports
+          whether the workload passed. On a contended cluster a multi-node
+          Unpinned job should set <code>spec.gangScheduler</code> so the gang
+          schedules whole or not at all. In both modes the target selector
+          now travels onto the pods as a required node affinity, with an
+          <code>nvidia.com/gpu.product</code> <code>In</code> term built from
+          the products discovery kept.
+          <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.7.0/docs/designs/089-unpinned-single-job-placement.md" target="_blank" rel="noopener noreferrer">ADR-089</a>
+          is the contract; the
+          <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.7.0/docs/getting-started/workloadrun-quick-start.md" target="_blank" rel="noopener noreferrer">WorkloadRun quick start</a>
+          shows the single-job YAML.
         </p>
 
         <h2>Phase transitions as Events</h2>
@@ -303,6 +453,35 @@ WorkloadRun   ──one Workflow from inline spec──────▶ Workflow
           Failed phase is a Warning; every other phase is Normal.
           <code>kubectl describe</code> on the object shows the run’s history
           without anyone reading controller logs.
+        </p>
+
+        <h2>Blocked versus running</h2>
+        <p>
+          A Job whose pods the scheduler has rejected
+          (<code>PodScheduled=False</code>, reason <code>Unschedulable</code>)
+          for longer than <code>spec.schedulingStallGraceSeconds</code>
+          (default five minutes) reports
+          <code>WorkloadSchedulingBlocked</code> with the scheduler’s own
+          diagnosis. The Workflow mirrors it as
+          <code>JobSchedulingBlocked</code>, and
+          <code>nvcrectl certification report</code> prints a
+          <code>Blocked:</code> line (JSON <code>statusDetail</code>) on a
+          Running category. <code>SchedulingGated</code> pods are held on
+          purpose and do not count. Previously the Job reported
+          <code>WorkloadRunning</code> while those pods sat Pending.
+        </p>
+        <p>
+          The blocked interval pauses <code>timeoutPerJob</code> and the
+          startup and training stall budgets, so a run no longer times out
+          against hardware that never ran. A single blocked episode longer
+          than <code>timeoutPerJob</code> still times the Job out. On recovery
+          the runtime used before the block still counts.
+          <code>startupStallTimeoutSeconds</code> on the Certification, or per
+          category under <code>options</code>, sets the first-step budget the
+          training entries previously hardcoded at 1200 s.
+          <code>nvcrectl certification run --startup-stall-timeout-seconds</code>
+          sets the spec-level value and is rejected with
+          <code>--cert-file</code>.
         </p>
 
         <h2>Gang scheduling</h2>
@@ -329,12 +508,12 @@ WorkloadRun   ──one Workflow from inline spec──────▶ Workflow
           read the submitted object before any pod exists.
         </p>
         <p>
-          Under KAI Scheduler, v0.6.0 drops the MPI launcher
+          Under KAI Scheduler, the MPI launcher
           <code>dependsOn</code> gate and the JobSet
-          <code>startupPolicy</code>, so both sub-groups are populated and the
-          gang is admitted. The ordering barrier moves into the launcher pod,
-          which waits for every worker to answer sshd. Non-KAI paths render
-          byte-identically.
+          <code>startupPolicy</code> are dropped, so both sub-groups are
+          populated and the gang is admitted. The ordering barrier moves into
+          the launcher pod, which waits for every worker to answer sshd.
+          Non-KAI paths render byte-identically.
         </p>
         <pre><code>apiVersion: nvcre.nvidia.com/v1alpha1
 kind: Certification
@@ -365,9 +544,15 @@ spec:
     queue: team-a   # must name an existing Run:ai queue</code></pre>
         <p>
           <code>nvcrectl certification render</code> applies the same rewrite,
-          so the rendered manifests show what the controller will create. Full
-          detail is in the
-          <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.6.0/docs/how-to-guides/certify-a-cluster.md" target="_blank" rel="noopener noreferrer">certify-a-cluster</a>
+          so the rendered manifests show what the controller will create. It
+          also names Workflows with the options suffix the controller uses
+          (<code>nodesPerJob</code>, <code>enableMNNVL</code>,
+          <code>testScale</code>, <code>enableCheckpoint</code>,
+          <code>maxSteps</code>, <code>exitDurationMins</code>,
+          <code>gpusPerNode</code>, and <code>rdmaDeviceAccess</code>), so a
+          rendered name matches what the controller creates. Full detail is in
+          the
+          <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.7.0/docs/how-to-guides/certify-a-cluster.md" target="_blank" rel="noopener noreferrer">certify-a-cluster</a>
           guide.
         </p>
         <p>
@@ -455,7 +640,7 @@ spec:
         <pre><code>kubectl nvcre setup init \
   --chart-ref oci://registry.example.com/mirror/cluster-readiness-engine \
   --trainer-chart-ref oci://registry.example.com/mirror/kubeflow-trainer \
-  --image registry.example.com/mirror/manager:v0.6.0</code></pre>
+  --image registry.example.com/mirror/manager:v0.7.0</code></pre>
         <p>
           <code>--chart-ref</code> is used for the release install and for
           CRD extraction (<code>helm show crds</code>). The mirror must still
@@ -500,9 +685,20 @@ spec:
           Multi-node MPI workers install <code>openssh-server</code> with
           <code>apt-get</code> unless <code>/usr/sbin/sshd</code> is already
           executable. Prebake sshd into the workload image for air-gapped
-          clusters; the install then no-ops. Loopback NCCL categories are
-          single-node and have no sshd bootstrap. AWS H100/GB200 (nccl-tests)
-          and AWS GB300 (command replacement) already skip the install.
+          clusters; the install then no-ops. Those workers now request
+          <code>SYS_CHROOT</code> alongside <code>IPC_LOCK</code>, and the
+          readiness probe opens a real loopback SSH session instead of a TCP
+          connect to port 22. On CRI-O, which does not grant
+          <code>SYS_CHROOT</code> by default, every SSH session used to die
+          preauth while the listener stayed up and <code>mpirun</code> failed
+          with the generic ORTE banner. An admission policy that pins the
+          capability list needs to allow the new one. An image without an
+          <code>ssh</code> client keeps the previous listening check.
+          Loopback NCCL categories are single-node and have no sshd bootstrap.
+          AWS H100/GB200 (nccl-tests) and AWS GB300 (command replacement)
+          already skip the install.
+          <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.7.0/docs/designs/093-mpi-worker-sshd-capability-and-session-probe.md" target="_blank" rel="noopener noreferrer">ADR-093</a>
+          is the design.
         </p>
         <p>
           Training categories resolve Megatron-LM at pod start: an existing
@@ -539,7 +735,7 @@ spec:
         <h2>How to run it</h2>
         <p>
           The steps below follow the official README quickstart and
-          <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.6.0/docs/getting-started/first-certification.md" target="_blank" rel="noopener noreferrer">Your first certification</a>.
+          <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.7.0/docs/getting-started/first-certification.md" target="_blank" rel="noopener noreferrer">Your first certification</a>.
           Plan for roughly 30 to 60 minutes; most of that is the workload.
         </p>
 
@@ -587,13 +783,14 @@ spec:
 
         <h3>1. Install the CLI</h3>
         <p>
-          v0.6.0 artifacts are signed with Sigstore and carry SLSA provenance.
-          Preferred path: download the installer with its Sigstore bundle,
-          verify with cosign, then run it pinned to the tag. Digests and exact
-          cosign identity strings live on the
-          <a href="https://github.com/NVIDIA/cluster-readiness-engine/releases/tag/v0.6.0" target="_blank" rel="noopener noreferrer">v0.6.0 release</a>.
+          v0.7.0 artifacts are signed with Sigstore and carry SLSA provenance.
+          The release verify gate refuses a <code>cosign_version</code> below
+          v3.1.3. Preferred path: download the installer with its Sigstore
+          bundle, verify with cosign, then run it pinned to the tag. Digests
+          and exact cosign identity strings live on the
+          <a href="https://github.com/NVIDIA/cluster-readiness-engine/releases/tag/v0.7.0" target="_blank" rel="noopener noreferrer">v0.7.0 release</a>.
         </p>
-        <pre><code>REL=https://github.com/NVIDIA/cluster-readiness-engine/releases/download/v0.6.0
+        <pre><code>REL=https://github.com/NVIDIA/cluster-readiness-engine/releases/download/v0.7.0
 
 curl -fsSLO "${REL}/installer"
 curl -fsSLO "${REL}/installer.sigstore.json"
@@ -601,11 +798,11 @@ curl -fsSLO "${REL}/installer.sigstore.json"
 cosign verify-blob-attestation \
   --bundle installer.sigstore.json \
   --type https://slsa.dev/provenance/v1 \
-  --certificate-identity "https://github.com/NVIDIA/cluster-readiness-engine/.github/workflows/attest.yml@refs/tags/v0.6.0" \
+  --certificate-identity "https://github.com/NVIDIA/cluster-readiness-engine/.github/workflows/attest.yml@refs/tags/v0.7.0" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
   installer
 
-bash installer -v v0.6.0</code></pre>
+bash installer -v v0.7.0</code></pre>
         <p>
           Piping <code>releases/latest</code> or a pin-by-tag installer into
           bash still works, but it is weaker: the script runs before anything
@@ -616,7 +813,7 @@ bash installer -v v0.6.0</code></pre>
 curl -fsSL https://github.com/NVIDIA/cluster-readiness-engine/releases/latest/download/installer | bash
 
 # weaker: pin by tag, still pipes into bash
-curl -fsSL https://github.com/NVIDIA/cluster-readiness-engine/releases/download/v0.6.0/installer | bash -s -- -v v0.6.0</code></pre>
+curl -fsSL https://github.com/NVIDIA/cluster-readiness-engine/releases/download/v0.7.0/installer | bash -s -- -v v0.7.0</code></pre>
         <p>
           The installer puts <code>nvcrectl</code> on your <code>$PATH</code> and
           creates a <code>kubectl-nvcre</code> symlink, so both
@@ -647,35 +844,37 @@ kubectl nvcre setup status</code></pre>
         </p>
         <p>
           Prefer Helm and want an explicit pin to this release’s chart digest.
-          The v0.6.0 signature covers digest
-          <code>sha256:af20cf1d7827a35e60a539ef9f7fc8445e0def61f345e8bdb030afc76f01f6cf</code>
+          The v0.7.0 signature covers digest
+          <code>sha256:6326d30c3443d27d62d039882dd080f5d73cab5b690db61dd791a8e72644d8b3</code>
           at <code>ghcr.io/nvidia/cluster-readiness-engine</code>. The version
           tag is mutable, so verify and install the same digest:
         </p>
         <pre><code>CHART=ghcr.io/nvidia/cluster-readiness-engine
-DIGEST=sha256:af20cf1d7827a35e60a539ef9f7fc8445e0def61f345e8bdb030afc76f01f6cf
+DIGEST=sha256:6326d30c3443d27d62d039882dd080f5d73cab5b690db61dd791a8e72644d8b3
 
+# 1. Verify the chart. Requires cosign; the package is public, so no login is needed.
 cosign verify \
-  --certificate-identity "https://github.com/NVIDIA/cluster-readiness-engine/.github/workflows/attest.yml@refs/tags/v0.6.0" \
+  --certificate-identity "https://github.com/NVIDIA/cluster-readiness-engine/.github/workflows/attest.yml@refs/tags/v0.7.0" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
   "${CHART}@${DIGEST}"
 
+# 2. Pull that exact digest, then install the file you just verified.
 helm pull "oci://${CHART}@${DIGEST}"
 helm install nvcre ./cluster-readiness-engine@${DIGEST/:/-}.tgz \
   --namespace nvcre --create-namespace</code></pre>
         <p>
-          <code>helm install --version v0.6.0</code> resolves the tag at
+          <code>helm install --version v0.7.0</code> resolves the tag at
           install time, which is not provably the digest you verified.
           <code>helm install --verify</code> looks for a PGP
           <code>.prov</code> file; this project publishes none.
         </p>
         <p>
           The controller image is
-          <code>ghcr.io/nvidia/cluster-readiness-engine/manager:v0.6.0</code>.
+          <code>ghcr.io/nvidia/cluster-readiness-engine/manager:v0.7.0</code>.
           This release signed these exact digests; pin the index rather than
           the tag:
         </p>
-        <div class="table-wrap" role="region" aria-label="v0.6.0 controller image digests" tabindex="0">
+        <div class="table-wrap" role="region" aria-label="v0.7.0 controller image digests" tabindex="0">
           <table>
             <thead>
               <tr>
@@ -686,30 +885,30 @@ helm install nvcre ./cluster-readiness-engine@${DIGEST/:/-}.tgz \
             <tbody>
               <tr>
                 <td>index (multi-platform)</td>
-                <td><code>sha256:8008c6f9f7e19b317caf0f91afab06b88027c14d7dd03e4173bd49cd1f3cd27a</code></td>
+                <td><code>sha256:4eaff9d047e7826aa212e6f1be21014189f8661e2ab464998427cce35e0aa0de</code></td>
               </tr>
               <tr>
                 <td><code>linux/amd64</code></td>
-                <td><code>sha256:80efd1b6b2ac99b710432c4dbfbeaaf069a6fec53e00bb6894f581e7f0d6f807</code></td>
+                <td><code>sha256:43d02389881201a888ed43726555079f53c9579b7d85008c5c91f54aefa9e1f6</code></td>
               </tr>
               <tr>
                 <td><code>linux/arm64</code></td>
-                <td><code>sha256:1f2ef6945689d10a34e1d6b74f9a6ee52a410698231f317bd1c7d1548df19b98</code></td>
+                <td><code>sha256:fda0f176aa4e5ceec0c61e92500159dd1584504e1c22867dbc9bb49c00beea69</code></td>
               </tr>
             </tbody>
           </table>
         </div>
         <pre><code>IMAGE=ghcr.io/nvidia/cluster-readiness-engine/manager
-INDEX=sha256:8008c6f9f7e19b317caf0f91afab06b88027c14d7dd03e4173bd49cd1f3cd27a
+INDEX=sha256:4eaff9d047e7826aa212e6f1be21014189f8661e2ab464998427cce35e0aa0de
 
 cosign verify \
-  --certificate-identity "https://github.com/NVIDIA/cluster-readiness-engine/.github/workflows/attest.yml@refs/tags/v0.6.0" \
+  --certificate-identity "https://github.com/NVIDIA/cluster-readiness-engine/.github/workflows/attest.yml@refs/tags/v0.7.0" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
   "${IMAGE}@${INDEX}"</code></pre>
         <p>
           To require that same signature and SLSA provenance at admit time,
-          v0.6.0 still ships two samples under
-          <a href="https://github.com/NVIDIA/cluster-readiness-engine/tree/v0.6.0/config/samples/policy" target="_blank" rel="noopener noreferrer"><code>config/samples/policy/</code></a>:
+          this release still ships two samples under
+          <a href="https://github.com/NVIDIA/cluster-readiness-engine/tree/v0.7.0/config/samples/policy" target="_blank" rel="noopener noreferrer"><code>config/samples/policy/</code></a>:
           a Kyverno <code>ImageValidatingPolicy</code> and a Sigstore
           policy-controller <code>ClusterImagePolicy</code>. Both check the
           controller image before a Pod is admitted. From v0.4.0 onward, the
@@ -777,7 +976,11 @@ cosign verify \
           ignored. When <code>--timeout</code> is omitted with
           <code>--wait</code>, the CLI derives it from the selected
           categories’ catalog <code>timeoutPerJob</code> budgets (never less
-          than 30 minutes).
+          than 30 minutes). Communication entries default to 1h;
+          <code>training/nemotron5-8b</code> and <code>nemotron5-56b</code>
+          now render 24h, so a training category on its own derives a 36h
+          wait. Pass <code>--timeout</code> in pipelines that need a tighter
+          bound.
         </p>
 
         <h3>5. Print the report again</h3>
@@ -842,7 +1045,8 @@ cosign verify \
         <h3>Ad-hoc WorkloadRun</h3>
         <p>
           For a single custom run without the catalog, write a WorkloadRun YAML.
-          This is the README’s NCCL all-reduce example:
+          This is the WorkloadRun quick start’s NCCL all-reduce example, with
+          Unpinned placement so it is one four-node job:
         </p>
         <pre><code># nccl-all-reduce.yaml
 apiVersion: nvcre.nvidia.com/v1alpha1
@@ -857,24 +1061,31 @@ spec:
       binary: /usr/local/bin/all_reduce_perf_mpi
       mpirunPath: /usr/local/mpi/bin/mpirun
       args: ["-b", "8", "-e", "32G", "-f", "2", "-n", "100"]
+  orchestration:
+    placement: Unpinned
   bandwidthMeasurement:
     logProfileRef: nccl-bandwidth
     testType: all_reduce</code></pre>
         <p>
-          <code>numNodes</code> is the node count <em>per job group</em>, not the
-          cluster total. On a 16-node cluster, <code>numNodes: 4</code> produces
-          four 4-node jobs.
+          Under the default <code>Pinned</code> placement,
+          <code>numNodes</code> is the node count <em>per job group</em>, not
+          the cluster total: on a 16-node cluster, <code>numNodes: 4</code>
+          produces four 4-node jobs. <code>placement: Unpinned</code> makes
+          <code>numNodes</code> the total size of the one job that runs.
         </p>
         <pre><code>kubectl nvcre workloadrun run nccl-all-reduce.yaml --wait</code></pre>
         <p>
           The same NCCL WorkloadRun, plus a multi-category Certification, also
           live as runnable files under
-          <a href="https://github.com/NVIDIA/cluster-readiness-engine/tree/v0.6.0/examples" target="_blank" rel="noopener noreferrer"><code>examples/</code></a>.
+          <a href="https://github.com/NVIDIA/cluster-readiness-engine/tree/v0.7.0/examples" target="_blank" rel="noopener noreferrer"><code>examples/</code></a>.
         </p>
         <p>
           <code>WorkloadRun.spec.env</code> values survive platform overrides
           that set <code>TrainJob.trainer.env</code>, which is the documented
-          user-wins precedence.
+          user-wins precedence. MPI ranks now receive that merged environment
+          through <code>mpirun -x</code>; without it, ranks started under
+          <code>sshd</code> with a fresh environment and never saw
+          <code>spec.env</code> or most of the base NCCL defaults.
         </p>
 
         <h3>Read-only MCP server</h3>
@@ -901,7 +1112,7 @@ spec:
           Cluster access uses the kubeconfig of whoever launches the server.
           The server holds no credentials of its own. Full flag and RBAC
           detail is in the
-          <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.6.0/docs/cli-reference/mcp.md" target="_blank" rel="noopener noreferrer">MCP CLI reference</a>.
+          <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.7.0/docs/cli-reference/mcp.md" target="_blank" rel="noopener noreferrer">MCP CLI reference</a>.
         </p>
 
         <h3>Cleanup</h3>
@@ -916,37 +1127,61 @@ kubectl nvcre setup reset</code></pre>
 
         <h2>Metrics and breaking changes</h2>
         <p>
-          Two new gauges, <code>nvcre_certification_status</code> and
-          <code>nvcre_workflow_status</code>, use the same 0/1-per-status
-          encoding as <code>nvcre_job_status</code>. A scrape-time collector
-          reads them from the manager’s informer cache on the elected leader,
-          so no reconciler write is needed to keep them current.
+          <code>nvcre_job_status</code> now reports <code>failed</code> for a
+          Job that timed out on <code>timeoutPerJob</code>. It is built at
+          scrape time from the informer cache, like
+          <code>nvcre_certification_status</code> and
+          <code>nvcre_workflow_status</code>, and the timeout write keeps
+          InProgress, Succeeded, and Failed exclusive. Checkpointed training
+          runs need the manager role’s new <code>update</code> grant on
+          PersistentVolumeClaims. Images and binaries are built with Go
+          1.27.2.
         </p>
-        <p>Three breaking changes from the v0.6.0 release notes:</p>
+        <p>Six breaking changes from the v0.7.0 release notes:</p>
         <ul>
           <li>
-            The NCCL bandwidth gauges are now <code>nvcre_nccl_algbw_gbs</code>
-            and <code>nvcre_nccl_busbw_gbs</code>. The previous
-            <code>_gbps</code> names incorrectly implied gigabits; the values
-            have always been GB/s from nccl-tests. The old names stay
-            dual-registered as deprecated aliases for one minor release.
+            OCI GB200 defaults to <code>mlnxPerNode: 0</code>, and
+            <code>mlnxPerNode: 0</code> now omits the
+            <code>nvidia.com/mlnxnics</code> request instead of rendering a
+            count of zero. A site that runs the SR-IOV device plugin sets its
+            own count. An unchanged manifest on OCI GB200 renders no NIC
+            request and no <code>k8s.v1.cni.cncf.io/networks</code>
+            annotation.
           </li>
           <li>
-            The ServiceMonitor sets <code>honorLabels: true</code> by default,
-            so the controller’s own <code>namespace</code> and
-            <code>job</code> labels survive the scrape. A dashboard built on
-            <code>exported_namespace</code> or <code>exported_job</code> stops
-            matching after the chart upgrade; set
-            <code>metrics.serviceMonitor.honorLabels=false</code> to keep the
-            previous labels.
+            <code>openstack://</code> providerIDs resolve to
+            <code>onprem</code>, and Nscale detection requires
+            <code>nscale://</code>. A cluster that v0.6.0 detected as Nscale
+            through the <code>nscale.com/rdmashare</code> allocatable now gets
+            the on-prem overlays.
           </li>
           <li>
-            <code>nodeHealthMonitor</code>, <code>goodputMeasurement</code>,
-            and <code>bandwidthMeasurement</code> on a <code>Job</code> can no
-            longer be added or removed after creation. Each was already
-            immutable once set; the presence rule closes the
-            absent-to-present and present-to-absent gap. Existing objects are
-            unaffected.
+            WorkloadRun MPI ranks receive the base NCCL environment and
+            <code>spec.env</code> through <code>mpirun -x</code>, and
+            <code>NCCL_DEBUG_SUBSYS=NET,INIT</code> is no longer set by
+            default; set it in <code>spec.env</code> to keep the filtered log.
+            An unchanged MPI WorkloadRun runs with NCCL settings its ranks
+            never saw before.
+          </li>
+          <li>
+            Workload pods carry the target selector and the discovered
+            <code>nvidia.com/gpu.product</code> values as a required node
+            affinity. A node relabeled after discovery no longer qualifies and
+            its pod stays Pending.
+          </li>
+          <li>
+            <code>training/nemotron5-8b</code>, <code>nemotron5-56b</code>, and
+            <code>communication/nccl-loopback</code> render
+            <code>timeoutPerJob</code> (24h and 1h) where they rendered none,
+            and <code>nvcrectl certification render</code> names Workflows
+            with the options suffix the controller uses. Scripts that matched
+            the shorter rendered names need the new ones.
+          </li>
+          <li>
+            The chart must move with the controller. The PVC
+            <code>update</code> grant lives in <code>manager-role.yaml</code>,
+            so a v0.7.0 manager under the v0.6.0 role fails checkpointed runs
+            the way v0.6.0 did.
           </li>
         </ul>
 
@@ -967,65 +1202,89 @@ kubectl nvcre setup reset</code></pre>
             <a href="https://github.com/NVIDIA/cluster-readiness-engine" target="_blank" rel="noopener noreferrer">NVIDIA/cluster-readiness-engine</a>
           </li>
           <li>
-            <a href="https://github.com/NVIDIA/cluster-readiness-engine/releases/tag/v0.6.0" target="_blank" rel="noopener noreferrer">v0.6.0 release</a>
-            (5 October 2026)
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/releases/tag/v0.7.0" target="_blank" rel="noopener noreferrer">v0.7.0 release</a>
+            (12 October 2026)
           </li>
           <li>
-            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.6.0/README.md" target="_blank" rel="noopener noreferrer">README (v0.6.0)</a>
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.7.0/README.md" target="_blank" rel="noopener noreferrer">README (v0.7.0)</a>
           </li>
           <li>
-            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.6.0/CHANGELOG.md" target="_blank" rel="noopener noreferrer">CHANGELOG.md</a>
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.7.0/CHANGELOG.md" target="_blank" rel="noopener noreferrer">CHANGELOG.md</a>
           </li>
           <li>
-            <a href="https://github.com/NVIDIA/cluster-readiness-engine/tree/v0.6.0/examples" target="_blank" rel="noopener noreferrer">examples/ (runnable Certification and WorkloadRun)</a>
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/tree/v0.7.0/examples" target="_blank" rel="noopener noreferrer">examples/ (runnable Certification and WorkloadRun)</a>
           </li>
           <li>
-            <a href="https://github.com/NVIDIA/cluster-readiness-engine/tree/v0.6.0/config/samples/policy" target="_blank" rel="noopener noreferrer">Admission-policy samples (Kyverno, Sigstore policy-controller)</a>
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/tree/v0.7.0/config/samples/policy" target="_blank" rel="noopener noreferrer">Admission-policy samples (Kyverno, Sigstore policy-controller)</a>
           </li>
           <li>
-            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.6.0/docs/getting-started/first-certification.md" target="_blank" rel="noopener noreferrer">Your first certification</a>
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.7.0/docs/getting-started/first-certification.md" target="_blank" rel="noopener noreferrer">Your first certification</a>
           </li>
           <li>
-            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.6.0/docs/how-to-guides/certify-a-cluster.md" target="_blank" rel="noopener noreferrer">Certify a cluster (incl. gang scheduling)</a>
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.7.0/docs/how-to-guides/certify-a-cluster.md" target="_blank" rel="noopener noreferrer">Certify a cluster (incl. gang scheduling)</a>
           </li>
           <li>
-            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.6.0/docs/operations/deployment.md" target="_blank" rel="noopener noreferrer">Deployment (air-gapped installs, sourceRepo, image preload)</a>
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.7.0/docs/operations/deployment.md" target="_blank" rel="noopener noreferrer">Deployment (air-gapped installs, sourceRepo, image preload)</a>
           </li>
           <li>
-            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.6.0/docs/cli-reference/mcp.md" target="_blank" rel="noopener noreferrer">nvcrectl mcp (read-only MCP server)</a>
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.7.0/docs/cli-reference/mcp.md" target="_blank" rel="noopener noreferrer">nvcrectl mcp (read-only MCP server)</a>
           </li>
           <li>
-            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.6.0/docs/cli-reference/certification.md" target="_blank" rel="noopener noreferrer">nvcrectl certification (incl. --gpu-arch, --timeout)</a>
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.7.0/docs/cli-reference/certification.md" target="_blank" rel="noopener noreferrer">nvcrectl certification (incl. --gpu-arch, --timeout, render Workflow names)</a>
           </li>
           <li>
-            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.6.0/docs/operations/metrics.md" target="_blank" rel="noopener noreferrer">Prometheus metrics (status gauges, NCCL _gbs names)</a>
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.7.0/docs/getting-started/workloadrun-quick-start.md" target="_blank" rel="noopener noreferrer">WorkloadRun quick start (Unpinned placement)</a>
           </li>
           <li>
-            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.6.0/docs/api-reference/certification.md" target="_blank" rel="noopener noreferrer">Certification API (workloadMetadata, taintSelectors, gangScheduler)</a>
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.7.0/docs/operations/metrics.md" target="_blank" rel="noopener noreferrer">Prometheus metrics (status gauges, timed-out Jobs as failed)</a>
           </li>
           <li>
-            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.6.0/docs/designs/081-cordoned-node-selection.md" target="_blank" rel="noopener noreferrer">ADR-081: cordoned node selection</a>
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.7.0/docs/api-reference/certification.md" target="_blank" rel="noopener noreferrer">Certification API (workloadMetadata, taintSelectors, gangScheduler, rdmaDeviceAccess)</a>
           </li>
           <li>
-            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.6.0/docs/designs/082-gpu-architecture-resourceslice-fallback.md" target="_blank" rel="noopener noreferrer">ADR-082: GPU architecture from DRA ResourceSlices</a>
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.7.0/docs/api-reference/workloadrun.md" target="_blank" rel="noopener noreferrer">WorkloadRun API (placement)</a>
           </li>
           <li>
-            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.6.0/docs/designs/084-mcp-server.md" target="_blank" rel="noopener noreferrer">ADR-084: read-only MCP server</a>
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.7.0/docs/designs/081-cordoned-node-selection.md" target="_blank" rel="noopener noreferrer">ADR-081: cordoned node selection</a>
           </li>
           <li>
-            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.6.0/docs/operations/faq.md" target="_blank" rel="noopener noreferrer">FAQ (air-gapped MPI / sshd)</a>
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.7.0/docs/designs/082-gpu-architecture-resourceslice-fallback.md" target="_blank" rel="noopener noreferrer">ADR-082: GPU architecture from DRA ResourceSlices</a>
           </li>
           <li>
-            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.6.0/docs/how-to-guides/interpret-results.md" target="_blank" rel="noopener noreferrer">Interpret results (incl. captured failure logs)</a>
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.7.0/docs/designs/084-mcp-server.md" target="_blank" rel="noopener noreferrer">ADR-084: read-only MCP server</a>
           </li>
           <li>
-            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.6.0/docs/concepts/platform-detection.md" target="_blank" rel="noopener noreferrer">Platform detection (incl. ResourceSlice fallback, RTX PRO 6000)</a>
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.7.0/docs/designs/085-nscale-nks-dra-support.md" target="_blank" rel="noopener noreferrer">ADR-085: Nscale NKS DRA</a>
           </li>
           <li>
-            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.6.0/docs/how-to-guides/nccl-benchmarks.md" target="_blank" rel="noopener noreferrer">Run NCCL Benchmarks</a>
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.7.0/docs/designs/087-mlnx-per-node-zero-opt-out.md" target="_blank" rel="noopener noreferrer">ADR-087: mlnxPerNode zero opt-out</a>
           </li>
           <li>
-            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.6.0/docs/how-to-guides/workloadrun-nemotron5.md" target="_blank" rel="noopener noreferrer">Nemotron 5 WorkloadRun guide</a>
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.7.0/docs/designs/088-oci-gb200-roce-and-rdma-device-access.md" target="_blank" rel="noopener noreferrer">ADR-088: OCI GB200 RoCE and rdmaDeviceAccess</a>
+          </li>
+          <li>
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.7.0/docs/designs/089-unpinned-single-job-placement.md" target="_blank" rel="noopener noreferrer">ADR-089: Unpinned single-job placement</a>
+          </li>
+          <li>
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.7.0/docs/designs/093-mpi-worker-sshd-capability-and-session-probe.md" target="_blank" rel="noopener noreferrer">ADR-093: MPI worker sshd capability</a>
+          </li>
+          <li>
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.7.0/docs/designs/094-hgx-b300-architecture-and-onprem-nic-override.md" target="_blank" rel="noopener noreferrer">ADR-094: HGX B300</a>
+          </li>
+          <li>
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.7.0/docs/operations/faq.md" target="_blank" rel="noopener noreferrer">FAQ (air-gapped MPI / sshd)</a>
+          </li>
+          <li>
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.7.0/docs/how-to-guides/interpret-results.md" target="_blank" rel="noopener noreferrer">Interpret results (incl. captured failure logs)</a>
+          </li>
+          <li>
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.7.0/docs/concepts/platform-detection.md" target="_blank" rel="noopener noreferrer">Platform detection (incl. Nscale, B300, OCI GB200, GCP H100 TCPXO)</a>
+          </li>
+          <li>
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.7.0/docs/how-to-guides/nccl-benchmarks.md" target="_blank" rel="noopener noreferrer">Run NCCL Benchmarks</a>
+          </li>
+          <li>
+            <a href="https://github.com/NVIDIA/cluster-readiness-engine/blob/v0.7.0/docs/how-to-guides/workloadrun-nemotron5.md" target="_blank" rel="noopener noreferrer">Nemotron 5 WorkloadRun guide</a>
           </li>
           <li>
             <a href="https://www.vcluster.com/blog/nvidia-cluster-readiness-engine-vcluster-private-nodes" target="_blank" rel="noopener noreferrer">Saiyam Pathak: NVCRE on vCluster Private Nodes</a>
