@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ReplaySSM: Hybrid Models Were Paying an HBM Tax on Every Token — Anpoo Sivanadi</title>
+  <meta name="description" content="A lot of the models people serve this year are hybrids." />
+  <link rel="canonical" href="https://asivanadi0.github.io/replayssm-hybrid-model-decode.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="ReplaySSM: Hybrid Models Were Paying an HBM Tax on Every Token — Anpoo Sivanadi" />
+  <meta property="og:description" content="A lot of the models people serve this year are hybrids." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/replayssm-hybrid-model-decode.html" />
+  <meta property="article:published_time" content="2026-10-14T06:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>ReplaySSM: Hybrid Models Were Paying an HBM Tax on Every Token</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-14T06:00:00-07:00">14 October 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>A lot of the models people serve this year are hybrids. Nemotron 3, Qwen3.5 through Qwen3.8, Kimi-K3, and GLM-5.3-Flash all put a few attention layers between many state-space model (SSM) layers, where the SSM layer is Mamba-2, Gated DeltaNet (GDN), or Kimi Delta Attention. The pitch is that the SSM layers keep a fixed-size state instead of a KV cache that grows with context, so decoding should be cheap.</p>
+<p>On October 12, NVIDIA and Tri Dao's lab at Princeton published a <a href="https://developer.nvidia.com/blog/replayssm-rethinking-state-storage-for-faster-hybrid-model-decoding/" target="_blank" rel="noopener noreferrer">joint write-up on ReplaySSM</a>. Its argument is that at serving batch sizes the SSM layers are often the slowest part of the decode step, and that the fix is mostly about what you store, not how you compute. The <a href="https://dao-lab.ai/blog/2026/replayssm/" target="_blank" rel="noopener noreferrer">Dao AI Lab post</a> has the full derivation, the <a href="https://github.com/Johnny-Liou/ReplaySSM" target="_blank" rel="noopener noreferrer">code is on GitHub</a>, and the <a href="https://github.com/vllm-project/vllm/issues/49232" target="_blank" rel="noopener noreferrer">vLLM RFC</a> tracks the integration work across vLLM, FlashInfer, and TensorRT-LLM.</p>
+<h2>Why the SSM layer is the bottleneck</h2>
+<p>A Mamba-2 decode step does very little math. It loads the per-head state from HBM, decays it, adds a rank-1 outer product of the new token's inputs, reads the output with one matrix-vector product, and writes the full state back. The Dao Lab post puts the arithmetic intensity at about one FLOP per byte. An H100 needs something like 300 ops per byte to be compute-bound on matmul, so this kernel is purely memory-bound.</p>
+<p>The state is also not small. On Nemotron-3-Super, one layer's FP32 state is 4 MiB per sequence. An FP8 KV entry is 0.5 KiB per token, so one SSM layer's state is the same size as one attention layer's KV cache at 8K tokens. That model also has five SSM layers for every attention layer (40 to 8).</p>
+<p>In NVIDIA's latency breakdown for Nemotron-3-Super-NVFP4 at batch size 256 on one B300, the SSM kernels are the largest part of the decode step until about 100K tokens of context. Attention grows with context but starts small; the SSM cost is flat and large.</p>
+<h2>The idea: cache inputs, not state</h2>
+<p>The recurrence for one step is roughly S_t = a_t S_{t-1} + v_t k_tᵀ, with output o_t = S_t q_t. You can unroll that over a short window. The current state equals a decayed checkpoint plus a weighted sum of the last few outer products.</p>
+<p>Normal decoding takes the left side of that identity every step. ReplaySSM takes the right side. It keeps one checkpoint state and a small ring buffer of recent per-token inputs (for Mamba-2, the v, k, and decay terms). On most steps it appends the new inputs to the buffer and computes the output from the checkpoint plus the buffer, without writing a state. When the buffer fills, a flush step folds the buffered inputs into the checkpoint and writes it to HBM once.</p>
+<p>Outputs match conventional decoding up to floating-point differences; it is not an approximation.</p>
+<p>The traffic math in the Dao Lab post is simple. With 4-byte state and 2-byte activations, the baseline moves about 8dn bytes of state per head per step (load plus store). ReplaySSM still loads the checkpoint every step, since the output needs it, but skips the store, so the dominant term drops to 4dn plus a small buffer read. That halves the main memory cost.</p>
+<p>There's a second trick that I find more interesting. Between flushes, a step only needs the output, not the new state. So instead of building the d×n state with an outer product and then reading it, ReplaySSM computes v(kᵀq): a dot product and a scaled vector. For d = n = 128, the post says that part is about 64x fewer FLOPs, and kᵀq is shared across all heads in a group, so it's computed once per group in a small precompute kernel.</p>
+<p>GDN's delta-rule correction depends on the previous state, so ReplaySSM caches the corrected update u instead of the raw v, and rebuilds the state rather than using the output-only path.</p>
+<h2>What it does to standard decode</h2>
+<p>NVIDIA evaluated four models in vLLM against vLLM's own kernels at their best launch settings, with FP32 state and a buffer length of 16:</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>SSM type</th>
+<th>Weights</th>
+<th>GPU</th>
+<th>SSM / attention layers</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Nemotron-3-Nano-4B</td>
+<td>Mamba-2</td>
+<td>BF16</td>
+<td>1× H100</td>
+<td>21 / 4</td>
+</tr>
+<tr>
+<td>Nemotron-3-Super-120B-A12B</td>
+<td>Mamba-2</td>
+<td>NVFP4</td>
+<td>1× B300</td>
+<td>40 / 8</td>
+</tr>
+<tr>
+<td>Qwen3.5-4B</td>
+<td>GDN</td>
+<td>BF16</td>
+<td>1× H100</td>
+<td>24 / 8</td>
+</tr>
+<tr>
+<td>Qwen3.5-122B-A10B</td>
+<td>GDN</td>
+<td>NVFP4</td>
+<td>1× B300</td>
+<td>36 / 12</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>At batch size 256, the SSM kernel ran 1.46x to 1.80x faster and the full decode step ran 1.20x to 1.47x faster. At batch size 1 there was no gain. The vLLM RFC's reference table shows the same shape: whole-model per-step speedup is 0.98 to 0.99 at batch size 1, then 1.55x for Nemotron-Nano-4B and 1.67x for Nemotron-Super-120B at batch size 512. The GDN models gain less, 1.31x and 1.20x at batch size 512.</p>
+<p>So this is a throughput optimization. A latency-first service at batch size 1 gets nothing; a packed decode fleet gains more as batch size grows.</p>
+<p>Buffer length is a real tuning knob. The Dao Lab sweep shows a bell curve: a short buffer flushes too often, and a long one makes every step read too much buffer and eventually turns compute-bound. Their best settings were 8 for Nemotron-3 and 16 for Qwen3.5.</p>
+<h2>Speculative decoding is where it gets big</h2>
+<p>Speculative decoding needs rollback. With attention, you move the KV cache pointer back and you're done. An SSM has already folded the rejected drafts into its state, and that update can't be undone. vLLM's current workaround stores a full state snapshot after every draft token and picks the one that matches the accepted prefix. That's one read and T writes per step on a path that is already memory-bound, and the snapshots eat HBM that would otherwise hold more requests.</p>
+<p>With ReplaySSM, the draft tokens' inputs go into the same ring buffer, and committing the accepted prefix is a pointer move. Verification uses the output-only form for all T drafts at once, which turns into two small masked matrix products, the same chunkwise shape that prefill kernels already use, so Tensor Cores can do the work.</p>
+<p>The numbers on the two 120B-class models are large. With a draft window of 4, GSM8K prompts, and FP32 state on one B300, NVIDIA reports 1.85x and 2.10x the throughput of vLLM's speculative decoding at batch size 512, with matched acceptance lengths. On Nemotron-3-Super at batch size 256, vLLM's verify kernel at T = 8 costs almost five times a standard decode step; ReplaySSM verifies eight tokens in about the time of one standard step, flushes included.</p>
+<p>For capacity planning, the Dao Lab post says the per-draft snapshots cut maximum decode batch by roughly 4x under a fixed HBM budget, and ReplaySSM recovers 3.0x to 3.3x of that. On Qwen3.5-122B-A10B-NVFP4, vLLM's speculative path at batch size 512 was slower than not speculating at all.</p>
+<h2>Low-precision state without the drift</h2>
+<p>The third result is about quantizing the SSM state, which people have mostly avoided. A quantized KV entry is read many times but never written back into itself. A quantized SSM state feeds the next update, so its rounding error compounds every step.</p>
+<p>ReplaySSM separates the two jobs. It keeps a high-precision checkpoint for the recurrence and a low-precision copy for the output reads on non-flush steps. The low-precision copy never re-enters the recurrence. On Mamba-2, the non-flush kernel reading NVFP4 state ran 3.8x faster than reading FP32.</p>
+<p>On Qwen3.5-4B at 128K generated tokens, NVFP4 reads with an FP32 recurrence cut output KL divergence from FP32 decoding from 0.136 (shared NVFP4 checkpoint) to 0.0038. On GPQA-Diamond, a shared NVFP4 checkpoint lost 3 to 31 points across the four models (31.3 on Nemotron-3-Nano-4B). NVFP4 reads with an FP16 or FP8 recurrence using stochastic rounding kept three of the four within about 2 points of FP32. Nemotron-3-Nano-4B still lost 5.6 to 6.7 points, so small models remain sensitive.</p>
+<h2>What I'd do with it</h2>
+<p>All of these numbers are the authors', on their harness, so independent acceptance-rate and long-context results would help. But the mechanism is simple to check, and NVIDIA says it already runs in production in GLM-5.3-Flash, with Kimi-K3 using a concurrent approach in its KDA layers.</p>
+<p>In vLLM it's opt-in. The RFC lists <code>--use-replayssm</code> for standard cached decode, <code>--use-replayssm-spec</code> for speculative decode (which requires <code>--mamba-cache-mode none</code>), and <code>--replayssm-buffer-len</code> with a default of 16. With the flags off, the decode path is unchanged. The upstream work is split across several PRs (NVIDIA links vLLM #48018, #52506, and #52928, plus TensorRT-LLM #14203 and #16464 and FlashInfer #3975 and #4081), so check what's actually in the build you run before you benchmark.</p>
+<p>If I were serving a hybrid model on a decode fleet today, I'd measure SSM kernel share at my real batch size first. If it's large, I'd test ReplaySSM standard decode, then speculative decode with an MTP drafter, and track both throughput and maximum concurrency per GPU. I'd leave state quantization for last and validate it on my own long-generation evals before trusting it.</p>
+<p>The "constant memory" story for SSMs hid a per-token write cost that dominates at scale. Cutting that traffic in half in software is a gain you get on the GPUs you already have.</p>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
