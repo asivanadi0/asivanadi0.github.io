@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Gemini 4 Argon: One 1M-Token Budget, a Continuation Protocol, and a Scorecard That Doesn't Win Everywhere — Anpoo Sivanadi</title>
+  <meta name="description" content="Google shipped Gemini 4 Argon today, October 13, as the first model in the Gemini 4 family." />
+  <link rel="canonical" href="https://asivanadi0.github.io/gemini-4-argon-1m-budget-long-decode.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Gemini 4 Argon: One 1M-Token Budget, a Continuation Protocol, and a Scorecard That Doesn't Win Everywhere — Anpoo Sivanadi" />
+  <meta property="og:description" content="Google shipped Gemini 4 Argon today, October 13, as the first model in the Gemini 4 family." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/gemini-4-argon-1m-budget-long-decode.html" />
+  <meta property="article:published_time" content="2026-10-13T18:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Gemini 4 Argon: One 1M-Token Budget, a Continuation Protocol, and a Scorecard That Doesn't Win Everywhere</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-13T18:00:00-07:00">13 October 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>Google shipped <a href="https://blog.google/innovation-and-ai/models-and-research/gemini-models/introducing-gemini-4-argon/" target="_blank" rel="noopener noreferrer">Gemini 4 Argon</a> today, October 13, as the first model in the Gemini 4 family. It is generally available in the Gemini API, AI Studio, Gemini for business, Antigravity, and the Gemini app. Launch pricing is $2 per million input tokens and $10 per million output tokens, with cached input 95% off. After November 30 the price doubles to $4 and $20.</p>
+<p>Most of the launch post is customer stories. The parts I care about as someone who runs agent workloads and the infrastructure under them are in two other places: the <a href="https://deepmind.google/models/model-cards/gemini-4-argon/" target="_blank" rel="noopener noreferrer">model card</a>, which has the head-to-head numbers, and the <a href="https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/guides/gemini-4-argon" target="_blank" rel="noopener noreferrer">developer guide</a>, which quietly changes the API contract in ways that will break existing harnesses. This post is about those two documents.</p>
+<h2>What the model card actually says</h2>
+<p>The architecture section is short. Argon is a large sparse mixture-of-experts transformer with native text, vision, and audio input, trained on TPUs with JAX and Pathways. Google says it is a new model, not a fine-tune of an earlier Gemini. There is no parameter count, no active-parameter count, and no expert count. Knowledge cutoff is March 2026.</p>
+<p>Inputs are text, images, audio, video, and PDF. Output is text only. There is no image or audio generation and no Live API support.</p>
+<p>The benchmark table compares Argon against GPT-6 Astra, Claude Fable 5.1, and Claude Opus 5.5. All numbers below are Google's, run under Google's <a href="https://deepmind.google/models/model-cards/gemini-4-argon/" target="_blank" rel="noopener noreferrer">published methodology</a>, not independent runs.</p>
+<p>Where Argon leads:</p>
+<div class="table-wrap" role="region" aria-label="Gemini 4 Argon table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Benchmark</th>
+<th>Argon</th>
+<th>Best other</th>
+<th>Who</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GraphWalks BFS, 256k to 1M (F1)</td>
+<td>84.2%</td>
+<td>71.8%</td>
+<td>GPT-6 Astra</td>
+</tr>
+<tr>
+<td>GraphWalks BFS, up to 128k (F1)</td>
+<td>99.7%</td>
+<td>98.7%</td>
+<td>GPT-6 Astra</td>
+</tr>
+<tr>
+<td>DeepSWE v1.1</td>
+<td>77.9%</td>
+<td>74.2%</td>
+<td>Opus 5.5</td>
+</tr>
+<tr>
+<td>Vals Index</td>
+<td>68.9%</td>
+<td>67.0%</td>
+<td>Opus 5.5</td>
+</tr>
+<tr>
+<td>AutomationBench</td>
+<td>51.3%</td>
+<td>42.5%</td>
+<td>Opus 5.5</td>
+</tr>
+<tr>
+<td>Harvey Legal Agent Benchmark</td>
+<td>19.6%</td>
+<td>6.7%</td>
+<td>Fable 5.1</td>
+</tr>
+<tr>
+<td>LVBench</td>
+<td>91.7%</td>
+<td>87.5%</td>
+<td>GPT-6 Astra</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Where it trails:</p>
+<div class="table-wrap" role="region" aria-label="Gemini 4 Argon table 2" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Benchmark</th>
+<th>Argon</th>
+<th>Leader</th>
+<th>Who</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>FrontierSWE v2</td>
+<td>55.0%</td>
+<td>65.5%</td>
+<td>GPT-6 Astra</td>
+</tr>
+<tr>
+<td>Terminal-bench 4.0</td>
+<td>57.4%</td>
+<td>66.4%</td>
+<td>Opus 5.5</td>
+</tr>
+<tr>
+<td>Terminal-Bench Science 0.1</td>
+<td>57.6%</td>
+<td>68.1%</td>
+<td>GPT-6 Astra</td>
+</tr>
+<tr>
+<td>PostTrainBench</td>
+<td>45.3%</td>
+<td>49.3%</td>
+<td>Opus 5.5</td>
+</tr>
+<tr>
+<td>OSWorld-2.0 (offline, partial)</td>
+<td>69.2%</td>
+<td>72.6%</td>
+<td>GPT-6 Astra</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>CWE-bench v1 is a tie with GPT-6 Astra at 68.0%.</p>
+<p>Two things stand out. First, the long-context number is the real outlier. A 12-point F1 gap on graph traversal between 256k and 1M tokens is much bigger than any of the coding deltas, and it lines up with the product decision to make 1M tokens the headline limit. If your workload is "load a large repo or a pile of documents and reason across all of it," this is the row to test first.</p>
+<p>Second, the coding story is split. Argon is ahead on DeepSWE but nine to ten points behind on FrontierSWE v2 and Terminal-bench 4.0. Terminal-bench is the closest of these to what a shell-driving agent does all day, so I would not swap a terminal agent over on the strength of the launch post alone. Run your own traces.</p>
+<h2>The API contract changed</h2>
+<p>This is the part that will bite people. Argon replaces separate input and output limits with a single unified budget of 1,048,576 tokens. Input, thinking tokens, function calls, and the final answer all draw from it.</p>
+<p>A single request still stops at 65,536 output tokens on a streaming call, or 32,768 on a non-streaming direct HTTP call. To go further you use what Google calls long decode. You set <code>max_output_tokens</code> above that cap, the server returns <code>finish_reason=CONTINUATION</code> with an encrypted <code>continuation_token</code>, and you resend the original request with the token attached. Generation picks up where it left off. You repeat until <code>finish_reason</code> is <code>STOP</code>.</p>
+<p>The rules around that loop are strict:</p>
+<ul>
+<li>You resend the original <code>contents</code>, <code>system_instruction</code>, and <code>tools</code> every time. You do not append the partial output to the conversation or send a "please continue" prompt.</li>
+<li>A segment can spend its whole token allowance on thinking and return an empty text part. You keep looping anyway.</li>
+<li>Long decode works only on the <code>v1beta1</code> endpoint of <code>GenerateContent</code>. It does not work on <code>v1</code>, on the Interactions API, or through the OpenAI-compatible Chat Completions layer. Older SDKs can't follow the token either. Python needs <code>google-genai</code> 2.30.1 or later.</li>
+<li>Each request has a 20-minute time limit.</li>
+</ul>
+<p>Several other parameters changed behavior too. <code>thinking_budget</code> and the <code>MINIMAL</code> thinking level now return HTTP 400 instead of being mapped to something close. <code>temperature</code>, <code>top_p</code>, and <code>top_k</code> are silently ignored. <code>frequency_penalty</code>, <code>presence_penalty</code>, and <code>candidate_count</code> return 400. Prefilled model turns are rejected, and a history that ends on a model turn fails validation. Thinking is controlled only with <code>LOW</code>, <code>MEDIUM</code> (the default), or <code>HIGH</code>.</p>
+<p>Explicit context caching is gone. Implicit caching kicks in automatically for shared prefixes of 6,144 tokens or more, with durable caching on by default, so static content needs to sit at the front of the prompt.</p>
+<p>If you run an eval harness or agent framework that sets <code>temperature=0</code> and a thinking budget, both will do something different on Argon. One is ignored and the other is a hard error. That's a migration task, not a model-ID swap.</p>
+<h2>What long decode costs</h2>
+<p>The developer guide is upfront that each continuation request re-prefills the original prompt plus everything decoded so far. That gets billed as input, discounted by the implicit cache if the requests land back to back within the 15 to 20 minute cache window.</p>
+<p>Here is a back-of-envelope example using Google's published prices. It's my arithmetic, not a measured bill. Take a 100,000-token prompt and a 256,000-token output on streaming segments of 65,536:</p>
+<ul>
+<li>Four segments. The re-prefill inputs are about 100K, 166K, 231K, and 297K tokens, roughly 793K input tokens in total.</li>
+<li>If everything after the first request hits the cache, that's about $0.20 for the first prefill plus about $0.07 for the cached re-prefills, at launch pricing.</li>
+<li>The 256K output tokens cost about $2.56.</li>
+</ul>
+<p>That comes to roughly $2.80 per call at launch pricing and roughly $5.70 after November 30. The output dominates. The cache discount does a lot of work, though: if your continuation loop stalls past the cache TTL, the re-prefill is billed at full input price and the input share jumps several times over.</p>
+<p>There's also an accounting trap for anyone building agents. In the Python SDK, <code>prompt_token_count</code> grows across continuation requests because of the re-prefill. If your harness uses that field to decide when to compact context, it will compact too early. Google says to read <code>initial_prompt_token_count</code> instead and to wait until the whole long decode finishes before compacting.</p>
+<p>Google's own guidance is that long decode is for hard math, proofs, the hardest coding tasks, and eval harnesses that would otherwise cut answers off. It isn't for chat, for tool-calling agents that take many short turns, or for anything latency-sensitive, since a long decode can run for minutes. For a tool-heavy agent the unified budget is the bigger concern, because every large tool result and every thinking trace shrinks the room left in a 1M window.</p>
+<h2>The systems claims worth checking</h2>
+<p>Two items in the launch post are directly checkable, and both are performance-engineering claims.</p>
+<p>Google says Argon helped get a 2.85x end-to-end inference speedup for Gemma 4 E2B on an A100 under vLLM, from about 37,900 to over 108,000 tokens per second, with token parity, and that the changes went upstream as pull requests covering attention tuning and speculative decoding. It also says Argon optimizations cut in-memory session prep time by 40% for long sessions and cold imports by 21% in <code>google/adk-python</code>. Those are Google's numbers, but they point at public code. That's a better test of a coding model than a benchmark row, and I plan to read the diffs.</p>
+<h2>How I'd approach it</h2>
+<p>I'd test Argon first on long-context retrieval and repository-scale reasoning, where its lead is largest. I'd hold off on moving terminal-driving agents until I had my own comparison against whatever is running today. Before pointing any harness at it, I'd audit for <code>thinking_budget</code>, sampling parameters, prefilled turns, and explicit cache calls, because the failure modes range from a silent behavior change to a 400 on every request. Budget for the price doubling on December 1 as well.</p>
+<p>What Google hasn't published is just as useful to know. There's no parameter count, no active-expert count, and no serving-hardware detail beyond "trained on TPUs." For a sparse MoE at this scale, those are the numbers that would tell us why the 1M-token window holds up as well as GraphWalks suggests. Until they show up, the useful public artifacts are the developer guide and the upstream pull requests.</p>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
