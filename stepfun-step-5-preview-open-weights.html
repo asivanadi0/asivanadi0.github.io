@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Step 5 Preview Weights Are Out: 600B, 92 Layers, and a 74 GB Million-Token KV Cache — Anpoo Sivanadi</title>
+  <meta name="description" content="StepFun put the Step 5 Preview weights on Hugging Face last night, the same day SGLang published its day-0 support post." />
+  <link rel="canonical" href="https://asivanadi0.github.io/stepfun-step-5-preview-open-weights.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Step 5 Preview Weights Are Out: 600B, 92 Layers, and a 74 GB Million-Token KV Cache — Anpoo Sivanadi" />
+  <meta property="og:description" content="StepFun put the Step 5 Preview weights on Hugging Face last night, the same day SGLang published its day-0 support post." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/stepfun-step-5-preview-open-weights.html" />
+  <meta property="article:published_time" content="2026-10-15T06:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Step 5 Preview Weights Are Out: 600B, 92 Layers, and a 74 GB Million-Token KV Cache</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-15T06:00:00-07:00">15 October 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>StepFun put the <a href="https://huggingface.co/stepfun-ai/Step-5-Preview" target="_blank" rel="noopener noreferrer">Step 5 Preview weights on Hugging Face</a> last night, the same day <a href="https://www.sglang.io/blog/step-5-preview-day0-support" target="_blank" rel="noopener noreferrer">SGLang published its day-0 support post</a>. StepFun announced the model in September with API access and promised open weights for October 15. They kept the date, so you can now download it, read its <code>config.json</code>, and work out what it costs to run. There are three checkpoints: FP8 (about 650 GB of safetensors), BF16 (about 1.21 TB), and NVFP4 (about 394 GB), going by the file listings on Hugging Face.</p>
+<p>The headline numbers are 600B total parameters, 27B active per token, and a 1M-token context. Those tell you less than the attention layout does. StepFun chose plain grouped-query attention over MLA, then made it sparse. That choice decides how much memory a long agent session takes and how many of them a node can hold, so most of this post is about it.</p>
+<h2>What the config says</h2>
+<p>StepFun's <a href="https://platform.stepfun.ai/blog/inside-step-5-preview" target="_blank" rel="noopener noreferrer">architecture write-up</a> and the published config agree on the shape:</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Step 5 Preview</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Parameters</td>
+<td>600B total, 27B active</td>
+</tr>
+<tr>
+<td>Layers</td>
+<td>92 (plus 3 MTP layers for speculative decoding)</td>
+</tr>
+<tr>
+<td>Hidden size</td>
+<td>4,096</td>
+</tr>
+<tr>
+<td>Experts</td>
+<td>8 of 352 routed, plus 1 shared, in layers 3–90</td>
+</tr>
+<tr>
+<td>Attention pattern</td>
+<td>3 gated sliding-window layers (512 tokens) per 1 sparse full-attention layer: 69 SWA, 23 sparse</td>
+</tr>
+<tr>
+<td>Heads</td>
+<td>64 query heads, 4 KV groups, head dim 192</td>
+</tr>
+<tr>
+<td>Sparse indexer</td>
+<td>one 256-dim key per 8-token block; top 512 blocks (k = 4,096 tokens)</td>
+</tr>
+<tr>
+<td>Context</td>
+<td>1,048,576 tokens</td>
+</tr>
+<tr>
+<td>Released precision</td>
+<td>FP8 E4M3 routed experts with 128×128 block scales; last three MoE layers in BF16</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The model is narrow and deep on purpose. StepFun argues that agents spend most of their tokens in prefill (tool output, files, logs) and get little room for explicit chain-of-thought, so the multi-hop reasoning has to happen across layers. They put the depth on par with much larger open models while keeping total and active parameters well below them. Depth wasn't free: the blog describes keeping hidden states and RMSNorm scales in FP32 because BF16 let a few massive activations blow up, plus a per-layer gradient clamp that clips only 0.00004% of gradient values. That's why the config carries <code>fp32_residual_connection: true</code>. For inference it means one more thing to check in any custom kernel path.</p>
+<h2>Why GQA, and what it costs</h2>
+<p>The blog is direct about the trade. StepFun picked GQA over MQA and MLA for long-context accuracy, which it says it validated in experiments, and because GQA parallelizes well across GPUs for fast inference. The price is a much larger KV cache than the latent-compressed designs.</p>
+<p>Here's my own arithmetic from the config. Each full-attention layer stores K and V for 4 groups at 192 dimensions, which is 3,072 bytes per token in BF16. Across 23 sparse layers that's about 70.7 KB per token. A 128K-token session holds about 9.3 GB; a full 1M-token session holds about 74 GB. The 69 sliding-window layers add a fixed ~109 MB per sequence no matter how long it runs, and the indexer's compressed keys add roughly 2% on top if they're stored at two bytes per value (my assumption; the config gives the dimension, not the storage type).</p>
+<p>For comparison, DeepSeek reported <a href="https://freshweights.com/launch/deepseek-v4-1-flash-552b-open-weight-moe-goes-live-under-mit/" target="_blank" rel="noopener noreferrer">about 890 bytes of KV per token</a> for V4.1 Flash. Step 5 Preview's full-attention cache is roughly 80 times that. Both models advertise 1M tokens. They are not equally cheap to hold at 1M tokens.</p>
+<h2>What sparse attention does and doesn't save</h2>
+<p>Sparse GQA cuts the <em>reads</em>, not the storage. In each sparse layer, a small indexer scores 8-token blocks and each KV group picks up to 512 historical blocks plus the current one. Every token still has to stay in memory because any block might be picked on the next step.</p>
+<p>The read savings are large. My estimate for a decode step at 1M context: the selected blocks come to about 290 MB across the 23 sparse layers, and the sliding window layers about 109 MB. Dense attention over the same cache would read about 74 GB. The piece that grows with context is the indexer itself, which has to score every block. At 1M tokens that's about 131K blocks per layer, or roughly 0.8 to 1.5 GB per step depending on whether the index keys sit at one or two bytes. At that length the indexer scan is the largest attention read in the step, bigger than the attention it's selecting for.</p>
+<p>That matches what StepFun says it found: in some DSA-style implementations the indexer can cost more than the sparse attention kernel at very long contexts. Their fix was to merge 8 tokens into one index entry, which cuts indexer and top-k cost by 8×, and to raise k to 4,096 tokens to recover coverage. Their reported token coverage is 78.06% against 79.09% for a per-token, k = 2,048 reference. Without the block merge, my numbers say the indexer read at 1M would be eight times larger.</p>
+<h2>Fitting it on a node</h2>
+<p>The <a href="https://huggingface.co/stepfun-ai/Step-5-Preview" target="_blank" rel="noopener noreferrer">model card</a> lists FP8 on one 4-GPU B300 node or one 8-GPU H200 node, and BF16 on 8 B300s or two H200 nodes. The <a href="https://docs.sglang.io/cookbook/autoregressive/StepFun/Step-5-Preview" target="_blank" rel="noopener noreferrer">SGLang cookbook</a> notes that FP8 does not fit on four H200s, which tracks: 650 GB of weights against 564 GB of HBM.</p>
+<p>The <a href="https://recipes.vllm.ai/stepfun-ai/Step-5-Preview" target="_blank" rel="noopener noreferrer">vLLM recipe</a> lists B300 at 268 GB per GPU, so four of them give 1,072 GB. At the recipe's <code>--gpu-memory-utilization 0.85</code> and 650 GB of FP8 weights, my estimate leaves about 260 GB for KV, activations, and graphs. At 70.7 KB per token in BF16, that's roughly 3.7 million cached tokens across the node before you count runtime overhead. Three full 1M-token sessions, or a couple dozen at 128K. The same recipe serves the NVFP4 checkpoint on four B300s with <code>--max-model-len 320000</code>, and doesn't explain the cap.</p>
+<p>This is why the cookbook spends so much space on KV placement. SGLang supports FP8 KV for the full-attention layers (it warns this is lossy and should be re-verified), HiCache to push evicted prefixes into host memory or an L3 store like Mooncake, and prefill/decode disaggregation including the MTP draft cache. StepFun's own RL serving stack went further: the tech blog says expert parallelism, CPU KV offload, MXFP4 weight storage, and FP8 KV quantization-aware training together gave 8 to 12 times more effective KV capacity. The public recipes default to BF16 KV, so you don't get that out of the box.</p>
+<h2>The serving numbers so far</h2>
+<p>SGLang's measurements on four GB300 GPUs, all with FP8 experts, BF16 KV, and MTP at an acceptance length of 2.85:</p>
+<ul>
+<li>About 299 tokens/s for a single request with the FlashInfer TRT-LLM MoE backend.</li>
+<li>About 740 output tokens/s per GPU at 64 concurrent requests with MegaMoE. That's about 2,960 tokens/s for the node, or around 46 per request (my arithmetic).</li>
+<li>Prefill of one 128K prompt at about 11,440 tokens/s per GPU, which puts time to first token near 2.9 seconds on four GPUs (also my arithmetic).</li>
+</ul>
+<p>The decode runs used about 8K input tokens and no prefix-cache hits. That's a fair short-context benchmark, but it says nothing about the case this model is built for, where each decode step pays the indexer scan over hundreds of thousands of tokens. Nobody has published decode throughput at 256K or 1M yet. Practical setup notes: the first launch compiles FlashInfer modules for about 15 minutes on B300, the TRT-LLM MoE path needs FlashInfer patches that come baked into the preview Docker image (custom builds have to apply them), SGLang says Step 5 support isn't in a tagged release yet, and vLLM's recipe also runs from a dedicated preview image.</p>
+<h2>Quality, briefly</h2>
+<p>StepFun's <a href="https://www.stepfun.com/step-5-preview" target="_blank" rel="noopener noreferrer">launch page</a> puts it at 44 on the Artificial Analysis Intelligence Index. The scorecard is mixed, and it compares Step 5 at its High setting against other models at Max. The long-context result is the strongest: 88.3% on AA-LCR v1.1, level with Kimi K3 at 88.7% and ahead of every closed model in the table. Coding is closer to the pack. DeepSWE v1.1 is 67.7% against 74.1% for GPT-6 Astra, and Terminal-Bench v4 is 33.3% against 41.9% for GLM-5.3. If you're choosing an open model for long-document or long-trajectory work, the AA-LCR number is the one that justifies the KV bill.</p>
+<h2>License, for anyone serving it</h2>
+<p>The weights are under the <a href="https://huggingface.co/stepfun-ai/Step-5-Preview/blob/main/LICENSE.txt" target="_blank" rel="noopener noreferrer">StepFun Model License 1.0</a>, which is permissive with conditions that matter to operators. Offering it as a model-as-a-service requires a separate commercial license once you and your affiliates exceed US$20 million in revenue over a twelve-month period. Device makers shipping it as a feature of their hardware need one too. Internal use that doesn't expose the model or its outputs to third parties is exempt. Read it before you put it behind a public endpoint.</p>
+<h2>What I'd check before deploying it</h2>
+<ul>
+<li>Decode tokens/s per sequence at 128K, 512K, and 1M, with and without FP8 KV, to see where the indexer scan starts to dominate.</li>
+<li>Accuracy on long-context tasks with FP8 KV versus BF16, since SGLang itself flags it as lossy.</li>
+<li>Prefix-cache hit rates through the cache-aware router on real agent traffic, which SGLang says is being prepared for a formal release.</li>
+<li>Why NVFP4 is capped at 320K in the vLLM recipe, and whether that's a kernel limit or a memory choice.</li>
+</ul>
+<h2>Where I land</h2>
+<p>Step 5 Preview is the most transparent large open release in a while: config, kernels upstreamed into SGLang, serving recipes for two frameworks, and an architecture write-up that explains its trade-offs. The trade-off that matters most for a cluster is that GQA plus 1M context means about 74 GB of KV per full-length session in BF16. Sparse attention keeps the per-step reads manageable, but it doesn't shrink what you have to hold. Plan capacity around sessions resident, not tokens per second.</p>
+<p>Sources: <a href="https://huggingface.co/stepfun-ai/Step-5-Preview" target="_blank" rel="noopener noreferrer">Step 5 Preview model card</a>, <a href="https://huggingface.co/stepfun-ai/Step-5-Preview/blob/main/config.json" target="_blank" rel="noopener noreferrer">config.json</a>, <a href="https://platform.stepfun.ai/blog/inside-step-5-preview" target="_blank" rel="noopener noreferrer">StepFun: Inside Step 5 Preview</a>, <a href="https://www.stepfun.com/step-5-preview" target="_blank" rel="noopener noreferrer">StepFun launch page and benchmarks</a>, <a href="https://www.sglang.io/blog/step-5-preview-day0-support" target="_blank" rel="noopener noreferrer">SGLang day-0 blog</a>, <a href="https://docs.sglang.io/cookbook/autoregressive/StepFun/Step-5-Preview" target="_blank" rel="noopener noreferrer">SGLang cookbook</a>, <a href="https://recipes.vllm.ai/stepfun-ai/Step-5-Preview" target="_blank" rel="noopener noreferrer">vLLM recipe</a>, <a href="https://huggingface.co/stepfun-ai/Step-5-Preview/blob/main/LICENSE.txt" target="_blank" rel="noopener noreferrer">StepFun Model License 1.0</a>, <a href="https://freshweights.com/launch/deepseek-v4-1-flash-552b-open-weight-moe-goes-live-under-mit/" target="_blank" rel="noopener noreferrer">Fresh Weights on DeepSeek V4.1 Flash</a>. Model, benchmark, and serving figures are from StepFun, SGLang, and vLLM. KV sizes, read volumes, memory headroom, and the per-request and TTFT figures are my own arithmetic from the published config and measurements.</p>
+<p>Related reading on this site: <a href="/deepseek-v4-1-flash.html">DeepSeek-V4.1-Flash</a>, <a href="/replayssm-hybrid-model-decode.html">ReplaySSM hybrid decode</a>, <a href="/intel-gpu-d270-lpddr5x-inference.html">Intel GPU D270</a>.</p>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
