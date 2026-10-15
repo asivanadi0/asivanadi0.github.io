@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Intel GPU D270: 480 GB on a PCIe Card, and What That Memory Is Actually For — Anpoo Sivanadi</title>
+  <meta name="description" content="Intel used the OCP Global Summit this week to put final numbers and a name on Crescent Island." />
+  <link rel="canonical" href="https://asivanadi0.github.io/intel-gpu-d270-lpddr5x-inference.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Intel GPU D270: 480 GB on a PCIe Card, and What That Memory Is Actually For — Anpoo Sivanadi" />
+  <meta property="og:description" content="Intel used the OCP Global Summit this week to put final numbers and a name on Crescent Island." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/intel-gpu-d270-lpddr5x-inference.html" />
+  <meta property="article:published_time" content="2026-10-14T18:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Intel GPU D270: 480 GB on a PCIe Card, and What That Memory Is Actually For</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-14T18:00:00-07:00">14 October 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>Intel used the OCP Global Summit this week to put final numbers and a name on Crescent Island. It ships as the <a href="https://www.intel.com/content/www/us/en/products/details/discrete-gpus/data-center-gpu/d-series.html" target="_blank" rel="noopener noreferrer">Intel GPU D270</a>, the first card in a new GPU D-Series, and the <a href="https://www.intel.com/content/www/us/en/newsroom/news/artificial-intelligence/intel-accelerates-open-infrastructure-agentic-ai-era.html" target="_blank" rel="noopener noreferrer">newsroom post</a> gives the headline: up to 480 GB of LPDDR5X, 1.5 TB/s of memory bandwidth, 1.3 PFLOPS of FP8, 350 W, air-cooled, standard PCIe.</p>
+<p>The capacity number is the one people will quote. I think the more useful exercise is to divide the numbers by each other, because the ratios tell you which part of an inference pipeline this card is good at and which part it isn't. That is what I want to work through here, using only figures Intel and AMD have published.</p>
+<h2>The spec sheet</h2>
+<p>Intel walked through the architecture at <a href="https://www.tomshardware.com/pc-components/gpus/hot-chips-2026-intel-dives-deep-on-crescent-island-ai-accelerator-larger-caches-and-deeper-xmx-engines-target-maximum-ai-flops-per-watt" target="_blank" rel="noopener noreferrer">Hot Chips in August</a> and filled in throughput and bandwidth at OCP. <a href="https://www.servethehome.com/intels-crescent-island-ai-server-gpu-gets-a-name-and-specs-meet-the-intel-gpu-d-series/" target="_blank" rel="noopener noreferrer">ServeTheHome's table</a> is the cleanest summary. Next to it I've put AMD's closest shipping equivalent, the <a href="https://www.amd.com/en/products/accelerators/instinct/mi350/mi350p.html" target="_blank" rel="noopener noreferrer">Instinct MI350P</a>, which is also a dual-slot, passively cooled PCIe 5.0 card.</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Spec</th>
+<th>Intel GPU D270</th>
+<th>AMD Instinct MI350P</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Architecture</td>
+<td>Xe3P (Crescent Island)</td>
+<td>CDNA 4</td>
+</tr>
+<tr>
+<td>Compute blocks</td>
+<td>32 Xe cores, 256 XMX engines</td>
+<td>128 CUs, 512 matrix cores</td>
+</tr>
+<tr>
+<td>Peak FP8 matrix</td>
+<td>1.3 PFLOPS</td>
+<td>2.3 PFLOPS</td>
+</tr>
+<tr>
+<td>Memory</td>
+<td>160 GB (Intel card), up to 480 GB (ODM cards), LPDDR5X</td>
+<td>144 GB HBM3E</td>
+</tr>
+<tr>
+<td>Memory bus</td>
+<td>1280-bit, 80 × 16-bit channels, ~9,375 MT/s</td>
+<td>4096-bit</td>
+</tr>
+<tr>
+<td>Bandwidth</td>
+<td>1.5 TB/s</td>
+<td>4 TB/s</td>
+</tr>
+<tr>
+<td>On-chip cache</td>
+<td>32 MB L2</td>
+<td>128 MB last-level cache</td>
+</tr>
+<tr>
+<td>Board power</td>
+<td>350 W</td>
+<td>600 W max, 450 W configurable</td>
+</tr>
+<tr>
+<td>Host link</td>
+<td>PCIe 5.0 x16</td>
+<td>PCIe 5.0 x16</td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Sampling; no price or launch date</td>
+<td>Shipping</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>A few architecture details from Hot Chips matter for inference. The chip is four slices of eight Xe cores. Each core has 1 MB of register file and 512 KB of L1/shared local memory. The XMX matrix engines are 16 deep, up from 4 deep on Xe2 and Xe3, so each engine chews on much bigger tiles per pass. Data types run from microscaled FP4 (MXFP4) up to full-rate FP64, and the cores have hardware sigmoid and tanh for softmax-heavy work. Ray tracing and graphics pipelines are gone; Intel kept a media block with four encoders and decoders for multimodal input.</p>
+<p>The memory system is the unusual part. Twenty LPDDR5X packages sit on the board, twelve on the front and eight on the back, giving 80 channels and a 1280-bit bus. Intel's own card uses 8 GB packages for 160 GB. Partners can use 24 GB packages for 480 GB. Nothing is stacked, so there's no CoWoS interposer and no HBM in the bill of materials.</p>
+<h2>Three ratios</h2>
+<p><strong>Compute per byte of bandwidth.</strong> 1.3 PFLOPS over 1.5 TB/s is about 870 FLOPs per byte. The MI350P is 2.3 PFLOPS over 4 TB/s, about 575. A kernel needs more arithmetic intensity on the D270 before it stops waiting on memory. In plain terms, the D270 is the more compute-heavy design relative to its memory pipe, even though its absolute FLOPS are lower.</p>
+<p><strong>Time to read all of memory once.</strong> 480 GB at 1.5 TB/s is 0.32 seconds. The 160 GB Intel card is about 0.11 seconds. The MI350P sweeps its 144 GB in about 0.036 seconds. That's the number that bounds decode, because each decode step has to stream the weights it uses and the KV cache of every sequence in the batch.</p>
+<p><strong>Per watt.</strong> Peak FP8 per watt comes out nearly even: about 3.7 TFLOPS/W for the D270 and 3.8 TFLOPS/W for the MI350P at its 600 W setting. Bandwidth per watt favors AMD, about 6.7 GB/s per watt against 4.3. Capacity per watt is where Intel wins by a lot: about 1.37 GB per watt for a 480 GB D270 against 0.24 GB per watt for the MI350P. These are peak-spec ratios, not measurements, and AMD doesn't publish FLOPS at the 450 W setting, but they're enough to show the shape of the trade.</p>
+<h2>What that means for decode</h2>
+<p>Intel says a single card handles models up to 300 billion parameters. Take that literally with a dense model at FP8: 300 GB of weights, read once per token at batch size 1, is 0.2 seconds per token, so the ceiling is around 5 tokens per second for one user. At MXFP4 it's about 10. Batching helps dense models because every sequence shares the same weight read, but nobody is buying this card to run a dense 300B model at single-digit tokens per second.</p>
+<p>Mixture-of-experts models are the better fit, and Intel said as much at Hot Chips, pairing MoE with speculative decoding as the target workload. Here's a rough example with my own numbers: a 400B-parameter MoE with 20B active parameters at FP8. The weights fit in 400 GB. At batch 1 you read roughly the active 20 GB per token, which puts the ceiling near 75 tokens per second. As the batch grows, different tokens route to different experts and each step touches more of the model, so the per-step read drifts toward the full 400 GB and the step time drifts toward 0.27 seconds. Speculative decoding helps here, which is why Intel keeps bringing it up: verifying several drafted tokens per weight read converts spare FLOPs into fewer passes over memory, and this card has more spare FLOPs per byte than its competitors.</p>
+<p>The KV cache is the part that capacity helps and bandwidth hurts. Unlike weights, KV is per sequence, so it isn't amortized across the batch. Assume a model with 64 KB of KV per token; real models vary widely. A 100K-token agent session is then about 6.4 GB. Put 200 GB of those on a card and you have about 31 sessions resident. If all 31 decode at once, each step reads 200 GB of KV before it touches a weight, which is about 0.13 seconds. That works out to under 8 tokens per second per session from KV traffic alone.</p>
+<p>So the 480 GB isn't really for streaming 31 long sessions at once. It's for keeping them resident while they're <em>not</em> decoding.</p>
+<h2>Parking, not streaming</h2>
+<p>That fits how agent traffic actually behaves. A coding or research agent spends much of its wall-clock time waiting on tools: a test run, a search, a file read. While it waits, its KV cache either stays on the accelerator, gets moved to host memory, or gets dropped and rebuilt later.</p>
+<p>Rebuilding is expensive. Prefill for 100K tokens on a 20B-active model is about 4 × 10^15 FLOPs, roughly 3 seconds at the D270's FP8 peak and more at realistic utilization. Moving 6.4 GB over PCIe 5.0 x16 at about 64 GB/s takes on the order of 0.1 seconds, so host-memory offload is already a reasonable answer, and I'd expect anyone evaluating this card to benchmark against it. What 480 GB on the card buys you is skipping that trip entirely for a large pool of sessions, without contending for host memory bandwidth that the CPU-side agent runtime also needs.</p>
+<p>The prefill side also matters. Intel's product page leans hard on "compute dominated by prefill," and the Hot Chips framing pairs the card with HBM-based decode hardware in disaggregated setups. Tom's Hardware pointed out that SambaNova's SN50 is built to take GPU-side prefill. A memory-rich, air-cooled prefill tier that can hold a lot of prefix cache is a sensible thing to want. The catch is that the MI350P has more peak FP8 per card at similar FLOPS per watt, so Intel has to win prefill on sustained efficiency from the deeper systolic arrays and the larger register file, not on the spec sheet.</p>
+<h2>Things I'd check before putting it in a cluster</h2>
+<ul>
+<li><strong>Software.</strong> Intel lists vLLM and PyTorch and says it had day-0 support for Meta's Muse Glimmer. I'd want to know which vLLM paths are upstream on Xe3P versus a fork, and whether MoE, MXFP4, and speculative decoding kernels are as mature as the CUDA and ROCm equivalents.</li>
+<li><strong>Multi-card scaling.</strong> There's no scale-up fabric, just PCIe 5.0 x16. Intel says an eight-GPU system handles models over a trillion parameters, but it doesn't say whether that's eight 160 GB cards (1.28 TB total) or eight 480 GB cards (3.84 TB). Either way, tensor parallelism over PCIe is painful. Pipeline or expert parallelism is more plausible, and I'd want Intel's reference recipe.</li>
+<li><strong>Real decode numbers.</strong> Tokens per second at batch 1 and batch 32 on a known open MoE, with and without speculative decoding. The ratios above are ceilings. Until someone publishes measurements, that's all they are.</li>
+<li><strong>Session parking.</strong> Latency to resume a parked 100K-token session on-card, compared with resuming from host memory and with re-prefilling.</li>
+<li><strong>Price.</strong> There isn't one. As ServeTheHome's Ryan Smith put it in a reply to readers, DRAM pricing is volatile right now, and the whole argument for LPDDR5X over HBM is cost per GB. Without a price, the capacity-per-dollar case is a promise.</li>
+</ul>
+<h2>Where I land</h2>
+<p>The D270 is a capacity card with modest bandwidth and decent FLOPS, priced against a cost structure (soldered LPDDR5X, no interposer, 350 W air cooling) that HBM parts can't match. For a single-user chatbot it will be the slow option. For a fleet of long-context agents that spend most of their time waiting on tools, it could be a good place to keep their context resident and to run prefill, next to faster decode hardware.</p>
+<p>Whether that pays off depends on numbers Intel hasn't given yet: sustained prefill throughput, the software stack, and price. Customer sampling is underway, and STH expects the release itself to land in 2027. I'll take another look once the first independent vLLM runs show up.</p>
+<p>Sources: <a href="https://www.intel.com/content/www/us/en/products/details/discrete-gpus/data-center-gpu/d-series.html" target="_blank" rel="noopener noreferrer">Intel GPU D270 product page</a>, <a href="https://www.intel.com/content/www/us/en/newsroom/news/artificial-intelligence/intel-accelerates-open-infrastructure-agentic-ai-era.html" target="_blank" rel="noopener noreferrer">Intel OCP 2026 announcement</a>, <a href="https://www.servethehome.com/intels-crescent-island-ai-server-gpu-gets-a-name-and-specs-meet-the-intel-gpu-d-series/" target="_blank" rel="noopener noreferrer">ServeTheHome on the D-Series specs</a>, <a href="https://www.tomshardware.com/pc-components/gpus/hot-chips-2026-intel-dives-deep-on-crescent-island-ai-accelerator-larger-caches-and-deeper-xmx-engines-target-maximum-ai-flops-per-watt" target="_blank" rel="noopener noreferrer">Tom's Hardware on Crescent Island at Hot Chips 2026</a>, <a href="https://www.amd.com/en/products/accelerators/instinct/mi350/mi350p.html" target="_blank" rel="noopener noreferrer">AMD Instinct MI350P specifications</a>. All performance and capacity figures are vendor specifications; the derived ratios and worked examples are my own arithmetic.</p>
+<p>Related reading on this site: <a href="/microsoft-maia-300-hbm4-superpod.html">Microsoft Maia 300</a>, <a href="/replayssm-hybrid-model-decode.html">ReplaySSM hybrid decode</a>.</p>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
