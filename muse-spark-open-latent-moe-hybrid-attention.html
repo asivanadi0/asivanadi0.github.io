@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Muse Spark Open: Latent MoE, Hybrid Attention, and a 1M Context That Actually Fits — Anpoo Sivanadi</title>
+  <meta name="description" content="Meta put the Muse Spark Open weights on Hugging Face today, October 15, the same day vLLM shipped day-0 support and NVIDIA published GB300 NVL72 serving numbers." />
+  <link rel="canonical" href="https://asivanadi0.github.io/muse-spark-open-latent-moe-hybrid-attention.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Muse Spark Open: Latent MoE, Hybrid Attention, and a 1M Context That Actually Fits — Anpoo Sivanadi" />
+  <meta property="og:description" content="Meta put the Muse Spark Open weights on Hugging Face today, October 15, the same day vLLM shipped day-0 support and NVIDIA published GB300 NVL72 serving numbers." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/muse-spark-open-latent-moe-hybrid-attention.html" />
+  <meta property="article:published_time" content="2026-10-15T18:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Muse Spark Open: Latent MoE, Hybrid Attention, and a 1M Context That Actually Fits</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-15T18:00:00-07:00">15 October 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>Meta put the <a href="https://huggingface.co/meta-models/Muse-Spark-Open-816B-A42B" target="_blank" rel="noopener noreferrer">Muse Spark Open weights on Hugging Face</a> today, October 15, the same day <a href="https://vllm.ai/blog/2026-10-15-muse-spark-open" target="_blank" rel="noopener noreferrer">vLLM shipped day-0 support</a> and <a href="https://developer.nvidia.com/blog/scale-agentic-coding-workflows-with-metas-muse-spark-open-on-nvidia-gb300-nvl72/" target="_blank" rel="noopener noreferrer">NVIDIA published GB300 NVL72 serving numbers</a>. The <a href="https://research.meta.ai/blog/muse-spark-open" target="_blank" rel="noopener noreferrer">Meta research post</a> calls it the most capable US open-weight model to date: 816B total parameters, 42B active per token, natively multimodal (text, image, video, audio in; text out), and a 1,048,576-token context. The useful story for anyone who runs clusters is not the headline. It is how Meta compressed the experts and cut the KV bill so a million-token agent session is not a fantasy on paper.</p>
+<p>This morning I wrote about <a href="/stepfun-step-5-preview-open-weights.html">Step 5 Preview</a>, which also advertises 1M context and pays for it with sparse GQA storage. Muse Spark Open takes a different bet: shrink the experts with a latent pooler, and keep full-sequence KV on only a quarter of the layers. Same problem, opposite levers.</p>
+<h2>What the card and the blogs agree on</h2>
+<p>The <a href="https://huggingface.co/meta-models/Muse-Spark-Open-816B-A42B" target="_blank" rel="noopener noreferrer">Hugging Face model card</a> and the <a href="https://huggingface.co/blog/meta-muse-spark-open" target="_blank" rel="noopener noreferrer">Hugging Face architecture post</a> line up with vLLM's day-0 write-up:</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Muse Spark Open</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Parameters</td>
+<td>816B total, ~42B active</td>
+</tr>
+<tr>
+<td>Layers</td>
+<td>62, every one MoE</td>
+</tr>
+<tr>
+<td>Hidden size</td>
+<td>8,192</td>
+</tr>
+<tr>
+<td>Experts</td>
+<td>256 per layer, top-8 routed</td>
+</tr>
+<tr>
+<td>Expert width</td>
+<td>latent: pooler 8192→4096, unpooler back (shared per layer)</td>
+</tr>
+<tr>
+<td>Attention</td>
+<td>128 Q heads / 16 KV heads, head dim 64, QK-norm, output gate + output norm</td>
+</tr>
+<tr>
+<td>Attention pattern</td>
+<td>3 sliding-window (2,048 tokens) + 1 full, cycle anchored so the last layer is full → 46 SWA, 16 full</td>
+</tr>
+<tr>
+<td>Full-attention position</td>
+<td>NoPE on the 16 full layers (<code>layer_rope_theta: 0</code>)</td>
+</tr>
+<tr>
+<td>Context</td>
+<td>1,048,576 tokens</td>
+</tr>
+<tr>
+<td>Vision</td>
+<td>Perception Encoder ~1.8–1.9B (50 layers, 14×14 patches)</td>
+</tr>
+<tr>
+<td>Audio</td>
+<td>~118M params; 24 kHz waveform → one token per 80 ms</td>
+</tr>
+<tr>
+<td>Released precision</td>
+<td>BF16 (~1.5–1.6 TB safetensors) and NVFP4 (~540 GB weight footprint per Baseten)</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>vLLM's weight breakdown puts about 799B in the 256 experts per layer, 13.5B in attention, 4.2B in the latent projections, and 3.3B in the untied embedding and output matrices, with the vision tower separate. That is why every serving recipe is really an expert-parallelism recipe.</p>
+<h2>Latent MoE: why the experts are half-width</h2>
+<p>A normal MoE at hidden size 8192 would run each expert at full width. Muse Spark Open inserts a shared pooler and unpooler around the expert block. The router still sees the full 8192-dimensional token. The experts only ever see 4096. <a href="https://www.baseten.co/blog/muse-spark-open-launch/" target="_blank" rel="noopener noreferrer">Baseten's launch post</a> spells out the point: that halves each expert's parameters, cuts roughly 800B parameters versus an uncompressed design of the same shape, frees HBM for KV, and shrinks the all-to-all traffic when experts live on different GPUs.</p>
+<p>For a sparse model that activates eight of 256 experts every token, expert traffic is the interconnect tax. Cutting the expert activation width in half is the kind of change you feel on a multi-node NVLink domain before you feel it on a single-GPU microbenchmark.</p>
+<h2>Hybrid attention and the KV arithmetic</h2>
+<p>Grouped-query attention already keeps the cache smaller than multi-head. My arithmetic from the published layout, matching the HF blog's all-full figure: each token stores K and V for 16 heads × 64 dimensions × 62 layers, which is 126,976 values. In BF16 that is about 248 KB per token, or about 266 GB for a full 1M-token session if every layer kept the whole history.</p>
+<p>They do not. Forty-six layers only keep a 2,048-token sliding window. Sixteen layers keep the full sequence, and those full layers drop rotary position encoding. At 1M tokens the hybrid cache is just over a quarter of the all-full number: about 68 GB for the sixteen full layers, plus a fixed ~386 MB for the forty-six windows. That is my arithmetic; vLLM says the same "just over ¼" ratio. Baseten measures the working-set case directly: at 128K context, hybrid cuts KV from 31 GiB to 8.4 GiB, about 3.7×.</p>
+<p>Compare that to this morning's Step 5 Preview number. Step 5's sparse full-attention layers still store about 70.7 KB per token across 23 layers, so a 1M session is about 74 GB even though sparse attention only <em>reads</em> a fraction of it each step. Muse Spark Open's full-length bill lands in the same ballpark, but most layers never grow with context at all. You are not paying an indexer scan that scales with every historical block.</p>
+<h2>What it takes to run it</h2>
+<p>The model card is blunt on VRAM: at least 700 GB for NVFP4 and 2 TB for BF16. The HF blog's transformers path runs BF16 across four nodes of eight H200s with tensor parallelism 32, and NVFP4 on a single B200-class node. The SGLang cookbook in the same post starts NVFP4 on four GB300 GPUs with FlashInfer TRT-LLM MoE and matching TP/EP sizes. Baseten says the NVFP4 checkpoint brings weights from roughly 1.6 TB down to about 540 GB, which is what lets a single 4×GB300 node hold the model without spilling expert traffic across a second chassis.</p>
+<p>NVIDIA's GB300 NVL72 post is the first rack-scale number that is useful. On agentic workloads with speculative decode at acceptance length 6, they report up to 50K tokens per second per GPU and up to 600 tokens per second per user on the 72-GPU NVLink domain (130 TB/s). Those are vendor measurements on their own stack; treat them as an upper envelope, not a purchase order. Meta also ships custom Helion kernels in SGLang and claims 1.03–3.95× kernel-level speedups on NVIDIA and AMD, with a 3% end-to-end gain on MI350.</p>
+<p>If you are not buying a rack, the desktop path is concrete: Meta says two Apple M5 Ultra Mac Studios with MLX can hold the model, and on a single M3 Ultra (512 GB) llama.cpp's Q2_K quant uses about 304 GB at around 18 tokens/s while MLX's oQ3e uses about 344 GB at roughly 21 tokens/s. Those are not production agent rates. They prove the checkpoint is not locked to one vendor's fabric. vLLM also trained a DSpark draft model that proposes up to seven tokens per pass on the same sliding-window pattern; AMD shipped MXFP4 for Instinct, and TPU megakernels with DSpark are claimed above 650 tokens/s on four TPU v7 chips.</p>
+<h2>License, before you put it on an endpoint</h2>
+<p>Weights ship under the <a href="https://huggingface.co/meta-models/Muse-Spark-Open-816B-A42B" target="_blank" rel="noopener noreferrer">Muse Model License</a>. Products that use it or derivatives must show "Built with Muse Spark Open." If you offer it as model-as-a-service and you and your affiliates clear US$20 million in aggregate gross revenue over any consecutive twelve months, you have to notify Meta and sign a separate agreement before including it in that MaaS business. Internal use and embedding it as a feature of your own non-MaaS product are carved out. Same shape as other large open releases this month: free to download, not free to run as a public API at scale without talking to the lab.</p>
+<h2>What I'd measure first</h2>
+<ul>
+<li>Decode tokens/s per sequence at 32K, 128K, and 1M on the same NVFP4 node, with and without DSpark, to see where hybrid attention stops hiding the full-layer KV.</li>
+<li>Expert-parallel all-to-all bytes per token on 4×GB300 versus a two-node BF16 H200 mesh, to price the latent-MoE interconnect win.</li>
+<li>Concurrent 128K agent sessions per node after NVFP4, using Baseten's 8.4 GiB KV figure as the planning floor and adding activation and graph overhead yourself.</li>
+</ul>
+<h2>Where I land</h2>
+<p>Muse Spark Open is the open-weight release I would actually capacity-plan around today. Latent MoE makes the 816B parameter count less scary on the wire, hybrid attention makes 1M context a memory schedule instead of a wish, and the day-0 SGLang, vLLM, TensorRT-LLM, MLX, and llama.cpp paths mean you can verify both claims on hardware you already have. It is a different answer than Step 5 Preview's sparse GQA: fewer layers that grow with context, smaller experts, still a real KV bill at a million tokens. Plan for the sixteen full layers, not the marketing total.</p>
+<p>Sources: <a href="https://research.meta.ai/blog/muse-spark-open" target="_blank" rel="noopener noreferrer">Meta research blog</a>, <a href="https://huggingface.co/meta-models/Muse-Spark-Open-816B-A42B" target="_blank" rel="noopener noreferrer">Hugging Face model card</a>, <a href="https://huggingface.co/blog/meta-muse-spark-open" target="_blank" rel="noopener noreferrer">Hugging Face Muse Spark Open blog</a>, <a href="https://vllm.ai/blog/2026-10-15-muse-spark-open" target="_blank" rel="noopener noreferrer">vLLM day-0 blog</a>, <a href="https://developer.nvidia.com/blog/scale-agentic-coding-workflows-with-metas-muse-spark-open-on-nvidia-gb300-nvl72/" target="_blank" rel="noopener noreferrer">NVIDIA GB300 NVL72 blog</a>, <a href="https://www.baseten.co/blog/muse-spark-open-launch/" target="_blank" rel="noopener noreferrer">Baseten launch post</a>. Model, benchmark, serving, and architecture figures are from Meta, Hugging Face, vLLM, NVIDIA, and Baseten. Per-token KV sizes, the 1M hybrid cache total, the fixed SWA overhead, and the 128K cross-check against Baseten's GiB figures are my own arithmetic from the published layout.</p>
+<p>Related reading on this site: <a href="/stepfun-step-5-preview-open-weights.html">Step 5 Preview open weights</a>, <a href="/replayssm-hybrid-model-decode.html">ReplaySSM hybrid decode</a>, <a href="/intel-gpu-d270-lpddr5x-inference.html">Intel GPU D270</a>.</p>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
