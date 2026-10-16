@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Nemotron 3.5 Super VL and Bolt: Hybrid MoE Served From Rack to 24 GB — Anpoo Sivanadi</title>
+  <meta name="description" content="NVIDIA put Nemotron 3.5 Super VL and Bolt on Hugging Face on October 15, the same window RTX Spark PCs started shipping." />
+  <link rel="canonical" href="https://asivanadi0.github.io/nemotron-3-5-super-vl-bolt-hybrid-moe.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Nemotron 3.5 Super VL and Bolt: Hybrid MoE Served From Rack to 24 GB — Anpoo Sivanadi" />
+  <meta property="og:description" content="NVIDIA put Nemotron 3.5 Super VL and Bolt on Hugging Face on October 15, the same window RTX Spark PCs started shipping." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/nemotron-3-5-super-vl-bolt-hybrid-moe.html" />
+  <meta property="article:published_time" content="2026-10-16T06:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Nemotron 3.5 Super VL and Bolt: Hybrid MoE Served From Rack to 24 GB</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-16T06:00:00-07:00">16 October 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>NVIDIA <a href="https://huggingface.co/nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-NVFP4" target="_blank" rel="noopener noreferrer">put Nemotron 3.5 Super VL and Bolt on Hugging Face</a> on October 15, the same window <a href="https://www.globenewswire.com/news-release/2026/10/16/3382553/0/en/nvidia-rtx-spark-pcs-available-today-a-new-beginning-for-windows-pcs.html" target="_blank" rel="noopener noreferrer">RTX Spark PCs started shipping</a>. The <a href="https://blogs.nvidia.com/blog/nemotron-3-5-super-vl/" target="_blank" rel="noopener noreferrer">product blog</a> frames it as an open agent stack from data center to desktop. The useful story for anyone who runs inference is how the same hybrid backbone is packaged for two very different memory envelopes: a 120B/12B-active multimodal MoE with a 1M context and native multi-token prediction, and a Star Elastic–compressed 74B/9B LatentMoE that lands in a 24 GB pack for local agents.</p>
+<p>Last night I wrote about <a href="/muse-spark-open-latent-moe-hybrid-attention.html">Muse Spark Open</a>, which cuts expert width and full-attention layers to make an 816B model fit a real KV schedule. Nemotron 3.5 takes a different bet: interleave Mamba-2 with MoE and attention, ship MTP as a first-class drafter, and then surgically shrink the same parent into something that shares a laptop with your other apps.</p>
+<h2>What the cards agree on</h2>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Super VL</th>
+<th>Bolt 74B-A9B 24GB</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Parameters</td>
+<td>120B total, 12B active</td>
+<td>74B total, 9B active</td>
+</tr>
+<tr>
+<td>Architecture</td>
+<td>Mamba-2–Transformer hybrid MoE</td>
+<td>Hybrid LatentMoE (compressed from Super VL)</td>
+</tr>
+<tr>
+<td>Experts</td>
+<td>512 routed per MoE layer</td>
+<td>Star Elastic search; top-K 9 (parent top-K was 22)</td>
+</tr>
+<tr>
+<td>Vision</td>
+<td>C-RADIO + VL connector</td>
+<td>C-RADIO v4-H + MLP projector</td>
+</tr>
+<tr>
+<td>Context</td>
+<td>Up to 1,048,576 tokens</td>
+<td>Up to 256K tokens</td>
+</tr>
+<tr>
+<td>Speculative decode</td>
+<td>Native MTP; LiLiCorr on DGX Spark</td>
+<td>LiLiCorr via DFlash, 7 draft tokens in vLLM recipes</td>
+</tr>
+<tr>
+<td>Precision</td>
+<td>BF16 reference; NVFP4 for deploy</td>
+<td>IQ2-XXS experts (~2.0625 bits/param) + mixed NVFP4/Q8_0</td>
+</tr>
+<tr>
+<td>Deploy footprint (vendor)</td>
+<td>NVFP4: 1× DGX Spark, 1× H200, 2× H100, or 1× GB200</td>
+<td>Packed ~22.1 GB / 24 GB target</td>
+</tr>
+<tr>
+<td>License</td>
+<td>OpenMDW-1.1</td>
+<td>OpenMDW-1.1</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The <a href="https://huggingface.co/nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-NVFP4" target="_blank" rel="noopener noreferrer">NVFP4 model card</a> is explicit that vision encoder, connector, Mamba convolutions, and embeddings stay in BF16, the MoE router stays in FP32, and inference is W4A4 on Blackwell and W4A16 elsewhere. That is the kind of mixed-precision map you want before you trust a single-GPU “fits” claim.</p>
+<h2>Hybrid backbone: why Mamba-2 is in the critical path</h2>
+<p>Super VL is not a pure Transformer MoE. Layers interleave Mamba-2 state-space blocks, sparse experts, and attention, then hang a C-RADIO vision tower and an MLP connector off the language backbone. The <a href="https://developer.nvidia.com/blog/nvidia-nemotron-3-5-super-vl-powers-specialized-agents-with-multimodal-reasoning/" target="_blank" rel="noopener noreferrer">developer deep dive</a> spells out the serving implication: prefix caching has to preserve both attention KV and Mamba recurrent state, with extra Mamba checkpoints so speculative decode does not replay the whole prefix.</p>
+<p>That matters for always-on agents. Every turn re-sends system prompts, tool schemas, and history. If your SSM cache is not checkpointed the same way as KV, you pay Transformer-style prefill taxes on a hybrid model that was supposed to avoid them. The vLLM and TensorRT-LLM recipes on the card turn on FlashInfer Mamba backends, shared-prefix Mamba checkpoints, and FP8 (or NVFP4-trained) KV for exactly that reason.</p>
+<h2>MTP and LiLiCorr: speculation without a second model family</h2>
+<p>Multi-token prediction is baked into the checkpoint. A shared MTP head drafts several future tokens; the main model verifies them in one pass. Super VL’s training notes describe a hidden-state-mixing warmup so later draft steps see heterogeneous states the way inference does, instead of only ground-truth step−1 states. On the card, GB200 MTP recipes use five draft tokens; H100/H200 use three; DGX Spark prefers a separate <a href="https://huggingface.co/nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-NVFP4" target="_blank" rel="noopener noreferrer">LiLiCorr</a> drafter that scores draft-token compatibility in one shot.</p>
+<p>NVIDIA’s developer blog claims LiLiCorr is up to 2.3× faster than no speculation on DGX Spark. Treat that as a vendor upper bound on their stack. The architectural point still stands: you get speculative decode without maintaining a separate tree of draft models for every precision and SKU, and Bolt reuses the same LiLiCorr/DFlash pattern with seven speculative tokens in the published vLLM command.</p>
+<h2>Dynamo numbers for the rack path</h2>
+<p>For multi-GPU serving, the interesting figure is not the single-stream peak. On <a href="https://developer.nvidia.com/blog/nvidia-nemotron-3-5-super-vl-powers-specialized-agents-with-multimodal-reasoning/" target="_blank" rel="noopener noreferrer">16 B200 GPUs at 50 tokens/s per user</a>, Dynamo with KV-aware routing, session affinity, and KV offload is claimed to serve up to 8× more users while cutting first-token latency by 85% at the same per-user rate. Recipes cover H100 through VR200 with NVFP4 weights and FP8 KV, MTP3 or MTP5 depending on topology.</p>
+<p>Separately, the Artificial Analysis chart NVIDIA cites puts Super VL above 600 output tokens/s on agentic tasks on a Baseten endpoint, with a “5× vs next open in class” callout. That is an endpoint measurement, not your cluster. Use it as a throughput envelope, then re-measure on your harness with tool calls and vision turns included.</p>
+<p>Benchmarks on the NVFP4 card (same harness as BF16) land roughly: GPQA-Diamond 89.9, SWE-bench Verified 71.07, Terminal-Bench 2.1 62.78, BrowseComp 77.5, CharXiv reasoning 79.88. Quantization-aware distillation is doing real work if those gaps stay that tight.</p>
+<h2>Bolt: Star Elastic into 24 GB</h2>
+<p>Bolt is the compression story. The <a href="https://huggingface.co/nvidia/NVIDIA-Nemotron-3.5-Bolt-74B-A9B-24GB" target="_blank" rel="noopener noreferrer">24GB card</a> and Bolt training write-up describe Star Elastic: a budget-conditioned router that heterogeneously picks routed-expert counts and MoE intermediate widths per layer while fixing top-K at 9 (down from 22 in the parent), targeting under 24 GB at batch 1 and 128K context after quantization. Architecture search runs at 8K for the first 8B tokens, recovery continues to 72B at 8K, then 48B at 128K — 120B tokens of compression training before vision adapter, SFT, RL, and IQ2-XXS quantization-aware distillation on the experts.</p>
+<p>The packed footprint is about 22.1 GB from a ~148 GB BF16 parent path. Experts go to IQ2-XXS; Mamba layers can stay NVFP4; embeddings and output stay Q8_0. Context drops from 1M to 256K, which is the right trade for a laptop agent that still needs BrowseComp and Terminal-Bench headroom. On the published table, Bolt 24GB scores GDPVal-AA-V2 28.47, Terminal-Bench 2.1 50.98, BrowseComp 66.75, PinchBench 87.82, and GPQA Diamond 86.43 against denser and smaller MoE peers in the same memory band.</p>
+<p>That is why today’s RTX Spark availability matters without needing another hardware post: the model that was sized for a 24 GB co-resident agent is shipping the same week as the Windows Grace-Blackwell laptops meant to run it via llama.cpp, Ollama, LM Studio, Unsloth, and vLLM.</p>
+<h2>License and customization, briefly</h2>
+<p>Both checkpoints use <a href="https://huggingface.co/nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-NVFP4" target="_blank" rel="noopener noreferrer">OpenMDW 1.1</a>. NVIDIA is also dumping open post-training datasets and NeMo Gym environments, and the developer post lists NeMo AutoModel / NeMo RL paths for SFT, LoRA, and environment RL. If you are capacity-planning, the open weights plus Dynamo recipes matter more than the partner logos.</p>
+<h2>What I'd measure first</h2>
+<ul>
+<li>Tokens/s per user and TTFT at 50 tok/s interactivity on a fixed B200 or GB200 node, with and without Dynamo KV-aware routing, using the same tool-calling harness you run in production.</li>
+<li>MTP acceptance length versus draft depth (3 vs 5 vs LiLiCorr-7) on DGX Spark and on a discrete Hopper node, with Mamba shared-prefix checkpointing on and off.</li>
+<li>Bolt 24GB concurrent sessions at 32K and 128K on a single RTX Spark / DGX Spark after FP8 KV, with vision turns enabled, to see when the 22.1 GB weight pack stops leaving room for SSM state.</li>
+</ul>
+<h2>Where I land</h2>
+<p>Nemotron 3.5 Super VL is the open agent checkpoint I would actually put on a NIM/Dynamo path this week: hybrid Mamba+MoE keeps long agent prefixes cheaper than a pure attention MoE of the same active size, MTP is in the weights instead of a side project, and NVFP4 QAD keeps the GPQA/SWE gaps small enough to trust. Bolt is the complementary move — Star Elastic plus 2-bit experts so the same family runs beside your desktop apps in 24 GB, timed with RTX Spark shipping. Opposite levers from Muse Spark Open’s latent experts and hybrid attention, same job: make agent context and agent concurrency fit the hardware you already bought.</p>
+<p>Sources: <a href="https://blogs.nvidia.com/blog/nemotron-3-5-super-vl/" target="_blank" rel="noopener noreferrer">NVIDIA Nemotron 3.5 product blog</a>, <a href="https://developer.nvidia.com/blog/nvidia-nemotron-3-5-super-vl-powers-specialized-agents-with-multimodal-reasoning/" target="_blank" rel="noopener noreferrer">developer deep dive</a>, <a href="https://huggingface.co/nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-NVFP4" target="_blank" rel="noopener noreferrer">Super VL NVFP4 model card</a>, <a href="https://huggingface.co/nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-BF16" target="_blank" rel="noopener noreferrer">Super VL BF16 model card</a>, <a href="https://huggingface.co/nvidia/NVIDIA-Nemotron-3.5-Bolt-74B-A9B-24GB" target="_blank" rel="noopener noreferrer">Bolt 74B-A9B 24GB model card</a>, <a href="https://docs.nvidia.com/dynamo/dev/recipes/nemotron-3-5-super-vl" target="_blank" rel="noopener noreferrer">Dynamo recipes</a>, <a href="https://www.globenewswire.com/news-release/2026/10/16/3382553/0/en/nvidia-rtx-spark-pcs-available-today-a-new-beginning-for-windows-pcs.html" target="_blank" rel="noopener noreferrer">RTX Spark PC availability</a>. Architecture, benchmark, and serving figures are from NVIDIA’s blogs and Hugging Face cards. Footprint arithmetic that cites ~22.1 GB / ~148 GB BF16 follows NVIDIA’s Bolt compression description.</p>
+<p>Related reading on this site: <a href="/muse-spark-open-latent-moe-hybrid-attention.html">Muse Spark Open</a>, <a href="/stepfun-step-5-preview-open-weights.html">Step 5 Preview open weights</a>, <a href="/rtx-spark-n1x-windows.html">RTX Spark N1X</a>.</p>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
