@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>vLLM's Two New KV Transfer Modes, and Why You Pick One — Anpoo Sivanadi</title>
+  <meta name="description" content="Two posts on the vLLM blog this week change how KV cache moves between prefill and decode workers in a disaggregated deployment." />
+  <link rel="canonical" href="https://asivanadi0.github.io/vllm-nixl-push-bidirectional-kv-transfer.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="vLLM's Two New KV Transfer Modes, and Why You Pick One — Anpoo Sivanadi" />
+  <meta property="og:description" content="Two posts on the vLLM blog this week change how KV cache moves between prefill and decode workers in a disaggregated deployment." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/vllm-nixl-push-bidirectional-kv-transfer.html" />
+  <meta property="article:published_time" content="2026-10-17T06:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>vLLM's Two New KV Transfer Modes, and Why You Pick One</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-17T06:00:00-07:00">17 October 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>Two posts on the vLLM blog this week change how KV cache moves between prefill and decode workers in a disaggregated deployment. Both describe work that started on AWS Trainium clusters, was contributed to vLLM's NIXL connector, and was then measured on H200s. Both target time to first token (TTFT). They attack different parts of it, and for now the push post points you back to pull mode if you want bi-directional transfer.</p>
+<ul>
+<li><a href="https://vllm.ai/blog/2026-10-14-nixl-push-connector" target="_blank" rel="noopener noreferrer">Push-based KV transfer</a> (Oct 14) has the prefill side write KV into memory the decode side reserved in advance, instead of the decode side reading it after prefill finishes.</li>
+<li><a href="https://vllm.ai/blog/2026-10-12-bidirectional-kvxfer-multiturn-agentic-workload" target="_blank" rel="noopener noreferrer">Bi-directional KV transfer</a> (Oct 12) lets the decode node hand a conversation's KV back to a prefill node on the next turn, so the prefill node stops recomputing history it already paid for.</li>
+</ul>
+<p>I run GPU clusters, so I read both with one question: where does the time actually go? The short answer is that the wire is almost never the problem.</p>
+<h2>The test rig</h2>
+<p>Both posts use the same setup, and it's worth knowing before reading any of the numbers:</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Nodes</td>
+<td>2 × <code>p5en.48xlarge</code> (8 × H200 each), one prefill, one decode, plus a small proxy node</td>
+</tr>
+<tr>
+<td>Network</td>
+<td>16 EFA interfaces per node at 200 Gb/s, 3.2 Tb/s per node</td>
+</tr>
+<tr>
+<td>Rail mapping</td>
+<td>Each GPU shares a PCIe switch with 2 EFA interfaces; NIXL's LIBFABRIC backend registers that GPU's KV only on those 2 rails</td>
+</tr>
+<tr>
+<td>Placement</td>
+<td>Same AZ (<code>ap-south-1b</code>), no cluster placement group</td>
+</tr>
+<tr>
+<td>Software</td>
+<td>vLLM 0.29.0, NIXL 1.4.1, driver 580.126.16, CUDA 13.0, EFA installer 1.50.0, libfabric 2.6.0amzn1.0</td>
+</tr>
+<tr>
+<td>Topology</td>
+<td>1P1D, TP 8 on each side</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>That is one prefill node feeding one decode node. Real fleets run many-to-many, and that matters for both features, as I'll get to below.</p>
+<h2>Push mode: the decode loop was the bottleneck</h2>
+<p>In the default pull mode, the sequence after prefill is serial. The prefill node finishes, the router passes block IDs to the decode node, the decode node allocates destination blocks, builds NIXL descriptors and issues an RDMA READ. Only then can decoding start.</p>
+<p>Push mode reorders that. When the decode node allocates blocks for a request, it sends their locations to the prefill node right away, while prefill is still running. Whichever of the two events lands second, prefill finishing or the registration arriving, triggers an RDMA WRITE straight into the decode node's memory. Descriptor setup and submission run on a background thread on the prefill worker, off the engine's forward-pass loop. The two sides can use different block sizes, because each side maps blocks to its own layout at transfer time.</p>
+<p>The numbers, on Qwen3-32B with prefix caching off on the decode side so every request does a full transfer:</p>
+<div class="table-wrap" role="region" aria-label="Table 2" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Load</th>
+<th>Pull</th>
+<th>Push</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>TTFT, 8 QPS, 16K input</td>
+<td>~1,744 ms</td>
+<td>~540 ms</td>
+</tr>
+<tr>
+<td>TPOT, light load</td>
+<td>5.6–5.8 ms</td>
+<td>5.6–5.8 ms</td>
+</tr>
+<tr>
+<td>TPOT, 4–8 QPS, 16K input</td>
+<td>~10.4 ms</td>
+<td>~7 ms</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>At low load and short prompts the two modes are nearly identical. The gap only opens as QPS and prompt length rise.</p>
+<p>To see why, I worked out how much data is actually moving. This is my own arithmetic from Qwen3-32B's <a href="https://huggingface.co/Qwen/Qwen3-32B/raw/main/config.json" target="_blank" rel="noopener noreferrer">config</a>: 64 layers, 8 KV heads, head dim 128, BF16. That's 2 × 64 × 8 × 128 × 2 bytes, or 256 KiB of KV per token. A 16,384-token prompt is 4 GiB. With TP 8 and 8 KV heads, each GPU holds one head's worth, about 512 MiB. Each GPU has two 200 Gb/s rails, about 50 GB/s, so the pure wire time is roughly 11 ms.</p>
+<p>So the pull-mode TTFT at 8 QPS is more than a second worse than push for a transfer that should take about 11 ms on the wire. The post says where that time goes: in pull mode the decode worker posts NIXL descriptors inline in its own engine loop, so setup for incoming requests stalls token generation for everything already running. That also explains why TPOT gets worse in pull mode under load, not just TTFT. The fix is about the scheduling, not the RDMA path.</p>
+<p>The tradeoff is routing. Pull mode lets the router pick a decode instance after prefill finishes, when it knows the most about load. Push mode commits to a decode instance up front so registration can overlap with prefill. In a 1P1D benchmark that costs nothing. In a fleet with several decode pools and uneven request lengths, choosing early means choosing with less information. There's an open vLLM PR (#45211) that moves the background-thread approach into pull mode, which would get some of the win without giving up late routing.</p>
+<p>To try it, both sides switch <code>kv_connector</code> from <code>NixlConnector</code> to <code>NixlPushConnector</code>. If the connector doesn't match the mode on both sides, the troubleshooting notes say the server crashes right after the first request.</p>
+<h2>Bi-directional mode: stop recomputing the conversation</h2>
+<p>Disaggregated serving normally moves KV one way, from prefill to decode. In a multi-turn agent session that leaves two problems. The decode node ends each turn holding KV for the prompt plus the response it just generated, but the next turn goes to a prefill node that never saw the response and has to recompute it. And because only the decode node keeps the session warm, the prefill node is the one more likely to have evicted it, in which case it recomputes the entire history.</p>
+<p>Bi-directional mode keeps those decode-side blocks alive after generation for a fixed TTL (<code>decoder_kv_blocks_ttl</code>, default 480 seconds) and returns their location in the last chunk of the streaming response. A small stateful router stores that metadata keyed on a client-supplied <code>conversation_id</code> and attaches it to the next turn's prefill request. The prefill node checks its own prefix cache first, then reads the rest from the decode node over RDMA and computes only the new suffix. KV tensors go peer to peer. The router only holds block locations.</p>
+<p>With prefix caching off on the prefill node, to mimic eviction or landing on a different prefill node:</p>
+<div class="table-wrap" role="region" aria-label="Table 3" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>Prompt</th>
+<th>TTFT off</th>
+<th>TTFT on</th>
+<th>KV transfer time</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Qwen3-32B</td>
+<td>2K → 24K</td>
+<td>158 → 778 ms</td>
+<td>122 → 460 ms</td>
+<td>~30 → 130 ms</td>
+</tr>
+<tr>
+<td>GLM-5-FP8</td>
+<td>2K → 20K</td>
+<td>500 → 2,334 ms</td>
+<td>358 → 702 ms</td>
+<td>~29 → 110 ms</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>That's about 1.6x at the longest Qwen prompt and 3.3x for GLM-5-FP8. The bigger model wins more because each token it doesn't recompute costs more.</p>
+<p>Two things stood out to me when I looked closer.</p>
+<p>First, the transfer is much slower than the link. If most of a 24K-token Qwen context comes back at 256 KiB per token, that's about 6.3 GB total, or about 790 MB per GPU. Moving that in 130 ms is about 6 GB/s per GPU, roughly an eighth of what two 200 Gb/s rails can carry. That's my estimate, since the post doesn't give the exact token count moved per turn, but the direction is clear: per-transfer overhead dominates, not bandwidth.</p>
+<p>Second, that overhead has a floor of about 30 ms even at short prompts. The <code>kv_recompute_threshold</code> setting decides when reuse is worth it, and its default is 64 tokens. On this rig, recomputing 64 tokens of Qwen3-32B on eight H200s takes a few milliseconds at most, far below a 30 ms transfer. I'd treat the default as a starting point and tune it by measuring the transfer floor on your own fabric, probably into the hundreds of tokens.</p>
+<h2>What I'd watch before turning either one on</h2>
+<p><strong>Memory held by the TTL.</strong> Retained blocks sit in decode-node HBM for the full TTL whether the conversation comes back or not, and the TTL isn't renewed. A 20K-token Qwen3-32B conversation is about 5 GB of KV. By my rough count, after weights, an 8×H200 decode node has room for something like 170 of those parked sessions at once. Set the TTL to your real gap between turns, not the default. The post says a heartbeat-renewed lease on the decode side is the natural next step.</p>
+<p><strong>Router state is in process.</strong> The reference proxy keeps its <code>conversation_id</code> map in memory. Restart it and every session falls back to a full recompute. Nothing breaks, but TTFT jumps across the board. In Kubernetes, that means a router pod reschedule shows up as a latency spike, and you should keep the proxy's cache TTL below the decode TTL, as the troubleshooting notes say.</p>
+<p><strong>Silent TCP fallback.</strong> If <code>fi_info -p efa</code> comes back empty, NIXL can fail to initialize or quietly run over TCP. Both posts suggest launching with <code>NIXL_LOG_LEVEL=DEBUG</code> and grepping for the rail mapping lines to confirm every GPU stayed on its PCIe-local rails. I'd make that a readiness check, not a one-time manual step.</p>
+<p><strong>Version drift.</strong> The bi-directional post says vLLM 0.21.0 or later, but its reproduction uses 0.29.0 plus a patch from PR #40186 so streaming responses carry <code>kv_transfer_params</code>. Without that patch every turn is a cache miss. Check that your build includes it before you benchmark.</p>
+<p><strong>You choose one.</strong> The push post says the pull connector is still the right one for workloads that need bi-directional transfer. If your traffic is mostly single-shot requests with long prompts at high QPS, push is the one to test. If it's long agent sessions that keep resending a growing history, bi-directional is. Many fleets have both kinds of traffic, which is an argument for separate pools rather than one setting.</p>
+<p>Both posts include full reproduction scripts, and the setup is two GPU nodes plus a proxy, so it's cheap to rerun on your own fabric before trusting anyone's chart, mine included. If you're building the benchmark more formally, the IETF draft on <a href="https://datatracker.ietf.org/doc/html/draft-calabria-bmwg-ai-fabric-inference-bench-05" target="_blank" rel="noopener noreferrer">benchmarking AI inference fabrics</a> covers RDMA KV transfer between prefill and decode workers, and comparisons across RoCEv2 and Ultra Ethernet transports.</p>
+<p>Related reading on this site: <a href="/vllm-0-31-fast-restart.html">vLLM 0.31 fast restart</a>, <a href="/lightbits-inferra-kv-cache-prefetch.html">Lightbits Inferra KV prefetch</a>, <a href="/astera-leo-x-fabric-kv-cache.html">Astera Leo X fabric-attached KV memory</a>, and <a href="/ling-3-1-flash-hybrid-linear-kv-budget.html">Ling-3.1-flash's KV budget</a>.</p>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
