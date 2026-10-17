@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ling-3.1-flash: What 63 Linear-Attention Layers Do to the KV Budget — Anpoo Sivanadi</title>
+  <meta name="description" content="inclusionAI, the Ant Group team behind the Ling, Ring and Ming model families, put the weights for Ling-3.1-flash on Hugging Face this week under the MIT license." />
+  <link rel="canonical" href="https://asivanadi0.github.io/ling-3-1-flash-hybrid-linear-kv-budget.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Ling-3.1-flash: What 63 Linear-Attention Layers Do to the KV Budget — Anpoo Sivanadi" />
+  <meta property="og:description" content="inclusionAI, the Ant Group team behind the Ling, Ring and Ming model families, put the weights for Ling-3.1-flash on Hugging Face this week under the MIT license." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/ling-3-1-flash-hybrid-linear-kv-budget.html" />
+  <meta property="article:published_time" content="2026-10-16T18:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Ling-3.1-flash: What 63 Linear-Attention Layers Do to the KV Budget</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-16T18:00:00-07:00">16 October 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>inclusionAI, the Ant Group team behind the Ling, Ring and Ming model families, put the weights for <a href="https://huggingface.co/inclusionAI/Ling-3.1-flash" target="_blank" rel="noopener noreferrer">Ling-3.1-flash</a> on Hugging Face this week under the MIT license. It is a 560B-parameter mixture-of-experts model with about 25B parameters active per token. That size class is crowded now. What made me open the config file is the attention stack: 63 of its 72 layers do not keep a KV cache at all.</p>
+<p>For long-running agent sessions, most of the GPU memory that isn't weights goes to KV cache. So this post is mostly arithmetic from the published <code>config.json</code>, plus what the day-zero SGLang and vLLM recipes say about running it.</p>
+<h2>The layer layout</h2>
+<p>The model is built from nine groups of eight layers. In each group, seven layers use Kimi Delta Attention (KDA), the gated delta-rule linear attention Moonshot introduced with Kimi Linear, and one layer uses gated Multi-head Latent Attention (MLA), the compressed attention DeepSeek made common. That gives 63 KDA layers and 9 MLA layers.</p>
+<p>The rest of the specs from the <a href="https://huggingface.co/inclusionAI/Ling-3.1-flash" target="_blank" rel="noopener noreferrer">model card</a> and <a href="https://huggingface.co/inclusionAI/Ling-3.1-flash/raw/main/config.json" target="_blank" rel="noopener noreferrer">config</a>:</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Spec</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Total / active parameters</td>
+<td>560B / ~25B (card); safetensors total 572B including the MTP head</td>
+</tr>
+<tr>
+<td>Layers</td>
+<td>72: 63 KDA + 9 gated MLA, first 4 with a dense FFN</td>
+</tr>
+<tr>
+<td>Experts</td>
+<td>512 routed, 8 active, 1 shared; sigmoid router with grouped top-k (8 groups, top 4)</td>
+</tr>
+<tr>
+<td>Hidden size / heads</td>
+<td>4,096 / 64 heads, head dim 128</td>
+</tr>
+<tr>
+<td>MLA</td>
+<td><code>kv_lora_rank</code> 512, RoPE dim 64, <code>q_lora_rank</code> 1,536</td>
+</tr>
+<tr>
+<td>Weights</td>
+<td>FP8 E4M3, 128×128 block scales, dynamic activation quantization</td>
+</tr>
+<tr>
+<td>Speculative decoding</td>
+<td>1 MTP (NEXTN) layer</td>
+</tr>
+<tr>
+<td>Context</td>
+<td>1M on the card; 262,144 in <code>config.json</code> and in the SGLang and vLLM recipes</td>
+</tr>
+<tr>
+<td>License</td>
+<td>MIT</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Two numbers on that list disagree with each other, and both matter for capacity planning. The card says 1M tokens of context, but the shipped config sets <code>max_position_embeddings</code> to 262,144 with no RoPE scaling, and the <a href="https://docs.sglang.io/cookbook/autoregressive/InclusionAI/Ling-3.1-flash" target="_blank" rel="noopener noreferrer">SGLang cookbook</a> and <a href="https://recipes.vllm.ai/inclusionAI/Ling-3.1-flash" target="_blank" rel="noopener noreferrer">vLLM recipe</a> both use 262,144. I would plan around 262K until inclusionAI ships a config that says otherwise. The cookbook also lists about 17B active parameters against the card's 25B. My own rough count from the config lands closer to 25B once you include the KDA projections and the embedding and output matrices; the KDA layers carry full 4,096-to-8,192 projections for queries, keys, values and gates, and with 63 of them, attention weights are a large share of what each token touches.</p>
+<h2>The memory math</h2>
+<p>Here is the part I care about. An MLA layer caches a compressed latent per token instead of full keys and values: 512 values for the latent plus 64 for the RoPE key, so 576 values. At BF16 that is 1,152 bytes per token per layer.</p>
+<p>With 9 MLA layers, Ling-3.1-flash grows by 10,368 bytes per token, about 10 KiB. Per sequence:</p>
+<ul>
+<li>32K tokens: about 0.32 GiB</li>
+<li>128K tokens: about 1.27 GiB</li>
+<li>262K tokens: about 2.53 GiB</li>
+<li>1M tokens, if the longer context ever ships: about 10.1 GiB</li>
+</ul>
+<p>If all 72 layers were MLA, those numbers would be eight times larger: about 20 GiB per sequence at 262K and 81 GiB at 1M. That is the headline benefit, and it is real. An FP8 KV cache would halve both columns.</p>
+<p>The KDA layers are not free, though. Each one keeps a fixed recurrent state per sequence: for 64 heads with 128-dimensional keys and values, that is 64 × 128 × 128, or about 1.05M values per layer. Across 63 layers that is 252 MiB per sequence if the state is held in FP32, which is common for numerical stability in delta-rule kernels, or 126 MiB in BF16. The short convolution in front of each KDA layer (kernel size 4) adds under 10 MiB more. These are my estimates from the config, not figures inclusionAI published, and the exact state dtype depends on the engine.</p>
+<p>That fixed cost changes how you think about the hybrid. Compared with a hypothetical version where those 63 layers were MLA too, the KDA state only comes out ahead once a sequence passes roughly 3,600 tokens at FP32 state (about 1,800 at BF16). For short chat requests, the hybrid holds more memory per sequence than a pure-MLA model would. For agent sessions that sit at 50K to 200K tokens of accumulated transcript, it holds far less. This model is clearly tuned for the second case, which matches how it is marketed and how its benchmarks were run.</p>
+<p>One more wrinkle for tensor-parallel deployments. With plain TP, MLA's shared latent cache is typically replicated on every rank, because every head reads the same latent. KDA state, by contrast, splits by head, and the cookbook notes that BailingKDA shards its projections on attention TP. So the part of the cache that grows with context is also the part that does not shrink when you add GPUs, unless you turn on data-parallel attention.</p>
+<h2>Fitting it on a node</h2>
+<p>The checkpoint is about 572 GB of FP8 weights, and the vLLM recipe gives a loading estimate of about 689 GB of aggregate VRAM before any cache. The reference deployments are eight H200s (8 × 141 GB = 1,128 GB) with TP8 and EP8, or four GB300s (4 × 288 GB = 1,152 GB) with TP4 and EP4. That leaves on the order of 400 GB per node for cache, state, activations and CUDA graphs. At roughly 2.8 GiB per 262K-token session including KDA state, the memory side of a long-context agent workload is unlikely to be what limits you; compute and scheduling will be.</p>
+<p>The measured numbers in the SGLang cookbook are batch-1 only:</p>
+<ul>
+<li>8 × H200, TP8 + EP8, NEXTN speculation plus the two Hopper decode flags (<code>SGLANG_ENABLE_FP8_BLOCK_GEMV=1</code>, <code>SGLANG_ENABLE_FUSED_KDA_OUTPUT_QUANT=1</code>): 251.2 output tokens/s</li>
+<li>4 × GB300: 180.0 tokens/s, TPOT 5.14 ms, acceptance 2.59</li>
+</ul>
+<p>MTP acceptance length was 2.61 on random tokens and 2.13 on 30 real-text prompts. I would size against the real-text number. There are no published concurrency curves yet beyond a reproduction command for a 32-concurrent run, so anyone planning a multi-tenant deployment will need to measure.</p>
+<h2>Where the hybrid makes serving harder</h2>
+<p>A plain KV cache is easy to prefix-cache: you hash blocks of tokens and reuse matching blocks. A recurrent state does not work that way. It is a single summary of everything before it, so you can only reuse it at positions where you saved a snapshot. Both engines handle this with hybrid-specific settings:</p>
+<ul>
+<li>vLLM runs the model from a branch with <code>--mamba-cache-mode align</code>, alongside <code>--enable-prefix-caching</code>, so state checkpoints line up with cache block boundaries.</li>
+<li>SGLang's multi-turn preset combines <code>--mamba-radix-cache-strategy extra_buffer</code>, <code>--chunked-prefill-size 4096</code> and <code>SGLANG_SPLIT_PREFILL_AT_MAMBA_FORK=1</code>, which caches the state both at the shared prefix fork and at the tail of each turn. In the cookbook's measured workload that saved about 576 tokens of prefill per later turn.</li>
+<li>SGLang's HiCache with Mooncake as an L3 store restored 5,952 of 6,000 tokens on every TP rank in their test, using a setting called <code>hicache_storage_pass_prefix_keys</code> for hybrid KDA prefix reuse.</li>
+</ul>
+<p>There are also explicit gaps. Prefill context parallelism is disabled because BailingKDA does not implement the sequence gather and recurrent-state handling it needs. Prefill/decode disaggregation is exposed in SGLang's playground with Mooncake transfer, and the runtime has hybrid state transfer support, but the cookbook says this model's PD deployment has not been verified. If your long-context plan depends on splitting a 200K-token prefill across nodes, that is not available today.</p>
+<p>My practical advice for anyone bringing it up: send a long prompt twice and confirm the second request reports cached tokens, then evict the cache, repeat the prompt, and confirm the answer is still correct. Hybrid state caching bugs tend to show up as quietly wrong output, not crashes.</p>
+<h2>The benchmarks, briefly</h2>
+<p>inclusionAI reports Terminal-Bench 2.1 at 81.18, SWE-bench Pro at 68.74, SWE-bench Multilingual at 88.5, SkillsBench v1.1 at 68.7, HLE at 37.44 and Terminal-Bench 4.0 at 46.03 on the model card. <a href="https://indierouter.ai/blog/ling-3-1-flash-open-weights/" target="_blank" rel="noopener noreferrer">IndieRouter's write-up</a> walks through the comparison chart against GPT-5.6 Sol, Claude Opus 5, Kimi K3, GLM 5.3 and DeepSeek-V4.1-Flash, where Ling lands first on HealthBench Professional and FrontierSWE and second on most of the rest. These are vendor numbers, and some agentic scores were run through LingCode, inclusionAI's own unreleased harness built on the open-source agent Pi. That makes those panels a comparison of model plus harness. I would wait for independent runs before ranking it.</p>
+<h2>Why I think this one matters</h2>
+<p>The interesting part of Ling-3.1-flash is not that it scores near the closed frontier at 25B active. It is that a 560B open model under an MIT license commits seven of every eight layers to linear attention, ships FP8 weights that fit one eight-GPU node, and arrives with day-zero engine support that already handles the hard part of caching recurrent state. The remaining gaps are specific and documented: context-parallel prefill, verified PD disaggregation, and the mismatch between a 1M-token card and a 262K config.</p>
+<p>If you are running long agent sessions on your own hardware, this is the model I would benchmark against a pure-attention MoE of similar size, at your real context lengths, with the cache settings above turned on.</p>
+<p><strong>Related reading:</strong> <a href="/muse-spark-open-latent-moe-hybrid-attention.html">Muse Spark Open: latent MoE and hybrid attention</a>, <a href="/nemotron-3-5-super-vl-bolt-hybrid-moe.html">Nemotron 3.5 Super VL and Bolt</a>, <a href="/replayssm-hybrid-model-decode.html">ReplaySSM and hybrid-model decode</a>, <a href="/deepseek-v4-1-flash.html">DeepSeek V4.1 Flash</a></p>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
