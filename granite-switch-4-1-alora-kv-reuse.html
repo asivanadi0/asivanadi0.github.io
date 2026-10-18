@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Granite Switch 4.1: Three Models' Worth of Jobs on One KV Cache — Anpoo Sivanadi</title>
+  <meta name="description" content="IBM shipped Granite Switch 4.1 this week in 8B and 30B sizes, Apache 2.0." />
+  <link rel="canonical" href="https://asivanadi0.github.io/granite-switch-4-1-alora-kv-reuse.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Granite Switch 4.1: Three Models' Worth of Jobs on One KV Cache — Anpoo Sivanadi" />
+  <meta property="og:description" content="IBM shipped Granite Switch 4.1 this week in 8B and 30B sizes, Apache 2.0." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/granite-switch-4-1-alora-kv-reuse.html" />
+  <meta property="article:published_time" content="2026-10-17T18:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Granite Switch 4.1: Three Models' Worth of Jobs on One KV Cache</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-17T18:00:00-07:00">17 October 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>IBM shipped <a href="https://huggingface.co/blog/ibm-granite/granite-switch-4-1" target="_blank" rel="noopener noreferrer">Granite Switch 4.1</a> this week in 8B and 30B sizes, Apache 2.0. The pitch is one endpoint that handles chat, a yes/no safety judge, a multiple-choice "decision" classifier, and speech-to-text. Plenty of stacks already do that with four deployments. What caught my attention is how this one does it with one checkpoint and, more importantly, one KV cache, and what that means for the prefill bill in an agent loop.</p>
+<p>I spent the afternoon reading the model card, the composed config, and the design docs in the <a href="https://github.com/generative-computing/granite-switch" target="_blank" rel="noopener noreferrer">granite-switch repo</a>. The idea is good. A few of the limits are the kind you only find by reading source, so I'll cover those too.</p>
+<h2>What's in the checkpoint</h2>
+<p>From the <a href="https://huggingface.co/ibm-granite/granite-switch-4.1-30b" target="_blank" rel="noopener noreferrer">30B model card</a>, its <code>BUILD.md</code>, and <code>config.json</code>:</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Granite Switch 4.1 30B</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Base model</td>
+<td><code>granite-4.1-30b</code>, dense decoder, 64 layers, hidden 4096, 32 query heads, 8 KV heads (GQA), 128K context</td>
+</tr>
+<tr>
+<td>Adapters</td>
+<td><code>guardian-core</code> (aLoRA, rank 16, attention projections only) and <code>decision</code> (aLoRA, rank 64, attention plus MLP)</td>
+</tr>
+<tr>
+<td>Speech</td>
+<td><code>granite-speech-5.0-470m-turboctc</code>, a 470M-parameter English CTC encoder</td>
+</tr>
+<tr>
+<td>Parameters</td>
+<td>28.87B base, 29.99B composed, +3.89%</td>
+</tr>
+<tr>
+<td>Weights on disk</td>
+<td>about 60 GB in BF16</td>
+</tr>
+<tr>
+<td>Serving</td>
+<td>Transformers, or vLLM through a plugin pinned to <code>&gt;=0.26.0, &lt;0.28.0</code></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The 8B has the same adapter and speech setup on an 8B base. There are also "preview" checkpoints at 3B, 8B, and 30B that pack the full Granite Libraries adapter set without audio.</p>
+<p>So the memory story is simple. You pay for a 30B model plus about 1.1B of adapter weights and a small speech encoder, instead of a chat model, a separate guard model, and a separate ASR box.</p>
+<h2>Why the KV cache is shared</h2>
+<p>A normal LoRA changes the Q, K, and V projections for every token in the request. That means a KV block computed under adapter A isn't valid for adapter B or for the base model, and vLLM's prefix cache knows it: the LoRA name goes into the block hash. Switch adapters on the same 16K-token context and you prefill the whole thing again.</p>
+<p>An activated LoRA (aLoRA, from <a href="https://neurips.cc/virtual/2025/loc/san-diego/poster/117964" target="_blank" rel="noopener noreferrer">IBM's NeurIPS 2025 paper</a>) only applies its weights to tokens after an invocation point. Everything before that point runs on the frozen base weights, so its KV is bit-for-bit what the base model would have produced. The adapter reads it and adds its own tokens on top.</p>
+<p>Granite Switch moves the selection inside the model. A control token like <code>&lt;|decision|&gt;</code> sits in the token stream, and a small "switch" layer, built from two single-head attention calls with no learned router, turns it into a per-token adapter index that every decoder layer reads. The repo's <a href="https://github.com/generative-computing/granite-switch/blob/main/docs/MULTISWITCH_EXPLAINED.md" target="_blank" rel="noopener noreferrer">MultiSwitch doc</a> spells out the consequence: vLLM hashes a block from its parent hash, its token IDs, and some extra keys like the LoRA name, and Granite Switch sets none of those extra keys. Two requests with the same token prefix share blocks, whichever adapter comes later. Since routing is computed from those same tokens, a reused block is always what recomputing would have given you.</p>
+<p>That's the whole trick. It isn't a new cache. It's arranging things so the cache vLLM already has can do its job.</p>
+<h2>What that saves, roughly</h2>
+<p>IBM's repo shows a live race between an aLoRA and a standard LoRA version of the same model on the same hardware. Partway through, the aLoRA side had a 74% KV hit rate and 5 of 16 queries done, and the LoRA side had 29% and 1 of 16. The blog also says the 30B with four specialized adapters finished a five-step RAG workflow "much faster" than JEV-27B. Neither gives a hardware spec or wall-clock times, so I treat both as directional.</p>
+<p>Here's my own back-of-envelope instead. The 30B base stores 2 × 64 layers × 8 KV heads × 128 dims × 2 bytes, which is 256 KiB of KV per token in BF16. A 16K-token RAG context is about 4 GiB of KV. Re-prefilling it costs roughly 2 × 29B × 16K ≈ 0.95 PFLOP for the weights alone, plus a few hundred TFLOP for attention at that length. On one H100 at realistic utilization that's a couple of seconds. If an agent step asks a guard question and two decision questions about the same context, a per-request LoRA setup pays that three extra times. With aLoRA, each question costs a few dozen new tokens of prefill plus one decode step. These are my estimates, not IBM's numbers, but the order of magnitude is what makes the design worth looking at.</p>
+<h2>The kernels matter as much as the cache</h2>
+<p>The other half is a new LoRA kernel path IBM calls <a href="https://github.com/generative-computing/granite-switch/blob/main/docs/SWITCH_KERNELS.md" target="_blank" rel="noopener noreferrer">SWITCH</a>. vLLM's Punica path runs three launches per wrapped projection (base GEMM, shrink, expand) and sizes every adapter slot to the engine-wide <code>max_lora_rank</code>. SWITCH stacks the base weight and every adapter's A matrix into one GEMM, then runs one Triton kernel that applies each token's own B matrix in place, at that adapter's own rank.</p>
+<p>Their numbers, on Granite 4.1 3B, 1× H100, BF16, batch 32, vLLM 0.22.1, 512-token prompts and 128 output tokens:</p>
+<div class="table-wrap" role="region" aria-label="Table 2" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Adapter mix</th>
+<th>SWITCH vs Punica, decode</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>All rank 32, 1 adapter</td>
+<td>1.21×</td>
+</tr>
+<tr>
+<td>All rank 32, 12 adapters</td>
+<td>1.38×</td>
+</tr>
+<tr>
+<td>12 × rank 32 + 1 × rank 128</td>
+<td>up to 2.5×</td>
+</tr>
+<tr>
+<td>12 × rank 32 + 1 × rank 512</td>
+<td>up to 5.9×</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The rank-512 row is the one to remember. Adding one big adapter cut Punica from 2,521 to 493 tok/s, an 80% drop, because every request got computed at rank-512 width. SWITCH went from 3,472 to 2,753 tok/s, since only the tokens using that adapter paid for it. At 8B the gains shrink to 1.11–1.32× with balanced ranks and 1.26–1.99× with one rank-128 adapter.</p>
+<p>There's a cost: with no adapter active, SWITCH runs about 5–10% slower than plain vLLM at 8B, because it runs as one CUDA graph while vLLM swaps to a no-LoRA graph. IBM says a two-graph version would close that. For a deployment where most traffic is plain chat, that idle tax is real and you should measure it.</p>
+<h2>What I'd check before running it</h2>
+<p><strong>Don't turn on an FP8 KV cache.</strong> The switch layer pushes a <code>-1e9</code> mask constant and memory keys scaled by 28 through the paged KV cache. Both blow past FP8 E4M3's maximum of about 448. The doc says <code>--kv-cache-dtype fp8</code> would wreck routing and nothing currently rejects the flag. If your fleet sets FP8 KV by default, this checkpoint needs an exception.</p>
+<p><strong>There's a ceiling of 188 control tokens per request in BF16.</strong> The counting head's signal is <code>1/(1+n)</code> stored in the KV dtype, and BF16 can't tell 189 from 190 apart. At 190 control tokens two adapter spans collide and tokens get routed to the wrong adapter with no error. The <code>Conversation</code> helper re-prefills before that point, but a client that posts token IDs straight to <code>/v1/completions</code> never goes through it. Long agent sessions that keep every turn's control token are the ones that can hit this.</p>
+<p><strong>Chat completions can quietly lose your cache hits.</strong> <code>/v1/chat/completions</code> re-renders the transcript on the server, and the template emits only the current turn's control token. The previous turn's token disappears, the prefix stops matching there, and everything after it gets prefilled again. To keep multi-turn reuse, the repo says to send token IDs to <code>/v1/completions</code> through its <code>Conversation</code> API. A falling cache-hit rate is the only symptom, so put it on a dashboard.</p>
+<p><strong>The vLLM pin is old.</strong> The card wants vLLM below 0.28, and vLLM 0.31 is already out. If you run a shared vLLM image across models, this one probably needs its own.</p>
+<p><strong>The speech path is a cascade, not a fused model.</strong> The ASR encoder isn't trained jointly with the LLM, outputs lowercase unpunctuated English, and a mistranscription feeds the guard and decision adapters as if it were what the user said. Fine for a demo, worth a test set before anything that matters.</p>
+<p><strong>The decision numbers are modest.</strong> The <code>decision</code> adapter scores 50.1 overall on the public Decision Index fast subset (1,068 rows), with Tools at 76.5 and Arts at 26.4, and local and hosted serving agree within about 0.6 points. IBM's case is that cheap specialist adapters beside one generalist beat a single big generalist on targeted tasks, and the shared cache is what makes stacking them cheap. That's plausible, but check it on your own labels.</p>
+<h2>Where this fits</h2>
+<p>Most agent stacks I see call a guard model, a router or classifier, and a main model over the same context, often as separate services that each prefill it again. Granite Switch is a clean, open example of collapsing those into one model whose cache key is just the tokens. The design generalizes. The specific checkpoint has sharp edges around KV dtype, control-token counts, and API choice that you only find by reading the docs closely.</p>
+<p>If you try it, the cheapest experiment is IBM's <a href="https://colab.research.google.com/github/generative-computing/granite-switch/blob/main/tutorials/notebooks/alora_vs_lora_race.ipynb" target="_blank" rel="noopener noreferrer">aLoRA vs LoRA race notebook</a>, then one of your own multi-step flows with vLLM's prefix-cache hit rate exported next to TTFT.</p>
+<p>Related reading on this site: <a href="/jev-27b.html">JEV-27B</a>, <a href="/vllm-nixl-push-bidirectional-kv-transfer.html">vLLM's two new KV transfer modes</a>, <a href="/vllm-0-31-fast-restart.html">vLLM 0.31 fast restart</a>, and <a href="/lightbits-inferra-kv-cache-prefetch.html">Lightbits Inferra KV prefetch</a>.</p>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
