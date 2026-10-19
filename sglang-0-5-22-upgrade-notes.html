@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SGLang 0.5.22 Upgrade Notes: Flags That Changed Meaning — Anpoo Sivanadi</title>
+  <meta name="description" content="SGLang v0.5.22 was published at 02:55 UTC on October 19, 2026, which was 7:55 PM PT on October 18." />
+  <link rel="canonical" href="https://asivanadi0.github.io/sglang-0-5-22-upgrade-notes.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="SGLang 0.5.22 Upgrade Notes: Flags That Changed Meaning — Anpoo Sivanadi" />
+  <meta property="og:description" content="SGLang v0.5.22 was published at 02:55 UTC on October 19, 2026, which was 7:55 PM PT on October 18." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/sglang-0-5-22-upgrade-notes.html" />
+  <meta property="article:published_time" content="2026-10-19T06:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>SGLang 0.5.22 Upgrade Notes: Flags That Changed Meaning</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-19T06:00:00-07:00">19 October 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>SGLang <a href="https://github.com/sgl-project/sglang/releases/tag/v0.5.22" target="_blank" rel="noopener noreferrer">v0.5.22</a> was published at 02:55 UTC on October 19, 2026, which was 7:55 PM PT on October 18. The notes count 950 PRs from 245 contributors. The headline list is mostly model speedups: DeepSeek-V4.1 on H200, Qwen3.8-Flash-Next on B200, MiMo with DFlash on B300, and a new weight loader.</p>
+<p>Those are worth reading, and I'll get to the ones that hold up. But the part of this release I'd spend time on before rolling a new image is shorter and less exciting. A few launch flags now mean something different, one flag's encoding was inverted, a cache class you may have depended on is gone, and the install can quietly give you an old version. None of these show up as a crash in every configuration. Some of them show up as a server that starts fine and behaves differently.</p>
+<h2>1. <code>--dp-size</code> now means replicas, and nothing else</h2>
+<p>Before this release, <code>--dp-size</code> had two meanings. With <code>--enable-dp-attention</code> it counted attention data-parallel groups inside the tensor-parallel group. Without it, it counted full model replicas. You had to read both flags to know which one you had.</p>
+<p><a href="https://github.com/sgl-project/sglang/pull/41818" target="_blank" rel="noopener noreferrer">PR #41818</a> splits them. <code>--attn-dp-size N</code> (alias <code>--attention-data-parallel-size</code>) now sets attention DP, and <code>--dp-size</code> counts replicas only. <code>--enable-dp-attention</code> is deprecated. The old spelling <code>--dp-size N --enable-dp-attention</code> still resolves to <code>--attn-dp-size N --dp-size 1</code> and prints a warning, so existing launch scripts keep working. Two things are now rejected at startup: combining replicas with attention DP, and passing both the old and new spellings.</p>
+<p>The PR checked that the rename is a no-op on outputs. On H200, DeepSeek-V2-Lite at <code>--tp 4 --attn-dp-size 4 --ep-size 4</code> scored 0.386 on a 300-question GSM8K slice, the same as the old spelling. Output throughput was 5,883 tok/s against 6,069 on the base, inside the run-to-run range of 5,626 to 6,456.</p>
+<p>Two details matter for anything that reads server state. <code>/server_info</code> now reports <code>attn_dp_size</code> alongside <code>dp_size</code>, and the gateway counts DP ranks as <code>dp_size * attn_dp_size</code>. If you have dashboards or autoscalers keyed on <code>dp_size</code> from <code>/server_info</code>, a server launched with the new flag will report <code>dp_size=1</code>. Wire formats such as KV-event descriptors and PD prefill server info keep the <code>dp_size</code> key with the old meaning, the total DP rank count. Under DeepSeek context parallelism, <code>--dp-size N</code> still means attention DP, warns, and will be rejected after December 31, 2026 (<a href="https://github.com/sgl-project/sglang/pull/42348" target="_blank" rel="noopener noreferrer">PR #42348</a>).</p>
+<h2>2. The decode host-receive threshold flipped</h2>
+<p><code>--disaggregation-decode-host-receive-threshold</code> is a fraction of device token usage. Once decode reaches it, incoming KV goes into the host retraction pool instead of GPU memory. The old encoding used <code>0</code> both as the default and as "off", which left no way to say "always receive on host" and read backwards for a threshold.</p>
+<p><a href="https://github.com/sgl-project/sglang/pull/43407" target="_blank" rel="noopener noreferrer">PR #43407</a> makes it a plain threshold. <code>1</code> is the new default and means off. <code>0</code> means always receive on host. Values in between kick in at that usage fraction. The default behavior hasn't changed, but if your PD config passes <code>0</code> explicitly to turn the feature off, after the upgrade it turns it fully on. That's the one change in this release I'd grep every deployment manifest for.</p>
+<h2>3. <code>ChunkCache</code> is gone, and so is a prefill graph backend</h2>
+<p>With <code>--disable-radix-cache</code>, full-attention, hybrid-SWA and Mamba models now run <code>UnifiedRadixCache</code> in disabled mode, and pure-SWA models run <code>PureSWARadixCache</code> (<a href="https://github.com/sgl-project/sglang/pull/43198" target="_blank" rel="noopener noreferrer">PR #43198</a> and siblings). Streaming sessions now start only on <code>UnifiedRadixCache</code>. Pure-SWA, FlexKV and plugin tree caches fail at startup with a "not verified" error (<a href="https://github.com/sgl-project/sglang/pull/42295" target="_blank" rel="noopener noreferrer">PR #42295</a>). If you run streaming sessions on one of those, this upgrade stops the server from starting, which is at least loud.</p>
+<p>Separately, <code>--cuda-graph-backend-prefill tc_piecewise</code> and any <code>tc_compiler</code> setting now raise an error (<a href="https://github.com/sgl-project/sglang/pull/42287" target="_blank" rel="noopener noreferrer">PR #42287</a>). CUDA keeps <code>breakable</code> as the default prefill graph backend.</p>
+<h2>4. Python 3.10 doesn't fail, it just stops upgrading</h2>
+<p><a href="https://github.com/sgl-project/sglang/pull/43021" target="_blank" rel="noopener noreferrer">PR #43021</a> sets <code>requires-python = "&gt;=3.11"</code>. The release note is careful about the failure mode: on Python 3.10, <code>pip install sglang</code> does not error. It resolves to the last release that supported 3.10. A CI job that builds on the Ubuntu 22.04 system Python will keep producing images, and they'll keep running 0.5.21. The official CUDA image already uses uv-managed Python 3.12, so this mostly bites custom images. I'd add a version assertion after install rather than trust the pin.</p>
+<p>The same release moves CUDA builds from PyTorch 2.13.0 to 2.14.1, FlashInfer to 0.7.1, and Transformers to 5.19.0. If you build your own image with pinned wheels, those all move together.</p>
+<h2>5. Small API and security changes</h2>
+<p>Three OpenAI-compatible response changes: <code>tool_choice: "none"</code> no longer shows tool schemas to DeepSeek models (<a href="https://github.com/sgl-project/sglang/pull/43006" target="_blank" rel="noopener noreferrer">#43006</a>), an absent <code>tool_calls</code> field is omitted instead of returned as <code>null</code> (<a href="https://github.com/sgl-project/sglang/pull/43027" target="_blank" rel="noopener noreferrer">#43027</a>), and a stream keeps one <code>created</code> timestamp for its whole life (<a href="https://github.com/sgl-project/sglang/pull/43026" target="_blank" rel="noopener noreferrer">#43026</a>). The <code>null</code> change is the one that breaks strict client parsers.</p>
+<p>On security, <a href="https://github.com/sgl-project/sglang/pull/41322" target="_blank" rel="noopener noreferrer">PR #41322</a> adds admin auth to <code>/load_lora_adapter_from_tensors</code> and <code>/set_trace_level</code>. On a server started with <code>--admin-api-key</code> and no <code>--api-key</code>, both routes previously accepted unauthenticated requests. The PR notes that the LoRA route fix had landed once before, in August, and was lost when that squash commit diverged from <code>main</code>. If you run that key combination on a build without this fix, you have an unauthenticated endpoint that loads tensors. That alone is a reason to upgrade.</p>
+<p>There's also a correctness fix worth knowing about: hybrid linear models could resume from the wrong Mamba state when speculative decoding and structured output were used together (<a href="https://github.com/sgl-project/sglang/pull/43029" target="_blank" rel="noopener noreferrer">#43029</a>). The release credits Baseten for finding it. If you've seen odd outputs from a hybrid model under JSON mode with speculation on, this is a candidate.</p>
+<h2>The performance items, with their fine print</h2>
+<p><strong>Prefill-complete decode allocation.</strong> <a href="https://github.com/sgl-project/sglang/pull/40703" target="_blank" rel="noopener noreferrer">PR #40703</a> adds an opt-in <code>--disaggregation-decode-allocation-policy prefill_complete</code>. In PD serving, decode normally reserves a request's KV slots while its prefill is still running, so a long prefill holds decode capacity it can't use yet. The new policy waits until prefill finishes. The PR's test used GLM-5.2-NVFP4 with MTP on 12 Rubin GPUs, decode KV deliberately capped at 163,840 tokens per rank, and a mix of 131,072-token and 4,096-token prompts.</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Mixed workload, mean of two runs</th>
+<th><code>early</code></th>
+<th><code>prefill_complete</code></th>
+<th>Change</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Output tokens/s</td>
+<td>458.88 / 435.98</td>
+<td>616.39 / 518.39</td>
+<td>+26.81%</td>
+</tr>
+<tr>
+<td>TTFT p95 (s)</td>
+<td>71.22 / 79.97</td>
+<td>36.03 / 41.27</td>
+<td>-48.87%</td>
+</tr>
+<tr>
+<td>Mean TPOT (ms)</td>
+<td>4.108 / 3.869</td>
+<td>4.204 / 3.943</td>
+<td>+2.13%</td>
+</tr>
+<tr>
+<td>ITL p99 (ms)</td>
+<td>34.40 / 12.03</td>
+<td>46.40 / 43.10</td>
+<td>+92.77%</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The release note's "27% more throughput and half the p95 TTFT" is accurate, but the ITL p99 row is the cost, and a Qwen3-8B comparison showed no clear gain. It also only supports Mooncake, attention TP1/CP1/PP1 per rank, and must be enabled on both roles after every worker is upgraded. Treat it as a tool for capacity-pressured long-prompt mixes, not a default.</p>
+<p><strong>InstantTensor loader.</strong> <code>--load-format instanttensor</code> (<a href="https://github.com/sgl-project/sglang/pull/40453" target="_blank" rel="noopener noreferrer">PR #40453</a>) is where the "10x faster loading" line comes from. On 50 GB/s storage, DeepSeek-R1 on 8x H200 loaded in 15.3 s against 160 s for plain Safetensors, 10.5x. Qwen3-30B-A3B on one H200 went from 57.4 s to 1.77 s. From tmpfs, the DeepSeek-R1 gain drops to 1.87x, because the baseline is already fast. So the win is real when your weights come off network or NVMe storage, which is the usual cold-start case. The numbers measure weight loading only, not time to ready.</p>
+<p><strong>DeepSeek-V4.1 Flash on Hopper.</strong> <a href="https://github.com/sgl-project/sglang/pull/41251" target="_blank" rel="noopener noreferrer">PR #41251</a> tunes group32 GEMMs, the paged indexer and Marlin MoE paths. On 8x H200 at 8,192 in / 1,024 out, output throughput per GPU went up 2.06x to 2.35x across concurrency 1 to 64, with TTFT 1.34x to 1.57x faster. GSM8K and AIME24 counts stayed within a few problems of main. The Blackwell part of the same PR is a 1.7% to 2.8% prefill gain, and the author says plainly it isn't a proven speedup.</p>
+<p><strong>GLM-5.3 decode context parallelism with MTP.</strong> <a href="https://github.com/sgl-project/sglang/pull/43735" target="_blank" rel="noopener noreferrer">PR #43735</a> is the "up to 2.1x" item. On 8x B300 with FP8, DCP8 with MTP generated 1,784 tok/s on AIME26 against 838 for DCP8 alone, which is the 2.1x. Against plain TP8 at 1,140 tok/s, the gain is about 1.56x, and DCP2 with MTP was faster still at 1,876. The point of DCP is fitting longer contexts, so compare against the layout you'd otherwise run. The DSA override also rejects HiSparse, HiCache, PD disaggregation and tree drafting.</p>
+<h2>My upgrade order</h2>
+<ol>
+<li>Assert the installed SGLang version in your image build, and move off Python 3.10.</li>
+<li>Grep manifests for <code>--disaggregation-decode-host-receive-threshold 0</code> and change it to <code>1</code>.</li>
+<li>Move <code>--dp-size N --enable-dp-attention</code> to <code>--attn-dp-size N</code>, and fix anything that reads <code>dp_size</code> from <code>/server_info</code>.</li>
+<li>Check for streaming sessions on non-unified caches and for <code>tc_piecewise</code>.</li>
+<li>Test strict OpenAI clients against the missing <code>tool_calls</code> field.</li>
+<li>Try <code>instanttensor</code> and <code>prefill_complete</code> as separate changes, each with its own benchmark.</li>
+</ol>
+<h2>Sources</h2>
+<ul>
+<li><a href="https://github.com/sgl-project/sglang/releases/tag/v0.5.22" target="_blank" rel="noopener noreferrer">SGLang v0.5.22 release notes</a></li>
+<li><a href="https://github.com/sgl-project/sglang/pull/41818" target="_blank" rel="noopener noreferrer">PR #41818: --attn-dp-size</a></li>
+<li><a href="https://github.com/sgl-project/sglang/pull/42348" target="_blank" rel="noopener noreferrer">PR #42348: DeepSeek CP dp-size deprecation</a></li>
+<li><a href="https://github.com/sgl-project/sglang/pull/43407" target="_blank" rel="noopener noreferrer">PR #43407: host-receive threshold encoding</a></li>
+<li><a href="https://github.com/sgl-project/sglang/pull/43198" target="_blank" rel="noopener noreferrer">PR #43198: PureSWARadixCache replaces ChunkCache for pure-SWA</a></li>
+<li><a href="https://github.com/sgl-project/sglang/pull/42295" target="_blank" rel="noopener noreferrer">PR #42295: streaming sessions on UnifiedRadixCache</a></li>
+<li><a href="https://github.com/sgl-project/sglang/pull/42287" target="_blank" rel="noopener noreferrer">PR #42287: tc_piecewise removed</a></li>
+<li><a href="https://github.com/sgl-project/sglang/pull/43021" target="_blank" rel="noopener noreferrer">PR #43021: Python 3.11 minimum</a></li>
+<li><a href="https://github.com/sgl-project/sglang/pull/41322" target="_blank" rel="noopener noreferrer">PR #41322: admin auth on two routes</a></li>
+<li><a href="https://github.com/sgl-project/sglang/pull/43029" target="_blank" rel="noopener noreferrer">PR #43029: Mamba state with spec decoding</a></li>
+<li><a href="https://github.com/sgl-project/sglang/pull/40703" target="_blank" rel="noopener noreferrer">PR #40703: prefill-complete decode allocation</a></li>
+<li><a href="https://github.com/sgl-project/sglang/pull/40453" target="_blank" rel="noopener noreferrer">PR #40453: InstantTensor loader</a></li>
+<li><a href="https://github.com/sgl-project/sglang/pull/41251" target="_blank" rel="noopener noreferrer">PR #41251: DeepSeek-V4.1 Flash Hopper paths</a></li>
+<li><a href="https://github.com/sgl-project/sglang/pull/43735" target="_blank" rel="noopener noreferrer">PR #43735: DCP for GLM-5.2 and GLM-5.3</a></li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
