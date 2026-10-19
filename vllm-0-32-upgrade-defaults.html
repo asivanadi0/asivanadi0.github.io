@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>vLLM 0.32 Upgrade Notes: The Defaults That Changed Under You — Anpoo Sivanadi</title>
+  <meta name="description" content="vLLM v0.32.0 was published at 06:50 UTC on October 18, 2026, which was 11:50 PM PT on October 17." />
+  <link rel="canonical" href="https://asivanadi0.github.io/vllm-0-32-upgrade-defaults.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="vLLM 0.32 Upgrade Notes: The Defaults That Changed Under You — Anpoo Sivanadi" />
+  <meta property="og:description" content="vLLM v0.32.0 was published at 06:50 UTC on October 18, 2026, which was 11:50 PM PT on October 17." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/vllm-0-32-upgrade-defaults.html" />
+  <meta property="article:published_time" content="2026-10-19T13:30:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>vLLM 0.32 Upgrade Notes: The Defaults That Changed Under You</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-19T13:30:00-07:00">19 October 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>vLLM <a href="https://github.com/vllm-project/vllm/releases/tag/v0.32.0" target="_blank" rel="noopener noreferrer">v0.32.0</a> was published at 06:50 UTC on October 18, 2026, which was 11:50 PM PT on October 17. The release notes count 814 commits from 363 contributors, 121 of them new. Most of the headline space goes to a new structured-decision endpoint and per-model kernel work for GLM-5.3, DeepSeek-V4.1, Kimi-K3 and Qwen3.8-Flash-Next.</p>
+<p>I'm not going to cover those. When I upgrade a serving fleet, the risk is rarely the new feature I opt into. It's the default that changed and the request that used to fail and now succeeds, or the reverse. This post goes through the 0.32 changes I'd check before rolling the new image, with the numbers taken from the PRs themselves. Any estimate that is mine is labeled as mine.</p>
+<h2>1. <code>max_tokens</code> is no longer reserved from the context window</h2>
+<p>This is the change most likely to show up in your dashboards. Before 0.32, vLLM treated the client's <code>max_tokens</code> as a hard reservation: the largest prompt it would accept was the context length minus <code>max_tokens</code>. <a href="https://github.com/vllm-project/vllm/pull/57035" target="_blank" rel="noopener noreferrer">PR #57035</a> changes that so <code>max_tokens</code> is only an upper bound on output, which is how the OpenAI API spec describes it.</p>
+<p>The PR's own example: a 128,000-token context, a 62,466-token prompt, and <code>max_tokens: 65535</code>. Before, the request was rejected, because 62,466 is one token more than 128,000 minus 65,535. Now the prompt is accepted and the sampling limit is clamped to 65,534. Coding agents that always send a large <code>max_tokens</code> were hitting exactly this.</p>
+<p>What it means operationally, in my reading: long-prompt requests that used to bounce with a 400 will now be admitted. If your error rate drops after the upgrade, that's probably why. Those requests now take KV cache and prefill time they never got before. If a client was effectively being throttled by those rejections, expect more long prefills and possibly more preemption under load. Genuine overflow, where the prompt alone exceeds the context, is still rejected.</p>
+<h2>2. CORS no longer allows every origin</h2>
+<p><a href="https://github.com/vllm-project/vllm/pull/61009" target="_blank" rel="noopener noreferrer">PR #61009</a> changes the default allowed origins from <code>["*"]</code> to an empty list in both the Python and Rust frontends. A browser script on another origin no longer gets an <code>Access-Control-Allow-Origin</code> header back, and JSON preflight requests fail.</p>
+<p>Server-to-server clients don't care about CORS, so most API traffic is unaffected. What breaks is any web UI that calls the vLLM endpoint directly from the browser. The fix is <code>--allowed-origins</code> with your real origins. The PR also points out that CORS is a browser control, not authentication, so a reachable server without an API key is still a reachable server.</p>
+<h2>3. NVFP4 KV cache now runs on Ampere, Hopper and consumer Blackwell, with an accuracy cost on small models</h2>
+<p><code>--kv-cache-dtype nvfp4</code> used to work only on SM100. <a href="https://github.com/vllm-project/vllm/pull/46963" target="_blank" rel="noopener noreferrer">PR #46963</a> adds SM8x and SM12x through FlashInfer's fa2 path, with no new CUDA kernel, and <a href="https://github.com/vllm-project/vllm/pull/60620" target="_blank" rel="noopener noreferrer">PR #60620</a> adds SM90 the same way. SM90 has no FP4 conversion instructions, so FlashInfer dequantizes in software there, as it does on SM8x.</p>
+<p>The capacity gain is real. On the PR author's sm_80 host, KV capacity went from 1,446,932 tokens to 4,805,405, which is 3.32 times as many. My own back-of-envelope figure for the ceiling: NVFP4 stores 4 bits per element plus one FP8 scale per 16 elements, about 4.5 bits against 16 for BF16, or roughly 3.56 times the density. The measured 3.32 times is close to that.</p>
+<p>The accuracy numbers in the same PR are the part I'd read twice:</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Model (GSM8K, FlashInfer backend)</th>
+<th style="text-align: right;">BF16 KV</th>
+<th style="text-align: right;">NVFP4 KV</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Qwen3-0.6B, all 1,319 questions</td>
+<td style="text-align: right;">0.384</td>
+<td style="text-align: right;">0.174</td>
+</tr>
+<tr>
+<td>Qwen3-4B, 100 questions, two runs</td>
+<td style="text-align: right;">0.920, 0.910</td>
+<td style="text-align: right;">0.880, 0.880</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>On a long-context retrieval test (MRCR on Qwen3.5-4B, prompts of 16,626 to 33,231 tokens, 30 samples), the overall match ratio barely moved, 0.8523 to 0.8452, but the two-needle score fell from 0.9949 to 0.8951. Those MRCR numbers came from an earlier revision of the PR. The 0.6B model losing more than half its GSM8K score is a strong hint that small models with few KV heads have little room for 4-bit KV.</p>
+<p>Two combinations are refused at backend selection on these GPUs, before the weights load: head size 64, where fa2 prefill misreads NVFP4 by 10 to 15 percent, and attention sinks. The PR says <code>openai/gpt-oss-20b</code> with an NVFP4 cache stops in 45 seconds with the head-size reason. The SM90 path was checked against FlashInfer source, not run on Hopper hardware, according to that PR. My takeaway: NVFP4 KV on an H100 or an RTX card is now worth an experiment, but I'd run my own evals on my own model before trusting it, and I wouldn't use it on anything around 1B parameters.</p>
+<h2>4. GLM-5.x quietly switches to FP8 KV on SM100</h2>
+<p>If you serve GLM-5.3 on B200-class GPUs with <code>--kv-cache-dtype auto</code>, you now get an FP8 KV cache by default (<a href="https://github.com/vllm-project/vllm/pull/60140" target="_blank" rel="noopener noreferrer">PR #60140</a>). In the PR's benchmark (TP4, MTP with five speculative tokens, 8,000 input and 1,000 output tokens), throughput rose 2.3 to 5.5 percent and KV memory at a 458,880-token budget dropped from 40.13 GiB to 20.69 GiB per rank. TTFT got worse by 6.9 to 11.1 percent. With FP8 KV, the PR reports 0.9212 on GSM8K (flexible-extract).</p>
+<p>That trade is reasonable for throughput-bound batch work. For an interactive service with a TTFT target, it's a regression you didn't ask for. Set the KV dtype explicitly if you need the old behavior.</p>
+<h2>5. API workers finally share the load</h2>
+<p>With <code>--api-server-count</code> above 1, connections used to land on whichever worker accepted first. <a href="https://github.com/vllm-project/vllm/pull/60723" target="_blank" rel="noopener noreferrer">PR #60723</a> sends each new connection to the worker with the fewest open ones. In one run on main with two data-parallel engines and eight API servers, connections per worker were 48, 15, 1, 0, 0, 0, 0, 0.</p>
+<p>The PR's results on Qwen3-0.6B with 32 input tokens and 1 output token:</p>
+<div class="table-wrap" role="region" aria-label="Table 2" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Config</th>
+<th style="text-align: right;">Concurrency</th>
+<th style="text-align: right;">Median req/s change</th>
+<th>Mean / p99 TTFT, before to after</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>DP2, 8 API servers</td>
+<td style="text-align: right;">64</td>
+<td style="text-align: right;">+85%</td>
+<td>57/81 to 30/39 ms</td>
+</tr>
+<tr>
+<td>DP2, 8 API servers</td>
+<td style="text-align: right;">1024</td>
+<td style="text-align: right;">+43%</td>
+<td>685/5014 to 427/673 ms</td>
+</tr>
+<tr>
+<td>DP1, 4 API servers</td>
+<td style="text-align: right;">256</td>
+<td style="text-align: right;">+48%</td>
+<td>171/308 to 110/200 ms</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>A one-output-token workload is about as frontend-bound as serving gets, so I'd expect much smaller gains for long generations. The p99 TTFT improvement is the number that matters more to me, because it comes from the busiest worker no longer setting the tail. The same PR measured an RL abort cycle on GB200 going from 40.0 seconds to 21.5 seconds. A single API server is unchanged, and there are no new flags.</p>
+<h2>6. Security fixes with new limits</h2>
+<p>Three advisories are fixed. The one with operational knobs is GHSA-frvg-qw88-hww9 (<a href="https://github.com/vllm-project/vllm/pull/51504" target="_blank" rel="noopener noreferrer">PR #51504</a>). A client could put unique, non-listening peer addresses in <code>kv_transfer_params</code>, and each one created three ZMQ sockets that were never cleaned up. About 340 such peers used up the ZMQ context's limit of 1,023 sockets and crashed EngineCore. The fix caps sessions with <code>VLLM_P2P_MAX_PEERS</code> (default 128), adds <code>VLLM_P2P_HANDSHAKE_TIMEOUT_S</code> (default 30) and evicts idle sessions after <code>VLLM_P2P_IDLE_TIMEOUT_S</code> (default 300). If you run P2P KV offload with more than 128 peers per engine, raise the cap before you upgrade, or new sessions will be refused.</p>
+<p>The other two cover chat-template resource exhaustion, now rendered under <code>VLLM_CHAT_TEMPLATE_RENDER_TIMEOUT</code>, and an off-by-one in the tokenizer's <code>max_token_id</code>. Untrusted images are now limited to raster formats, and JSON schemas nested more than 64 levels deep return a 400.</p>
+<h2>7. The breaking changes list</h2>
+<p>These are the ones I'd grep my deployment configs and client code for:</p>
+<ul>
+<li>Python 3.10 is dropped. The minimum is 3.11.</li>
+<li><code>transformers&gt;=5.16.1,&lt;5.20.0</code> and <code>tokenizers&gt;=0.23.2</code> are required. Pinned base images will need a bump.</li>
+<li>Cascade attention is removed (<a href="https://github.com/vllm-project/vllm/pull/61126" target="_blank" rel="noopener noreferrer">PR #61126</a>). It was off by default, so nothing changes for most setups, and the scheduler no longer scans each running request's blocks every step. <code>--disable-cascade-attn</code> still parses but only warns, and it goes away in v0.33.0.</li>
+<li><code>--mamba-cache-mode all</code> now fails validation.</li>
+<li>The torch.compile sequence-parallelism and AsyncTP passes are gone, along with <code>PassConfig.enable_sp</code> and <code>fuse_gemm_comms</code>.</li>
+<li>Responses API streaming renames the reasoning events to <code>response.content_part.added</code> and <code>response.content_part.done</code> with <code>part.type="reasoning_text"</code>. Clients that parse the old event names will silently miss reasoning output.</li>
+</ul>
+<h2>8. Startup: run <code>vllm download-kernels</code></h2>
+<p>On Hopper and newer, the worker now logs a warning when <code>flashinfer-cubin</code> or <code>flashinfer-jit-cache</code> is missing or doesn't match <code>flashinfer-python</code>, and names the fix: <code>vllm download-kernels</code> (<a href="https://github.com/vllm-project/vllm/pull/58765" target="_blank" rel="noopener noreferrer">PR #58765</a>). Unlike FlashInfer's own CLI, it handles the stale-kernel state that every FlashInfer bump leaves behind. The official CUDA Docker image already installs them. If you build your own image, add the command to the build stage so the first pod doesn't spend its startup on JIT compilation. It pairs with the <code>vllm preload</code> daemon I wrote about in <a href="/vllm-0-31-fast-restart.html">vLLM 0.31 Fast Restart</a>: <code>vllm preload --preload-autotune</code> now keeps the FlashInfer autotune table on the daemon, so the tuning pass runs once per GPU instead of once per restart (<a href="https://github.com/vllm-project/vllm/pull/60085" target="_blank" rel="noopener noreferrer">PR #60085</a>).</p>
+<h2>My upgrade order</h2>
+<ol>
+<li>Check Python, <code>transformers</code> and <code>tokenizers</code> versions in the base image.</li>
+<li>Search clients for the old Responses reasoning event names, and browser UIs that hit vLLM directly. Set <code>--allowed-origins</code> where needed.</li>
+<li>Pin <code>--kv-cache-dtype</code> explicitly on GLM-5.x if TTFT matters.</li>
+<li>Raise <code>VLLM_P2P_MAX_PEERS</code> if you use P2P KV offload at scale.</li>
+<li>Add <code>vllm download-kernels</code> to custom images.</li>
+<li>After rollout, watch the 400 rate, long-prefill volume and preemptions. The <code>max_tokens</code> change moves those numbers in ways that look like a traffic shift.</li>
+</ol>
+<p>If you want to try NVFP4 KV on Hopper, do it as a separate change with its own eval run, not as part of the upgrade.</p>
+<h2>Sources</h2>
+<ul>
+<li><a href="https://github.com/vllm-project/vllm/releases/tag/v0.32.0" target="_blank" rel="noopener noreferrer">vLLM v0.32.0 release notes</a></li>
+<li><a href="https://github.com/vllm-project/vllm/pull/57035" target="_blank" rel="noopener noreferrer">PR #57035: max_tokens as an upper bound</a></li>
+<li><a href="https://github.com/vllm-project/vllm/pull/61009" target="_blank" rel="noopener noreferrer">PR #61009: default CORS origins</a></li>
+<li><a href="https://github.com/vllm-project/vllm/pull/46963" target="_blank" rel="noopener noreferrer">PR #46963: NVFP4 KV on SM8x and SM12x</a></li>
+<li><a href="https://github.com/vllm-project/vllm/pull/60620" target="_blank" rel="noopener noreferrer">PR #60620: NVFP4 KV on SM90</a></li>
+<li><a href="https://github.com/vllm-project/vllm/pull/60140" target="_blank" rel="noopener noreferrer">PR #60140: GLM FP8 KV default</a></li>
+<li><a href="https://github.com/vllm-project/vllm/pull/60723" target="_blank" rel="noopener noreferrer">PR #60723: least-loaded API worker</a></li>
+<li><a href="https://github.com/vllm-project/vllm/pull/51504" target="_blank" rel="noopener noreferrer">PR #51504: P2P ZMQ session limits</a></li>
+<li><a href="https://github.com/vllm-project/vllm/pull/61126" target="_blank" rel="noopener noreferrer">PR #61126: cascade attention removed</a></li>
+<li><a href="https://github.com/vllm-project/vllm/pull/58765" target="_blank" rel="noopener noreferrer">PR #58765: vllm download-kernels</a></li>
+<li><a href="https://github.com/vllm-project/vllm/pull/60085" target="_blank" rel="noopener noreferrer">PR #60085: autotune preload</a></li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
