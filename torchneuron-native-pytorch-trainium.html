@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TorchNeuron Public Beta: What Changes When Trainium Becomes a Normal PyTorch Device — Anpoo Sivanadi</title>
+  <meta name="description" content="AWS opened up TorchNeuron today at PyTorch Conference North America in San Jose." />
+  <link rel="canonical" href="https://asivanadi0.github.io/torchneuron-native-pytorch-trainium.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="TorchNeuron Public Beta: What Changes When Trainium Becomes a Normal PyTorch Device — Anpoo Sivanadi" />
+  <meta property="og:description" content="AWS opened up TorchNeuron today at PyTorch Conference North America in San Jose." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/torchneuron-native-pytorch-trainium.html" />
+  <meta property="article:published_time" content="2026-10-20T06:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>TorchNeuron Public Beta: What Changes When Trainium Becomes a Normal PyTorch Device</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-20T06:00:00-07:00">20 October 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>AWS opened up <a href="https://github.com/aws-neuron/torch-neuronx" target="_blank" rel="noopener noreferrer">TorchNeuron</a> today at PyTorch Conference North America in San Jose. It is a native PyTorch backend for Trainium2 and Trainium3, Apache-2.0, and it ships as a public beta in the <a href="https://awsdocs-neuron.readthedocs-hosted.com/en/latest/release-notes/components/torchneuron.html" target="_blank" rel="noopener noreferrer">Neuron 2.33.0 release</a>. The pitch in the <a href="https://pytorch.org/blog/introducing-torchneuron-native-pytorch-backend-for-aws-trainium/" target="_blank" rel="noopener noreferrer">PyTorch blog post</a> is that <code>.to('neuron')</code> is the only change you need.</p>
+<p>I'm always a little suspicious of that sentence when it comes with new hardware. It isn't wrong. It just skips what operators care about: compile behavior, caches, shapes, and what happens when an op is missing.</p>
+<h2>What actually changed</h2>
+<p>The older <code>torch-neuronx</code> was built on PyTorch/XLA, so you wrote against <code>torch_xla</code> and <code>xm.xla_device()</code>. The new backend drops that. It registers Trainium through <code>PrivateUse1</code>, the same extension point PyTorch exposes for any out-of-tree device, so <code>torch.nn</code>, <code>torch.autocast</code>, <code>torch.distributed</code> and <code>torch.profiler</code> see a device called <code>neuron</code>. Code written against <code>torch.accelerator</code> picks it up without edits. You don't even need <code>import torch_neuronx</code>; the package registers a <code>torch.backends</code> entry point and autoloads on <code>import torch</code>.</p>
+<p>The release notes call out the break directly: code written for the XLA-based library has to be updated. The docs also say the XLA lineage (versions before 2.14) stays available under the same package name. That's the first thing I'd pin in any requirements file, because <code>torch-neuronx</code> alone no longer tells you which stack you're getting.</p>
+<h2>Install surface</h2>
+<ul>
+<li><strong>Packages:</strong> <code>torch-neuronx</code> 2.13.3.0 for PyTorch 2.13 and 2.14.3.0 for PyTorch 2.14, each with wheels for Python 3.12, 3.13 and 3.14 on Linux x86_64.</li>
+<li><strong>Install line:</strong> <code>torch-neuronx==2.14.*</code> plus <code>neuronx-cc==2.*</code> and <code>nki</code> from the Neuron pip repo, on top of the PyTorch CPU wheel. The device support all comes from the plugin.</li>
+<li><strong>System packages:</strong> the Neuron driver, runtime, collectives and tools, or a Neuron Base DLAMI that has them plus EFA.</li>
+<li><strong>OS:</strong> this is where the sources disagree. The docs release notes list Ubuntu 22.04 as end of support and 24.04 and 26.04 as supported. The <a href="https://github.com/aws-neuron/torch-neuronx/releases/tag/v2.33.0" target="_blank" rel="noopener noreferrer">GitHub v2.33.0 release</a> says this release ships wheels for 26.04 only, with 22.04 and 24.04 wheels planned for the next release and build-from-source until then. If your base image is 24.04, check before you assume a wheel exists.</li>
+</ul>
+<p>On a <code>trn2.48xlarge</code>, the quickstart shows <code>neuron-ls</code> listing 16 Neuron devices with 4 cores each and 96 GB per device, under a logical NeuronCore config of 2. PyTorch then reports 64 devices. Those values are Trn2-only; Trn3 needs its own math.</p>
+<h2>Eager mode is real, but every op is a compile</h2>
+<p>From the outside, eager behaves: control flow, prints and breakpoints all work. Underneath, each op is lowered to StableHLO, compiled to its own NEFF (Neuron Executable File Format) and queued asynchronously. A shape the compiler hasn't seen compiles on first use and is then served from cache.</p>
+<p>Two details matter in practice:</p>
+<ol>
+<li><strong>CPU fallback is quiet.</strong> An op without a Neuron implementation runs on the CPU with a warning, and the model keeps going. <code>torch_neuronx.get_fallback_ops()</code> lists what fell back. I'd check it at the end of every smoke test and fail CI if it isn't empty.</li>
+<li><strong>Adaptive eager is opt-in and can change numerics.</strong> It fuses queued ops to cut launch overhead and is enabled with <code>TORCH_NEURONX_ENABLE_CONCATENATION=1</code>. The docs say fusion can change intermediate precision, and printing a tensor forces a sync that can break a fusion boundary. So a debug print can shift your numbers slightly. Worth knowing before you chase a loss mismatch.</li>
+</ol>
+<h2>torch.compile: no Inductor, static shapes</h2>
+<p>The compile path is TorchDynamo to an FX graph, AOTAutograd for the backward, a lowering to StableHLO through a vendored <code>torch_mlir</code> importer, then <code>neuronx-cc</code> produces the NEFF. TorchInductor isn't involved, so anything tuned for Inductor (Triton configs, <code>max-autotune</code>, CUDA graph modes) doesn't carry over.</p>
+<p>The limits in this beta:</p>
+<ul>
+<li><strong>Only <code>mode="default"</code> and static shapes.</strong> You set <code>dynamic=False</code>, and each new input shape can trigger another compilation. The advice is to pad or bucket inputs. For training with fixed sequence length that's fine. For inference with variable prompts, bucketing is now your job unless a serving plugin does it for you.</li>
+<li><strong>Graph breaks work, lowering failures don't.</strong> Uncapturable code splits the graph into separately compiled segments, but a captured op the backend can't lower fails compilation by default.</li>
+<li><strong>FlexAttention is supported</strong>, and the docs suggest a mixed mode: run most of the model eager and compile hot regions like attention.</li>
+</ul>
+<h2>The compile cache is an operations problem</h2>
+<p>This is the section I'd hand to whoever owns the cluster images. Compiled NEFFs go into a content-addressed on-disk cache keyed on the lowered HLO bytes, the compiler configuration and the compiler version. A second cache holds the lowered StableHLO. The paths are <code>TORCH_NEURONX_NEFF_CACHE_DIR</code> and <code>TORCH_NEURONX_HLO_CACHE_DIR</code>, and the docs suggest pointing the NEFF cache at a shared mount such as FSx so ranks and instances can reuse artifacts.</p>
+<p>Because the compiler version is part of the key, a <code>neuronx-cc</code> bump invalidates everything. If you let <code>neuronx-cc==2.*</code> float, your first job after an image rebuild pays the full compile cost on every rank. I'd pin the compiler, version the cache directory, and warm it in CI.</p>
+<p>There's a tool for that warming: <code>torch_neuronx.compiler.compile_only()</code> or <code>TORCH_NEURONX_COMPILE_ONLY=1</code> compiles graphs without running them. On a host with no Neuron device, you set <code>NEURON_RT_FAKE_INSTANCE_TYPE</code> to the target instance type. That lets a cheap CPU box pre-populate the cache before the Trainium nodes come up, which is the most useful operator feature in the release.</p>
+<h2>Distributed: standard APIs, NeuronCore as the unit</h2>
+<p>You initialize with <code>init_process_group(backend="neuron")</code>. The c10d backend covers <code>all_reduce</code>, <code>all_gather</code>, <code>reduce_scatter</code>, <code>all_to_all</code>, <code>broadcast</code>, <code>reduce</code>, <code>gather</code>, <code>scatter</code> and <code>barrier</code>, plus <code>send</code>, <code>recv</code> and <code>batch_isend_irecv</code>. On top of that: DDP, FSDP2 (<code>fully_shard</code>), SimpleFSDP, HSDP, tensor and sequence parallelism through DTensor and <code>DeviceMesh</code>, <code>torch.distributed.pipelining</code>, and experimental context parallelism for scaled dot-product attention. Collectives run on Trainium's collective cores inside a node and over EFA between nodes.</p>
+<p>The thing that will trip up anyone porting GPU recipes is the unit of distribution. It's the NeuronCore, not the chip. The TorchTitan example in the blog trains Llama 3 8B on one <code>trn2.48xlarge</code> with <code>NEURON_RT_NUM_CORES=64</code>, <code>torchrun --nproc_per_node 64</code>, tensor parallel degree 4 and the rest sharded with SimpleFSDP. Your mesh shapes, ranks per node and memory per rank all come out of the NeuronCore count and the logical core setting, not the "8 GPUs per node" assumption baked into most configs.</p>
+<p>Streams come with a caveat: non-default streams keep ordering and event semantics but multiplex onto a single hardware queue, so they don't buy real concurrency. Errors also surface at the next sync point, not at the op that caused them.</p>
+<h2>Dtypes and gaps</h2>
+<p>BF16 is the training baseline, with FP16 and FP32 supported. <code>float64</code> runs as <code>float32</code> with a warning, which matters for anyone with FP64 reductions in a loss or a metric. FP8 and MXFP8 require Trainium3. The release notes say this release doesn't include TorchAO integration or composite MXFP8 support, and the blog says TorchAO and FP8 are in private beta for the next release.</p>
+<p>Not supported in this release: <code>torch.sparse</code>, <code>torch.func</code>, <code>torch.nested</code> and <code>torch.distributions</code>, and most of <code>torch.fft</code> falls back to the CPU. If you rely on <code>torch.func</code> for <code>vmap</code> or per-sample gradients, it won't run here yet.</p>
+<h2>How much is covered</h2>
+<p>AWS published its test methodology instead of a single compatibility number. It runs a sweep over 100,000 Hugging Face models, which it says cover 99.9% of real-world usage by download count, checking load, forward, backward, compile and which ops fell back to the CPU. It also runs PyTorch's upstream ATen, Dynamo, distributed and profiler suites. The August 2026 run produced about 154,000 test outcomes. Roughly 69,000 were skipped: about 30,000 by PyTorch's own eligibility checks (CUDA-only or CPU-only tests) and about 39,000 deliberately for Neuron. The largest group of those, about 22,000, are ops without a Neuron lowering yet.</p>
+<p>On performance, the only concrete number in the announcement is from a customer. Deepgram's CTO says that in the benchmarks they evaluated, Trainium processes about 60% more input audio seconds per dollar than their existing GPU baselines, after a multi-month port with AWS's help. That's one team's workload and pricing, not a general result.</p>
+<h2>Why this matters beyond AWS</h2>
+<p>The same conference schedule has a session on <a href="https://events.linuxfoundation.org/pytorch-conference-north-america/program/schedule/?id=1252992" target="_blank" rel="noopener noreferrer">TorchTPU</a>, Google's native PyTorch backend for TPUs, which also lowers ATen to StableHLO and is described as heading toward a public GitHub repo. When two non-NVIDIA accelerators both ship as PrivateUse1 backends with eager mode, the cost of being off CUDA moves. It shifts from rewriting your training loop to managing compile caches, static shapes and op coverage. That's work a platform team can own once, instead of every model team paying for it.</p>
+<p>What I'd do this week if I had Trainium capacity:</p>
+<ol>
+<li>Pin <code>torch-neuronx</code> to the exact 2.14.3.0 family and pin <code>neuronx-cc</code>, and confirm a wheel exists for your Ubuntu version.</li>
+<li>Run your model in eager mode and check <code>get_fallback_ops()</code> before touching <code>torch.compile</code>.</li>
+<li>Move the NEFF cache to shared storage and warm it with compile-only runs on a CPU host.</li>
+<li>Rebuild your device mesh from NeuronCore counts, not GPU counts.</li>
+<li>Bucket input shapes before measuring anything, or you'll be benchmarking the compiler.</li>
+</ol>
+<p>It's a beta, and the release notes say so. But it's the first time Trainium has looked like an ordinary PyTorch device, and the parts that aren't ordinary are documented well enough to plan around.</p>
+<h2>Sources</h2>
+<ul>
+<li><a href="https://pytorch.org/blog/introducing-torchneuron-native-pytorch-backend-for-aws-trainium/" target="_blank" rel="noopener noreferrer">PyTorch blog: Introducing TorchNeuron, a native PyTorch backend for AWS Trainium</a></li>
+<li><a href="https://awsdocs-neuron.readthedocs-hosted.com/en/latest/release-notes/components/torchneuron.html" target="_blank" rel="noopener noreferrer">AWS Neuron docs: TorchNeuron release notes (Neuron 2.33.0)</a></li>
+<li><a href="https://awsdocs-neuron.readthedocs-hosted.com/en/latest/torch/about-pytorch-neuron.html" target="_blank" rel="noopener noreferrer">AWS Neuron docs: What is TorchNeuron?</a></li>
+<li><a href="https://awsdocs-neuron.readthedocs-hosted.com/en/latest/torch/get-started/quickstart-torch-neuron.html" target="_blank" rel="noopener noreferrer">AWS Neuron docs: Quickstart, install and verify torch-neuronx</a></li>
+<li><a href="https://github.com/aws-neuron/torch-neuronx/releases/tag/v2.33.0" target="_blank" rel="noopener noreferrer">GitHub: aws-neuron/torch-neuronx v2.33.0 release</a></li>
+<li><a href="https://events.linuxfoundation.org/pytorch-conference-north-america/program/schedule/?id=1252992" target="_blank" rel="noopener noreferrer">PyTorch Conference North America 2026 schedule (TorchTPU session)</a></li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
