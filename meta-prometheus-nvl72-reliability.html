@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Meta's Prometheus Numbers: What 64-of-72 Sparing and a 54K GPU-Hour MTBI Mean for NVL72 Operators — Anpoo Sivanadi</title>
+  <meta name="description" content="Meta published Inside Prometheus on October 19, 2026." />
+  <link rel="canonical" href="https://asivanadi0.github.io/meta-prometheus-nvl72-reliability.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Meta's Prometheus Numbers: What 64-of-72 Sparing and a 54K GPU-Hour MTBI Mean for NVL72 Operators — Anpoo Sivanadi" />
+  <meta property="og:description" content="Meta published Inside Prometheus on October 19, 2026." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/meta-prometheus-nvl72-reliability.html" />
+  <meta property="article:published_time" content="2026-10-19T18:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Meta's Prometheus Numbers: What 64-of-72 Sparing and a 54K GPU-Hour MTBI Mean for NVL72 Operators</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-19T18:00:00-07:00">19 October 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>Meta published <a href="https://engineering.fb.com/2026/10/19/data-center-engineering/inside-prometheus-meta-gigawatt-scale-supercluster/" target="_blank" rel="noopener noreferrer">Inside Prometheus</a> on October 19, 2026. It describes the supercluster in New Albany, Ohio that trained the Muse models, written by Kevin Lee, Yashar Bayani, Ahmed Sharif and Yee Jiun Song. The headline is roughly 1 million GPUs at full scale. The useful part is smaller and rarer: real reliability numbers for GB200 and GB300 NVL72 at fleet scale, and how Meta plans capacity around them.</p>
+<p>If you run NVL72 racks, or are about to, these are the numbers I'd write down.</p>
+<h2>The hardware, briefly</h2>
+<p>Prometheus runs two NVL72 platforms today, with a third coming.</p>
+<ul>
+<li><strong>Catalina (GB200 NVL72, Ariel variant).</strong> Two racks of 36 GPUs form one 72-GPU NVLink domain. Each Blackwell GPU gets its own Grace CPU and two ConnectX-7 400G NICs, so 800G of scale-out per GPU. Meta lists 13.4 TB of HBM3e (192 GB per GPU), 720 PFLOPS peak FP8, 130 TB/s of NVLink bandwidth and about 120 kW across the pair.</li>
+<li><strong>Clemente (GB300 NVL72).</strong> 288 GB of HBM3e per GPU, 20.7 TB per domain, ConnectX-8 SuperNICs at 800G per GPU natively, a 2:1 GPU-to-CPU ratio, and the full 72-GPU domain in one rack at about 135 kW. Meta quotes a 5 to 10% gain over GB200 NVL72.</li>
+<li><strong>San Miguel (Vera Rubin NVL72), next.</strong> 288 GB of HBM4 per GPU at 19.2 TB/s, 2.52 EFLOPS peak FP4 per rack, 216 TB/s of NVLink (3 TB/s bidirectional per GPU), and more than 170 kW per fully liquid-cooled rack.</li>
+</ul>
+<p>The Ariel choice is the interesting design call. Meta's reasoning was that GB200 scaled FLOPS, HBM bandwidth and NVLink domain size well past H100, while standard scale-out would have stayed at 400G per GPU. They expected that imbalance to cost performance, so they paid for a 1:1 CPU-to-GPU layout to get 800G per GPU early. Even so, the gap is wide. Clemente's 1.8 TB/s bidirectional NVLink per GPU works out to about 7.2 Tb/s each way, against 0.8 Tb/s of scale-out. That's roughly 9 to 1 (my arithmetic), which is why the parallelism plan has to keep the heavy collectives inside the rack.</p>
+<p>Power per GPU slot keeps climbing too. Dividing Meta's rack figures by 72 gives about 1.67 kW per GPU for Catalina, 1.88 kW for Clemente and more than 2.36 kW for San Miguel, before cooling.</p>
+<h2>The reliability numbers</h2>
+<ul>
+<li>More than <strong>85% goodput</strong> on Muse Wonder pre-training runs and more than <strong>90%</strong> on RL runs.</li>
+<li>Wall-clock <strong>mean time between interruptions (MTBI) of about 47,000 GPU-hours</strong> during those runs, raised to <strong>more than 54,000 GPU-hours</strong> since then through fleet changes that include firmware fixes.</li>
+<li>A peak of <strong>nearly 1,000 interruptions per 8,000 GPUs per day</strong> in mid-2025, during the first phase. Meta says a year of work cut that by 99%.</li>
+<li>A stated target of <strong>two interruptions per 8,000 GPUs per day</strong>, which Meta equates to about 100,000 GPU-hours MTBI.</li>
+</ul>
+<p>MTBI in GPU-hours is easy to misread, so it helps to turn it into wall-clock time for a single job. Divide MTBI by the job's GPU count. At 54,000 GPU-hours, a 32,768-GPU run sees an interruption about every 99 minutes. A 100,000-GPU run would see one about every 32 minutes. Even at Meta's 100,000 GPU-hour target, the 32K-GPU job is interrupted roughly every three hours. (That's my arithmetic from Meta's figures; the post doesn't break it down by job size.)</p>
+<p>At these rates a restart isn't a rare event. You make restarts cheap, and you design the cluster so most faults don't need one.</p>
+<h2>Why 64 of every 72 GPUs do the work</h2>
+<p>This is the part I'd copy first. NVL8 on H100 meant an eight-GPU tensor-parallel domain. NVL72 makes it 72, which Meta describes as a 9x larger fault blast radius. A single GPU fault can now take out a whole rack's worth of work.</p>
+<p>Meta's answer is to treat the rack as the unit of allocation. Training parallelism maps most cleanly onto power-of-two group sizes, so each NVL72 domain runs a 64-GPU slice and keeps the other 8 GPUs as in-rack spares. When a GPU fails, a spare takes over and the job restarts from its last checkpoint without waiting for a repair. For whole-rack faults, Meta holds about 2% extra racks in reserve.</p>
+<p>Meta's worked example is a 32,768-GPU run provisioned on 523 NVL72 racks, or 37,656 GPUs. The post calls that "about 13% above the active footprint," with 11 points coming from the 64-of-72 geometry. One small note if you're reusing this for your own capacity plan: 4,888 idle GPUs is 13% of the 37,656 provisioned, but it's about 15% on top of the 32,768 active. The 11% matches 8 spares out of 72. Either way, the point stands. Most of the overhead is a geometry choice you'd likely make anyway, not a tax for unreliability.</p>
+<h2>Two recovery paths</h2>
+<p>Meta describes two mechanisms, chosen by how far a fault reaches.</p>
+<p><strong>Parallelism-aware fault tolerance (PAFT).</strong> If the fault stays inside one data-parallel replica, that replica goes offline, the rest of the cluster repeats the step and keeps training, and the failed slice restarts on spare hosts and resyncs. A full halt turns into a short dip in throughput.</p>
+<p><strong>Checkpointing.</strong> If the fault reaches past one replica, the whole job rolls back. Meta checkpoints model state, including gradients and optimizer data, asynchronously to multi-tier storage, using delta checkpoints and in-memory staging to keep the cost off the training step.</p>
+<p>The arithmetic above explains why both are needed. With an interruption every 99 minutes on a 32K-GPU job, the classic Young approximation for checkpoint interval, the square root of two times checkpoint cost times MTBI, gives about 14 minutes if a blocking checkpoint costs one minute. That's an illustrative assumption, not a Meta figure. The lever Meta is pulling is to make checkpoint cost close to zero with async and delta saves, and to keep as many faults as possible on the PAFT path where nothing rolls back.</p>
+<h2>What actually broke</h2>
+<p>The breakdown by cause reads like a fleet bring-up checklist.</p>
+<ul>
+<li><strong>NVLink signal integrity</strong> was the first bottleneck on GB200. One NVL72 domain has 5,184 tuned differential pairs at 200 Gbps, each crossing GPU SerDes, tray PCBs, cable cartridges and switch tray interfaces. Across more than 600,000 NVLink connections, marginal links caused frequent recovery cycles. The fix was continuous telemetry, automated flagging, and L11 diagnostic burns to find weak links before production.</li>
+<li><strong>Memory faults in HBM and LPDDR</strong> became the leading cause as GB300's larger memory arrived. The mitigations are refined HBM firmware settings, memory scrubbing, a better LPDDR error correction algorithm, and pattern-based prediction to retire degrading devices early. Meta says it is still measuring the impact.</li>
+<li><strong>NVLink switch and fabric health</strong> is watched at millisecond resolution, and back-end link failures are rerouted in hardware, both without interrupting the job.</li>
+</ul>
+<p>Meta's firmware automation can push driver and firmware fixes to more than 100,000 GPUs in a few hours, and the P90 time to upgrade one pod fell from more than seven hours early in GB200 bring-up to two hours. Every repaired system sits in quarantine until it passes validation before it rejoins the pool.</p>
+<h2>The power swings</h2>
+<p>Synchronous training moves power in lockstep. Meta reports load swings of 30 to 40% as tens of thousands of GPUs flip between compute and communication, and tens of megawatts shifting in seconds when a big job starts or pauses. Its Dynamo Dimmer framework lowers GPU power caps gradually as the cluster nears its electrical limit instead of stopping work, backed by rack batteries, capacitor trays, facility battery storage and coordination with the utility. The back-end network story (a 20,736-GPU building fabric on 51.2T switches, and an aggregation layer spanning up to 100 km) is in the post too, and worth its own read.</p>
+<h2>What I'd take from it</h2>
+<p>Most of this scales down to a few dozen racks:</p>
+<ol>
+<li>Plan capacity in whole NVL72 domains, with in-rack spares, and make sure your scheduler can express that.</li>
+<li>Track MTBI in GPU-hours, then convert it to minutes per job so the checkpoint interval is set from real numbers.</li>
+<li>Keep as many faults as possible on a replica-level recovery path, and make checkpoints asynchronous.</li>
+<li>Burn in NVLink before production and treat signal integrity as an ongoing telemetry problem.</li>
+<li>Expect memory faults to rise with GB300's larger HBM, and plan for scrubbing and predictive retirement.</li>
+<li>Measure firmware rollout time per pod. Seven hours versus two matters when the fix targets your top interruption cause.</li>
+</ol>
+<p>The caveats: these are Meta's own numbers on Meta's own stack, and the memory mitigations are still rolling out. But a 99% cut in interruption rate, with the failure categories spelled out, is about as close to a public operations runbook for NVL72 as anyone has shared.</p>
+<h2>Sources</h2>
+<ul>
+<li><a href="https://engineering.fb.com/2026/10/19/data-center-engineering/inside-prometheus-meta-gigawatt-scale-supercluster/" target="_blank" rel="noopener noreferrer">Meta Engineering: Inside Prometheus, Meta's Journey to a Gigawatt-Scale Supercluster</a></li>
+<li><a href="https://www.storagereview.com/news/meta-prometheus-gigawatt-supercluster-1-million-gpus-gb200-gb300-nvl72" target="_blank" rel="noopener noreferrer">StorageReview: Meta Prometheus, inside the gigawatt supercluster</a></li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
