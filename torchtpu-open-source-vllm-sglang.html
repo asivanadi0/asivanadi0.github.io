@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TorchTPU Is Open Source: What Running PyTorch Natively on TPUs Actually Involves — Anpoo Sivanadi</title>
+  <meta name="description" content="This morning I wrote about TorchNeuron and noted that TorchTPU was only a conference session with a repo on the way." />
+  <link rel="canonical" href="https://asivanadi0.github.io/torchtpu-open-source-vllm-sglang.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="TorchTPU Is Open Source: What Running PyTorch Natively on TPUs Actually Involves — Anpoo Sivanadi" />
+  <meta property="og:description" content="This morning I wrote about TorchNeuron and noted that TorchTPU was only a conference session with a repo on the way." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/torchtpu-open-source-vllm-sglang.html" />
+  <meta property="article:published_time" content="2026-10-20T18:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>TorchTPU Is Open Source: What Running PyTorch Natively on TPUs Actually Involves</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-20T18:00:00-07:00">20 October 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>This morning I wrote about <a href="/torchneuron-native-pytorch-trainium.html">TorchNeuron</a> and noted that TorchTPU was only a conference session with a repo on the way. That changed a few hours later. Google and Meta open-sourced <a href="https://github.com/google-pytorch/torch_tpu" target="_blank" rel="noopener noreferrer">TorchTPU</a> at PyTorch Conference today, and two serving engines built on it shipped the same day: <a href="https://github.com/vllm-project/vllm-torchtpu" target="_blank" rel="noopener noreferrer">vLLM-TorchTPU</a>, co-developed with Inferact, and <a href="https://github.com/sgl-project/sglang-torchtpu" target="_blank" rel="noopener noreferrer">SGLang-TorchTPU</a>, co-developed with RadixArk. The engine repos are Apache-2.0, and the TorchTPU repo's LICENSE file is Apache 2.0 as well.</p>
+<p>The headline is the same one every new backend uses: change <code>.to("cuda")</code> to <code>.to("tpu")</code>. The <a href="https://pytorch.org/blog/introducing-torchtpu/" target="_blank" rel="noopener noreferrer">PyTorch blog post</a> is unusually honest about why that sentence is only half the story, and the other half is what anyone running clusters needs to read.</p>
+<h2>Why this isn't PyTorch/XLA again</h2>
+<p>Google has shipped PyTorch on TPU before. PyTorch/XLA (2020) was built on lazy tensors, needed code changes to mark compilable regions, compiled slowly, had no real eager mode, and lagged on new distributed primitives. The team's own write-up says all of that directly.</p>
+<p>TorchTPU starts from a different set of rules. There's no JAX dependency in the runtime. It registers as a <code>PrivateUse1</code> backend in the PyTorch dispatcher. <code>torch.compile(model, backend="tpu")</code> goes through Dynamo rather than lazy tensors. Collectives sit at the Process Group level, through a <code>tpu_dist</code> backend that inherits from <code>c10d::Backend</code>, so DTensor, FSDPv2, SimpleFSDP and FairScale see an ordinary process group. It's the same architectural move AWS made with TorchNeuron, and the fact that both arrived on the same day is the real story for anyone who runs mixed fleets.</p>
+<p>The coverage numbers at launch:</p>
+<ul>
+<li>About 450 ATen ops, including forward and backward for the Core ATen set.</li>
+<li>4,917 Hugging Face models tested; 4,821 (98%) run without crashing.</li>
+<li>638 of 657 architecture representatives (97%) match GPU numerics.</li>
+<li>With bounded dynamism, 834 of 839 causal LLMs (99%) produce correct numerics.</li>
+</ul>
+<h2>Eager has three modes, and one of them is new</h2>
+<p>TorchTPU's eager path can dispatch an op immediately, defer it until something forces a result, or anything in between. That gives three modes:</p>
+<ul>
+<li><strong>Strict</strong> (default): one ATen op at a time, asynchronous to the CPU, like CUDA eager.</li>
+<li><strong>Debug</strong> (<code>TORCH_TPU_LAUNCH_BLOCKING=1</code>): synchronous, with bounds checks. It's the <code>CUDA_LAUNCH_BLOCKING</code> equivalent.</li>
+<li><strong>DeferAndFuse</strong> (<code>TORCH_TPU_DEFER_AND_FUSE=1</code>): ops are recorded as deferred StableHLO builders and compiled together at the next materialization point, such as <code>.item()</code> or <code>.to("cpu")</code>. The post says this can be 50% or more faster than Strict and lowers peak HBM.</li>
+</ul>
+<p>DeferAndFuse is the interesting design choice. A "Repeated Ops Heuristic" spots repeated sequences, like a stack of transformer blocks, and materializes early so the TPU isn't left idle.</p>
+<p>Compiled graphs land in a three-tier cache: in-process memory, host-local shared memory across processes (on by default for distributed jobs), and an optional persistent tier on a remote filesystem such as GCS. The key is three 64-bit fingerprints covering graph structure, tensor dimensions, and compiler options plus TorchTPU, libtpu and PjRT versions. In practice a libtpu bump invalidates everything, which is correct, but you should plan your warm-up around it.</p>
+<h2>The parts that are not like a GPU</h2>
+<p>This is the section I'd hand to a platform team.</p>
+<p><strong>One process per TPU device, and only one.</strong> A TPU can be opened by a single user-space process. TorchTPU follows PyTorch's one-process-per-device model rather than JAX's one-process-per-host model. The post says plainly that RL colocation, where trainer and rollout share a chip, doesn't work out of the box yet.</p>
+<p><strong>A v7 chip shows up as two devices.</strong> Each TPU v7 chip exposes its two TensorCores as two PyTorch devices. Their single-chip prefill example runs FSDP with a world size of 2 for that reason. Plan your rank math the way you would for Trainium's NeuronCores, not by counting chips.</p>
+<p><strong>Distributed init needs the topology up front.</strong> A TPU process sees only its own device, so it has to know the world size and slice type before <code>init_process_group</code>. That means two variables torchrun can't set by itself: <code>TORCH_TPU_TOPOLOGY</code> (for example <code>2,2,1</code>) and <code>TORCH_TPU_SLICEBUILDER_ADDRESSES</code>, one port per device for building the ICI mesh. <code>python -m torch.tpu.distributed</code> prints them for you on Google Cloud.</p>
+<p><strong>Collectives are compiled, not called.</strong> There's no NCCL equivalent. All-reduce and friends are StableHLO ops. Because PyTorch code often isn't strictly SPMD (rank-conditional branches, uneven DTensor splits), ranks can compile different modules. With embedded collectives that can deadlock or corrupt memory. So by default each collective is compiled into its own "skinny" module. That's safe, but the post puts the cost at 30 to 40% end to end, because XLA can't overlap communication with compute. You can opt out with an <code>@spmd_safe</code> decorator, or an RFC-stage compile handshake (<code>TORCH_TPU_SPMD_HANDSHAKE_STAGE</code>) that checks FX graphs match across replicas. Mark something <code>@spmd_safe</code> that isn't, and you've built the brittle case the authors warn about.</p>
+<p><strong>Default matmul precision is BF16.</strong> PyTorch on CUDA defaults to full FP32 for <code>float32</code> matmuls. TorchTPU defaults to <code>medium</code>, which means BF16 inputs with FP32 accumulation. <code>high</code> and <code>highest</code> emulate FP32 with 3 and 6 MXU passes, so they cost about 3x and 6x, and they print a warning. There's a scoped <code>torch.tpu.precision</code> context manager for sensitive layers. If you're comparing loss curves between GPU and TPU runs, check this first.</p>
+<p><strong>Shapes are still mostly static.</strong> <code>torch.compile</code> on TPU forces <code>dynamic=False</code> for now. Bounded dynamism, where you compile once against a maximum shape and XLA pads and slices for you, is in active development and not on by default yet.</p>
+<h2>The numbers they did publish</h2>
+<p>Out of the box, with no custom kernels, on a self-contained pure-PyTorch Muse Glimmer 30B in the repo:</p>
+<ul>
+<li>Prefill on one TPU v7 chip: about 25.7k tokens/s at 59% MFU at 5,120 tokens, and about 22.4k tokens/s at 51% MFU at 10,240.</li>
+<li>Training on a 4-chip host with FSDP: about 5.6k tokens/s per TPU at 38% MFU (5,120), and 4.6k at 32% (10,240).</li>
+<li>The TorchTitan GPU implementation, with FlexAttention swapped for <code>F.scaled_dot_product_attention</code> because FlexAttention isn't supported yet, reaches 5.3k at 36% and 4.2k at 29%.</li>
+</ul>
+<p>At scale, Qwen3 MoE 235B in TorchTitan on 64 v7 chips ran at 1,828 tokens/s against 1,937 for JAX on MaxText, about 94%. Going from one 1,024-chip slice to four slices (4,096 chips) with HSDP took per-TensorCore throughput from 2,236 to 2,095 tokens/s and MFU from 28.8% to 26.9%, with step time going from 29.3 to 31.3 seconds. That run used Tokamax Splash Attention and other Pallas kernels, so it's not the out-of-the-box path.</p>
+<h2>The serving side</h2>
+<p>The <a href="https://vllm.ai/blog/2026-10-20-vllm-torchtpu" target="_blank" rel="noopener noreferrer">vLLM-TorchTPU post</a> describes an out-of-tree platform plugin, found through the <code>vllm.platform_plugins</code> entry point. The scheduler, workers, KV cache manager and API server are unmodified upstream vLLM. Models compile with <code>torch.compile(backend="tpu")</code>, and the TPU work lives in Pallas kernels registered as custom ops: Ragged Paged Attention v3, dense and sparse MLA, Gated DeltaNet and Kimi Delta Attention, fused MoE with expert parallelism, and FP8/INT8/MXFP4/NVFP4 matmuls.</p>
+<p>Practical details:</p>
+<ul>
+<li><code>pip install vllm-torchtpu</code> needs Python 3.12 on a Cloud TPU VM. PyPI shows 0.29.0, uploaded Oct 19.</li>
+<li>TPU v7x (Ironwood) is the recommended target and runs in CI on every PR. v6e, v5e and v5p are experimental.</li>
+<li>First startup compiles graphs for your configured shapes and can take minutes. Set <code>VLLM_XLA_CACHE_PATH</code> so restarts reuse them.</li>
+<li>All six vLLM parallelism dimensions work (TP, DP, PP, EP, prefill and decode context parallel). For large MoE they suggest DP=8, TP=1 with EP on one v7x host.</li>
+</ul>
+<p>KV movement goes through <a href="https://developers.googleblog.com/announcing-new-vllm-and-sglang-inference-engines-on-tpu/" target="_blank" rel="noopener noreferrer">TPU Sync</a>, an open-source C++ library that reads device buffers directly, outside Python. vLLM uses it through its KV connector for zero-copy offload to host DRAM and for prefill/decode disaggregation. Prefill and decode can use different layouts, such as PCP=4, TP=2 for prefill and DP=8, TP=1 for decode, with the KV resharded in transit. SGLang uses it for disaggregation and as the HiCache I/O backend, and Google's post adds Managed Lustre as a further tier.</p>
+<p>Two vendor claims belong in their own box. Google says its SemiAnalysis InferenceX submission for Qwen 3.5 on Ironwood reached 2.01 cents per million tokens. It also says a Pallas megakernel that runs Kimi K3's whole decode step as one kernel serves more than 700 tokens/s to a single user. Meta says SGLang-TorchTPU is in production there. I haven't reproduced any of this; check the InferenceX entries yourself before you plan around them. Google also says vLLM-JAX and SGLang-JAX will keep being maintained.</p>
+<h2>What I'd check first</h2>
+<ol>
+<li>Run your model in Strict eager mode, then DeferAndFuse, and compare outputs before touching <code>torch.compile</code>.</li>
+<li>Set <code>torch.set_float32_matmul_precision</code> explicitly on both GPU and TPU so you're comparing the same math.</li>
+<li>Point the tier-3 compile cache, or <code>VLLM_XLA_CACHE_PATH</code>, at shared storage and pin libtpu, because a version change invalidates every entry.</li>
+<li>Size your ranks from TensorCores, not chips, and build meshes with <code>torch.tpu.topology_aware_mesh()</code> so TP lands on the fastest ICI ring.</li>
+<li>Measure with skinny collectives first. Only move to <code>@spmd_safe</code> on code you can show is identical on every rank.</li>
+</ol>
+<p>Two native, non-CUDA PyTorch backends shipped in one day. The work of leaving CUDA is now mostly compile caches, shape discipline and topology, and that's work a platform team can do once for everyone.</p>
+<h2>Sources</h2>
+<ul>
+<li><a href="https://pytorch.org/blog/introducing-torchtpu/" target="_blank" rel="noopener noreferrer">PyTorch blog: Introducing TorchTPU</a></li>
+<li><a href="https://cloud.google.com/blog/topics/ai-infrastructure/torchtpu-is-now-open-source-run-native-pytorch-on-tpus" target="_blank" rel="noopener noreferrer">Google Cloud blog: TorchTPU is now open source</a></li>
+<li><a href="https://developers.googleblog.com/announcing-new-vllm-and-sglang-inference-engines-on-tpu/" target="_blank" rel="noopener noreferrer">Google Developers blog: New vLLM and SGLang inference engines on TPU</a></li>
+<li><a href="https://vllm.ai/blog/2026-10-20-vllm-torchtpu" target="_blank" rel="noopener noreferrer">vLLM blog: Introducing vLLM TorchTPU</a></li>
+<li><a href="https://github.com/google-pytorch/torch_tpu" target="_blank" rel="noopener noreferrer">GitHub: google-pytorch/torch_tpu</a></li>
+<li><a href="https://github.com/vllm-project/vllm-torchtpu" target="_blank" rel="noopener noreferrer">GitHub: vllm-project/vllm-torchtpu</a></li>
+<li><a href="https://github.com/sgl-project/sglang-torchtpu" target="_blank" rel="noopener noreferrer">GitHub: sgl-project/sglang-torchtpu</a></li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
