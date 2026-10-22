@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DeepSeek Open-Sourced DeepInfer. The Deployment Q&amp;A Is the Part to Read. — Anpoo Sivanadi</title>
+  <meta name="description" content="DeepSeek put DeepInfer on GitHub this week under Apache 2.0." />
+  <link rel="canonical" href="https://asivanadi0.github.io/deepseek-deepinfer-deployment-qa.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="DeepSeek Open-Sourced DeepInfer. The Deployment Q&amp;A Is the Part to Read. — Anpoo Sivanadi" />
+  <meta property="og:description" content="DeepSeek put DeepInfer on GitHub this week under Apache 2.0." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/deepseek-deepinfer-deployment-qa.html" />
+  <meta property="article:published_time" content="2026-10-22T06:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>DeepSeek Open-Sourced DeepInfer. The Deployment Q&amp;A Is the Part to Read.</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-22T06:00:00-07:00">22 October 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>DeepSeek put <a href="https://github.com/deepseek-ai/DeepInfer" target="_blank" rel="noopener noreferrer">DeepInfer</a> on GitHub this week under Apache 2.0. The README calls it "the high-performance inference framework that powers DeepSeek's large-scale production services." It ships with one supported model, <a href="https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017" target="_blank" rel="noopener noreferrer">DeepSeek-V4.1-Flash-1017</a>, and two supported targets: NVIDIA SM100 GPUs on CUDA 13 and Huawei Ascend 950 NPUs on CANN 9.2.</p>
+<p>Most of the coverage stops at that sentence. I think the more useful file is <a href="https://github.com/deepseek-ai/DeepInfer/blob/main/doc/inference_deployment_qa.md" target="_blank" rel="noopener noreferrer"><code>doc/inference_deployment_qa.md</code></a>, a long Q&amp;A about how DeepSeek actually runs V4.1 Flash. It's rare to get this much operating detail from a lab: storage ratios, load-balancer tiers, expert re-placement intervals, KV cache TTLs. It reads like a production design review. Below is what I took from it as someone who has to size and run clusters, plus the limits of what was released.</p>
+<h2>What the repo is, and what it isn't</h2>
+<p>Be clear about scope before planning anything around it. The public release is an <strong>offline</strong> engine. The README lists three things a full online service needs that are not included:</p>
+<ul>
+<li>A KV cache system</li>
+<li>Vision-encoder / prefill / decode disaggregation ("most required engine functionality is already implemented")</li>
+<li>Load balancing across data-parallel replicas for prefill and decode</li>
+</ul>
+<p>The Q&amp;A says the KV cache and load-balancing pieces are "tightly coupled to our internal infrastructure." So you get the engine and its kernels, and DeepSeek's design for the rest is written down in prose rather than shipped as code.</p>
+<p>What is in the engine:</p>
+<ul>
+<li>Kernels from <a href="https://github.com/deepseek-ai/FlashMLA" target="_blank" rel="noopener noreferrer">FlashMLA</a>, <a href="https://github.com/deepseek-ai/DeepGEMM" target="_blank" rel="noopener noreferrer">DeepGEMM</a>, <a href="https://github.com/deepseek-ai/DeepEP" target="_blank" rel="noopener noreferrer">DeepEP</a>, TileKernels, DeepSelect, and custom TileLang ops</li>
+<li>Attention DP with balanced context parallelism, MoE expert parallelism with EPLB</li>
+<li>DSpark speculative decoding with confidence-scheduled verification</li>
+<li>"SWA bounded replay" for sliding-window attention (more on this below)</li>
+<li>An asynchronous, overlapped CPU scheduler</li>
+<li>Batch-invariant inference and deterministic sampling, both NVIDIA-only</li>
+<li>Structured outputs (regex, JSON schema, EBNF)</li>
+</ul>
+<p>The README credits <a href="https://github.com/vllm-project/vllm" target="_blank" rel="noopener noreferrer">vLLM</a> as the original base, with ideas taken from SGLang and TensorRT-LLM. The build needs Linux, GCC 13 or newer, and Python 3.12. Nothing older than SM100 is listed, so H100 and H200 fleets are out for this release.</p>
+<p>There is also <a href="https://github.com/deepseek-ai/deepseek-recipe" target="_blank" rel="noopener noreferrer">deepseek-recipe</a>, a Rust library that converts Chat Completions, Responses, and Messages API requests into V4.1 token sequences. One detail is worth copying: strings like <code>&lt;｜User｜&gt;</code> inside user input or tool results are encoded as ordinary text, never as control tokens, and tool-call markers are matched by token ID, so text can't inject a tool call.</p>
+<h2>The topology DeepSeek recommends</h2>
+<p>The Q&amp;A is specific about parallelism:</p>
+<ul>
+<li><strong>Prefill:</strong> EP2–8 / DP2–8, using the smallest EP/DP that HBM allows. In other words, ordinary 8-GPU boxes.</li>
+<li><strong>Decode:</strong> EP64–128 / DP64–128, using the largest EP that your GPUs allow. That means a 64- to 128-GPU scale-up domain.</li>
+<li><strong>Vision encoder:</strong> one GPU per instance, and DeepSeek recommends cheaper GPUs for it.</li>
+<li>No tensor parallelism and no context parallelism in production "for now."</li>
+</ul>
+<p>The sizing line I'd underline: "1P + 1D is deployable," the prefill-to-decode GPU ratio is roughly 1:1, and because decode wants EP64 or more, "the smallest efficient deployment unit is 64 GPUs of prefill plus 64 GPUs of decode." So if you were hoping to try DeepSeek's production recipe on a single node, you can run it, but you won't be measuring what DeepSeek measures.</p>
+<p>The published benchmark charts match that. Prefill was measured on 4 SM100 GPUs and decode on 64, each within one scale-up domain. The charts are NVIDIA-only. There are no Ascend 950 throughput numbers in the repo, so don't quote any.</p>
+<h2>Storage: the number that surprised me</h2>
+<p>DeepSeek retains KV cache for days, not minutes. The design goal is more than 72 hours of retention. The storage details:</p>
+<ul>
+<li>Block KV cache (main KV plus indexer K) lives on a dedicated <a href="https://github.com/deepseek-ai/3FS" target="_blank" rel="noopener noreferrer">3FS</a> cluster, not in host memory. Any prefill machine can hit any prefix, so they don't need prefix-affinity routing.</li>
+<li>About <strong>14.4 TB of logical KV storage per online GPU</strong>. Physical capacity has to be larger than that.</li>
+<li>Recommended KV storage server: 20 × 30.73 TB SSDs, at least 40 GB/s read and 5 GB/s write, enough capacity for 24 hours of data.</li>
+<li>3FS runs 10+2 erasure coding. A read goes to all 11 data nodes in the group, and any 10 responses are enough to decode.</li>
+<li>Roughly 100 PiB of SSD in total. The TTL is 3 days for agent traffic and 7 days for chatbot traffic, because chatbot hits have a long tail. A 3-day TTL cost chatbot traffic 0.5–1% of hit rate.</li>
+</ul>
+<p>They give a reason for using a separate storage tier: compute nodes fail "more than an order of magnitude" more often than storage nodes, so keeping cache off the GPU hosts keeps it alive through failures. Swap-in from host shared memory to HBM uses GPUDirect RDMA instead of the CUDA copy engine. The copy engine does poorly on small KV block copies, and an RDMA NIC can saturate PCIe without using SMs.</p>
+<p>If you plan capacity for a cache-heavy agent workload, 14.4 TB per GPU is the figure to bring to your storage team. It is one company's number on one model, but it's a real measured number, and those are rare.</p>
+<h2>Load balancing, in enough detail to copy</h2>
+<p>The prefill load balancer splits requests by total context length into four tiers: under 16K, 16–64K, 64–256K, and 256K or more. Engines are reassigned across tiers based on each tier's share of compute demand in the previous round. Inside a GPU, the chunk size isn't fixed. Each step gets a time budget in nanoseconds, a fitted quadratic cost model <code>cost(q, c)</code> predicts step time from new tokens and already-computed prefix, and the scheduler solves for the largest <code>q</code> that fits under a 32,768-token cap.</p>
+<p>On decode, the balancer weighs two things for each GPU: how many requests it's running and how much KV it holds. Short requests go to GPUs with few requests but a lot of KV, and long requests go to GPUs with little KV. DeepSeek says the whole system reaches about 80% of a perfectly balanced offline benchmark.</p>
+<p>Expert load balancing has measured numbers too. Prefill starts from 4 redundant experts per GPU, uses a 100-step statistics window, and re-assigns experts every 1,000 steps, giving <code>moe_lb</code> (slowest rank over mean) of 1.074 at EP4/DP4. Decode starts from 1 redundant expert per GPU and re-assigns every 10,000 steps, giving <code>moe_lb</code> 1.090 at EP64. Expert weights move within the group over NVLink symmetric memory.</p>
+<p>Failover is blunt. In wide EP, one bad GPU takes down the whole instance's communication domain. On restart, the instance takes however many healthy GPUs it gets as its new EP size. A draining decode engine gets a one-minute grace period, then forwards unfinished requests and their KV to other engines. Scale-in is blocked while quota utilization is above 0.8.</p>
+<h2>DSpark: modest gains, and they depend on load</h2>
+<p>DSpark's draft model proposes 5 tokens, and a confidence head predicts how likely each one is to be accepted. The scheduler then verifies only the prefix with the best expected payoff. DeepSeek's EP64/DP64 table is honest about where that helps:</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">Seqs per rank</th>
+<th style="text-align: right;">Avg verified (dynamic)</th>
+<th style="text-align: right;">Est. tok/s/rank, fixed-5</th>
+<th style="text-align: right;">Est. tok/s/rank, dynamic</th>
+<th style="text-align: right;">Change</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">16</td>
+<td style="text-align: right;">4.44</td>
+<td style="text-align: right;">4,891</td>
+<td style="text-align: right;">4,816</td>
+<td style="text-align: right;">−1.5%</td>
+</tr>
+<tr>
+<td style="text-align: right;">60</td>
+<td style="text-align: right;">3.58</td>
+<td style="text-align: right;">13,730</td>
+<td style="text-align: right;">14,466</td>
+<td style="text-align: right;">+5.4%</td>
+</tr>
+<tr>
+<td style="text-align: right;">96</td>
+<td style="text-align: right;">3.24</td>
+<td style="text-align: right;">16,817</td>
+<td style="text-align: right;">18,660</td>
+<td style="text-align: right;">+11.0%</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>At light load it's slightly worse. At DeepSeek's production point of about 60 sequences per rank, it's 4–7% better. Accepted length barely changes (3.29 vs 3.20 on average). The gain comes from skipping verification work on low-confidence tokens. These are estimates computed from benchmark data, not end-to-end measurements, and the Q&amp;A says so.</p>
+<h2>SWA bounded replay and FP4 placement</h2>
+<p>Two smaller details are worth knowing.</p>
+<p>V4.1 Flash mixes sliding-window and compressed attention. When a prefix hits in the block cache but its SWA KV is missing, DeepInfer recomputes only the last 128 tokens and limits attention to that replay segment. That makes the recompute cost a constant. On the decoder side, prefill recomputes only the last 128 prompt tokens instead of running 2,560 tokens through 20 decoder layers, which DeepSeek says "nearly halv[es] total prefill computation." The README's default settings are <code>DEEPINFER_YOCO_PREFILL_KEEP_TOKENS=140</code>.</p>
+<p>FP4 shows up in three places: main KV (per-16 e4m3, NVFP4-like but without the global scale), indexer KV (MXFP4), and routed-expert weights (MXFP4).</p>
+<p>On kernels, DeepSeek admits the public FlashMLA is missing one hand-tuned SASS optimization, which makes the decoding kernel 5–10% slower than their internal one. They put the end-to-end gap at most 5%.</p>
+<h2>What I'd do with this</h2>
+<p>If you run SM100 hardware and serve V4.1 Flash, the engine is worth benchmarking against your current vLLM or SGLang build with <code>examples/sweep/run_sweep.sh</code>. Watch two things the benchmark README calls out. Decode throughput is reported under "full-acceptance accounting," meaning <code>1 + nextn</code> tokens per step whatever the real acceptance rate, so scale it by your own acceptance rate before comparing. And don't trust step times from <code>PROFILE=1</code> runs, which the docs say can be inflated by up to nearly 50% at batch size 1.</p>
+<p>If you don't run this model, read the Q&amp;A anyway. The storage ratio, TTL policy, tiered prefill balancing, and EP failover behavior apply to any wide-EP MoE deployment. DeepSeek's headline claim is that one cluster serves 155 trillion tokens per day at US$38 per GPU-hour in revenue "at valley pricing." That's their number about their own operation, and I can't verify it. The engineering choices in the document are much more useful than the headline anyway.</p>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
