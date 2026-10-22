@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Reading Flint's Serving Kit Before the Benchmarks: A 40B MoE That Wants One Big GPU — Anpoo Sivanadi</title>
+  <meta name="description" content="Recursive released Flint today, an Apache 2.0 mixture-of-experts coding model with 39.8B total parameters and about 2.5B active per token." />
+  <link rel="canonical" href="https://asivanadi0.github.io/recursive-flint-serving-kit.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Reading Flint's Serving Kit Before the Benchmarks: A 40B MoE That Wants One Big GPU — Anpoo Sivanadi" />
+  <meta property="og:description" content="Recursive released Flint today, an Apache 2.0 mixture-of-experts coding model with 39.8B total parameters and about 2.5B active per token." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/recursive-flint-serving-kit.html" />
+  <meta property="article:published_time" content="2026-10-21T18:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Reading Flint's Serving Kit Before the Benchmarks: A 40B MoE That Wants One Big GPU</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-21T18:00:00-07:00">21 October 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>Recursive released <a href="https://recursive.com/updates/introducing-recursive-flint" target="_blank" rel="noopener noreferrer">Flint</a> today, an Apache 2.0 mixture-of-experts coding model with 39.8B total parameters and about 2.5B active per token. Most of the coverage is about the laptop numbers and the claim that the company's automated research system, the Eureka Machine, did much of the work. <a href="https://techcrunch.com/2026/10/21/recursive-launches-flint-a-laptop-coding-model-it-says-was-largely-built-by-ai/" target="_blank" rel="noopener noreferrer">TechCrunch</a> and <a href="https://www.wired.com/story/recursive-self-improvement-flint-latest-model-scary-good/" target="_blank" rel="noopener noreferrer">WIRED</a> both lead with that.</p>
+<p>I went the other way and read the <a href="https://huggingface.co/RecursiveSI/flint" target="_blank" rel="noopener noreferrer">model card</a>, the <a href="https://huggingface.co/RecursiveSI/flint/raw/main/config.json" target="_blank" rel="noopener noreferrer"><code>config.json</code></a>, and the <a href="https://huggingface.co/RecursiveSI/flint/blob/main/sglang/README.md" target="_blank" rel="noopener noreferrer">SGLang serving README</a> first. If you run inference for a team rather than on your own laptop, the serving kit tells you more about what you'd actually be signing up for than the benchmark chart does.</p>
+<h2>The architecture, from the config</h2>
+<p>The headline numbers check out against the config. Here is what's in it:</p>
+<ul>
+<li>49 layers: 2 dense MLP layers (<code>mlp_only_layers: [0, 1]</code>), then 47 MoE layers.</li>
+<li>Hidden size 2048, 32 query heads, 4 KV heads, head dimension 128.</li>
+<li>256 routed experts per MoE layer, 6 selected per token, plus an always-on shared expert. Expert intermediate size is 512; the shared expert is 1024.</li>
+<li>Sigmoid router scoring (<code>router_score_function: sigmoid</code>) with normalized top-k, not softmax routing.</li>
+<li>35 sliding-window layers with a 513-token window (the current token plus 512 back) and 14 full-attention layers, roughly a 3:1 pattern.</li>
+<li>RoPE only on the sliding-window layers. The full-attention layers use no positional encoding at all.</li>
+<li>Per-head QK RMSNorm and learned per-head attention sinks (<code>softmax_type: learnable</code>).</li>
+<li>150,144-token vocabulary, untied embeddings.</li>
+</ul>
+<p>I did the parameter count by hand as a sanity check. The routed experts come to about 37.8B total. Per token, the six selected experts plus the shared expert are about 1.2B across the 47 MoE layers. Attention is about 0.93B across all 49 layers, the two dense layers add about 75M, and the output head about 0.31B. That lands right at 2.5B active, which matches the card's footnote that the active count includes the output head and excludes the input embedding.</p>
+<p>The part I found interesting is the split. Attention is close to 40% of the active compute path. The experts are so narrow (512 wide) that the model spends almost as many active parameters routing information between tokens as it does transforming each one. That is a deliberate trade for decode speed on memory-bandwidth-limited hardware, and Recursive's <a href="https://recursive.com/updates/introducing-recursive-flint" target="_blank" rel="noopener noreferrer">announcement</a> says the Eureka Machine picked this shape starting from a 35B-total, 3B-active baseline.</p>
+<h2>The KV cache math is the real selling point</h2>
+<p>The serving README spells out KV cost per token, and it's small:</p>
+<ul>
+<li>28 KiB per token across the 14 full-attention layers. That's 4 KV heads × 128 dims × 2 (K and V) × 2 bytes × 14 layers. A full 262,144-token sequence costs about 7.5 GB.</li>
+<li>70 KiB per token across the 35 sliding-window layers, but those keep only the last 513 tokens of each running request, so they cap at roughly 35 MiB per request no matter how long it runs.</li>
+</ul>
+<p>Compare that with a model that runs full attention on every layer with the same KV shape: 49 layers at 2 KiB each is 98 KiB per token, about 3.5x more, and none of it ages out. Grouped-query attention with 4 KV heads does most of the work; the sliding-window layers do the rest.</p>
+<p>SGLang manages the two pools separately, and the knob is <code>--swa-full-tokens-ratio</code>. Recursive's validated settings are 0.05 on B300 and 0.4 on H200. Raise it for lots of short concurrent requests, lower it for a few long agent sessions. That is a knob you should actually tune for your traffic, because coding agents tend to be the long-session case.</p>
+<h2>Hardware: one 141 GB GPU per replica, not two 80 GB ones</h2>
+<p>The README is blunt about this. Each replica needs one GPU with at least 141 GB: B300 or B200, or H200. 80 GB GPUs are not supported. The BF16 checkpoint is 79.6 GB, so an H100 can't even hold the weights with room for KV.</p>
+<p>My rough arithmetic on what's left for cache, using the validated <code>--mem-fraction-static</code> values:</p>
+<ul>
+<li>H200 at 0.9: about 127 GB budgeted, minus 79.6 GB of weights, leaves roughly 47 GB for the two KV pools.</li>
+<li>B300 at 0.8: with 288 GB of HBM, about 230 GB budgeted, leaving around 150 GB for KV.</li>
+</ul>
+<p>At 28 KiB per full-attention token, 47 GB is on the order of 1.7M tokens of full-attention cache. That's a handful of max-length sessions on an H200, or a lot of normal-length ones.</p>
+<p>Scale-out is replicas behind <code>sglang_router</code> 0.3.2 with the <code>cache_aware</code> policy, eight single-GPU servers per 8-GPU node. One operational catch: the bundled <code>serve_node_8x.sh</code> stops all eight replicas if one exits. The README says to run one container per GPU if you want independent restarts, and I would do that from day one.</p>
+<h2>What isn't validated, and what the kit refuses to do</h2>
+<p>This is the section I'd tape to the wall before anyone puts Flint behind a production endpoint. Per the README, these are not validated:</p>
+<ul>
+<li>Tensor, expert, or pipeline parallelism, and DP attention.</li>
+<li>Quantized weights or a quantized KV cache, including FP8.</li>
+<li>Speculative decoding.</li>
+<li>Greedy decoding.</li>
+<li>B200, GB200, and GB300 use the same flags as B300 but aren't validated yet.</li>
+</ul>
+<p>Some combinations are hard-blocked rather than just untested. The model refuses to start with a MoE runner other than <code>flashinfer_trtllm_routed</code>, <code>triton</code>, or <code>auto</code>, because <code>flashinfer_trtllm</code> and <code>triton_kernel</code> bypass the sigmoid routing. It refuses any <code>--moe-a2a-backend</code>, an unpatched FA4 kernel, or FlashInfer without its CUDA RMSNorm kernels. <code>--attention-backend flashinfer</code> doesn't support attention sinks, so B300 uses a patched FA4 and H200 uses FA3. It also won't start without <code>--grammar-backend flint</code> and <code>--reasoning-parser flint</code>.</p>
+<p>I like that it fails loudly. A model with learned attention sinks and sigmoid routing that silently falls back to a kernel ignoring both would give you plausible, wrong output, and you'd find out from a user. But it also means Flint is pinned to SGLang 0.5.16, FlashInfer 0.6.16.post1, and a custom <code>flint_sglang</code> 0.1.4 wheel, and Transformers can't load the model yet. If your stack is vLLM or TensorRT-LLM, there is no path today.</p>
+<p>The NVFP4 and Apple Silicon numbers in the coverage come from separate quantized builds and Recursive's own inference engine. They are not the BF16 SGLang path in the README, so don't plan datacenter capacity from the laptop figures.</p>
+<h2>Reasoning length eats your output budget</h2>
+<p>Flint decides on each turn whether to reason, with no switch or budget. <code>enable_thinking</code> in the chat template kwargs does nothing. The README gives a useful distribution from GPQA-Diamond: median 4.3K reasoning tokens, p95 33K, p99 46K, and about 5% of answers go past 32K. Recursive recommends <code>max_tokens</code> of at least 32,768 for hard problems and evaluated with up to 81,920.</p>
+<p>For an agent loop, that means two things. A <code>finish_reason: "length"</code> can arrive before any content or tool call, so your harness needs to treat it as a retry case, not an empty answer. And you have to send <code>reasoning_content</code> back on assistant messages in later turns, which grows your prompt.</p>
+<h2>Tool calls are constrained, with sharp edges</h2>
+<p>Tool calls go through XGrammar via the <code>flint</code> tool-call parser. Arguments are schema-enforced only when a tool is sent with <code>"strict": true</code>, following OpenAI's strict-mode rules. The README lists the known edges honestly:</p>
+<ul>
+<li>A string argument can't contain the literal text <code>&lt;/tool_call&gt;</code>. There's no escaping, so the parser ends the call there. If Flint copies untrusted text into an argument, that text can inject an extra call to one of your listed tools.</li>
+<li>The chat template escapes role markers in user and tool text but not the tool tags (<code>&lt;tool_call&gt;</code>, <code>&lt;tool_response&gt;</code>, <code>&lt;arg_key&gt;</code>, <code>&lt;arg_value&gt;</code>). Recursive tells you to strip those from untrusted tool output yourself.</li>
+<li>When streaming, a call whose last argument is a JSON object can arrive without its closing brace. SGLang only repairs it for the response's last call.</li>
+</ul>
+<p>For a model built for coding agents that will read arbitrary repository files and web pages, the first two are the ones I'd test first. Sanitizing tool output is your job here, not the model's.</p>
+<h2>The benchmarks, with the caveats attached</h2>
+<p>Recursive reports 89.7% on SWE-bench Pro v2, 74.2% on SWE-bench Verified, and 54.9% on Terminal-Bench 2.1, using temperature 1.0, top-p 0.95, top-k 20, and pass@1 averaged over at least five attempts. The card notes that comparison scores from other developers are developer-reported and setups differ, and that Recursive counts Terminal-Bench solutions found through web retrieval as failures. These are all self-reported, and I haven't seen independent runs yet.</p>
+<p>One mismatch to note: the announcement says Flint supports up to 512K tokens and recommends staying within 256K, while the model card and serving kit document a 262,144-token configuration. I'd plan around 262,144.</p>
+<h2>Where I land</h2>
+<p>Flint is worth a test if you already run SGLang on H200 or Blackwell and want a cheap-to-serve coding model with a small KV footprint. The engineering choices are coherent: narrow experts, a 3:1 sliding-to-full attention mix, 4 KV heads, and a serving kit that refuses unsupported configurations instead of degrading quietly. What it isn't, yet, is portable. One runtime, one validated parallelism mode (none), no quantized datacenter path, and two prompt-injection edges you have to handle yourself. I'd pin the commit SHA the README asks for, run it as single-GPU replicas, and measure on my own agent traces before I believe any of the leaderboard numbers.</p>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
