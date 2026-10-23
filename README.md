@@ -22,14 +22,14 @@ omitted.
 
 ## Files
 
-- `index.html` — home: selected work, experience, writing, connect
-- `cv.html` — printable public career chronology
-- `writing.html` — writing index
-- `nvcre.html` — NVIDIA Cluster Readiness Engine note
-- `style.css` — responsive light/dark and print styles
-- `404.html` — not-found page
-- `robots.txt` and `sitemap.xml` — search discovery
-- `.nojekyll` — serve files directly without a Jekyll build
+- `index.html`: home: selected work, experience, writing, connect
+- `cv.html`: printable public career chronology
+- `writing.html`: writing index
+- `nvcre.html`: NVIDIA Cluster Readiness Engine note
+- `style.css`: responsive light/dark and print styles
+- `404.html`: not-found page
+- `robots.txt` and `sitemap.xml`: search discovery
+- `.nojekyll`: serve files directly without a Jekyll build
 
 ## Monthly workflow
 
