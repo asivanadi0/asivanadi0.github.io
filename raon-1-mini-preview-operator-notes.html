@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Raon-1 mini Preview: 8 KiB of KV per Token, and a Commit Log Worth Reading — Anpoo Sivanadi</title>
+  <meta name="description" content="KRAFTON released Raon-1 mini preview on October 21 under Apache 2.0." />
+  <link rel="canonical" href="https://asivanadi0.github.io/raon-1-mini-preview-operator-notes.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Raon-1 mini Preview: 8 KiB of KV per Token, and a Commit Log Worth Reading — Anpoo Sivanadi" />
+  <meta property="og:description" content="KRAFTON released Raon-1 mini preview on October 21 under Apache 2.0." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/raon-1-mini-preview-operator-notes.html" />
+  <meta property="article:published_time" content="2026-10-22T18:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Raon-1 mini Preview: 8 KiB of KV per Token, and a Commit Log Worth Reading</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-22T18:00:00-07:00">22 October 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>KRAFTON released <a href="https://huggingface.co/KRAFTON/Raon-1-mini-preview" target="_blank" rel="noopener noreferrer">Raon-1 mini preview</a> on October 21 under Apache 2.0. It's a 28.8B-parameter mixture-of-experts model with 4.3B active per token, trained from scratch, and <a href="https://www.yna.co.kr/view/AKR20261021108300017" target="_blank" rel="noopener noreferrer">Yonhap's report</a> frames it as a Korean-first model built for low inference cost. The benchmark table is fine. What caught my attention is the memory profile: only 7 of its 25 layers keep a KV cache, and the model card puts that cache at about 8 KiB per token in BF16.</p>
+<p>That number changes what you can do with a long-context model on one GPU. The release also has a short, very honest commit history on Hugging Face that tells you where the preview tooling breaks. Here's my read as someone who has to size hardware for these things.</p>
+<h2>The architecture, in operator terms</h2>
+<p>From the <a href="https://huggingface.co/KRAFTON/Raon-1-mini-preview" target="_blank" rel="noopener noreferrer">model card</a> and the <a href="https://github.com/krafton-ai/Raon-1-mini-preview" target="_blank" rel="noopener noreferrer">GitHub README</a>:</p>
+<ul>
+<li><strong>25 layers, hidden size 2,560.</strong> 18 layers are Raon Delta Attention (RDA), a linear-attention variant that KRAFTON says decouples the erase and write gates of Kimi Delta Attention. RDA layers hold a fixed-size state, so their memory doesn't grow with context.</li>
+<li><strong>7 layers are Gated MLA</strong>, with KV LoRA rank 512, query LoRA rank 576, and 40 heads (192-dim QK, 128-dim V). These are the only layers with a per-token cache.</li>
+<li><strong>No positional encoding</strong> (NoPE) in either attention type.</li>
+<li><strong>MoE:</strong> 128 routed experts, 6 routed plus 1 shared active per token, expert intermediate size 1,088. The first layer is a dense FFN at 12,032.</li>
+<li><strong>Raon-mHC</strong> residuals with 4 streams, a cheaper take on DeepSeek's manifold-constrained hyper-connections.</li>
+<li><strong>Vocabulary 259,840</strong>, untied LM head, <strong>262,144-token</strong> native context.</li>
+</ul>
+<p>The ratio is 3 RDA layers to 1 MLA layer. Combine a mostly-linear stack with MLA's compressed latent cache, and you get a very small KV footprint.</p>
+<h2>What 8 KiB per token buys you</h2>
+<p>Some arithmetic, using the card's figure:</p>
+<ul>
+<li>A full 262,144-token sequence needs about <strong>2 GiB</strong> of MLA cache in BF16.</li>
+<li>For comparison, when I <a href="https://asivanadi0.github.io/recursive-flint-serving-kit.html" target="_blank" rel="noopener noreferrer">read the Recursive Flint serving kit</a> earlier this week, its KV came to 28 KiB per token. That's roughly 3.5x more per token for a model with 39.8B total parameters, not wildly larger.</li>
+</ul>
+<p>Both quickstart profiles run the cache in <code>fp8_e4m3</code>. If FP8 halves the BF16 figure, which is my assumption since the card only gives the BF16 number, a 128-sequence batch at full context on the B300 profile needs on the order of 128 GiB of MLA cache. That's a lot, but it's within reach of a single B300. A dense-attention model of this size couldn't come close.</p>
+<p>Keep the caveat in mind. The RDA layers still carry per-sequence state, and the card doesn't say how big it is. When you plan concurrency, measure the real per-sequence footprint under load. Don't size from the 8 KiB figure alone.</p>
+<h2>The consumer and desk-side profiles</h2>
+<p>KRAFTON published two small-box configurations, and the flags are the interesting part.</p>
+<p><strong>RTX 5090 (32 GB), NVFP4 checkpoint:</strong></p>
+<pre><code>--max-model-len 32768
+--max-num-batched-tokens 2048
+--max-num-seqs 8
+--gpu-memory-utilization 0.85
+--kv-cache-dtype fp8_e4m3
+--kv-cache-memory 3221225472
+--spec-method dflash --spec-tokens 7</code></pre>
+<p>That's a hard-capped 3 GiB KV budget, 32K context, and eight sequences. Using my FP8 assumption, eight full 32K sequences need about 1 GiB of MLA cache, so I'd guess the rest of the budget goes to RDA state and the draft model's needs. The card doesn't break this down. It also requires CUDA Toolkit 13 with <code>nvcc</code> on <code>PATH</code>, and it sets <code>VLLM_WSL2_ENABLE_PIN_MEMORY=1</code> for WSL2, so somebody clearly tested this on a Windows gaming box.</p>
+<p><strong>DGX Spark (GB10):</strong> a public ARM64 container, <code>ghcr.io/krafton-ai/raon-vllm-spark:sm121-4e09534</code>, with SM 12.1 compatibility fixes. It's tested on driver <code>580.159.03</code> and runs 128K context, eight sequences, a 2,048-token scheduler batch, and a 3 GiB FP8 KV cache. The instructions pin both the target and draft snapshots by commit hash and run with <code>HF_HUB_OFFLINE=1</code>. I wish more model releases did this. It's the only way to know the weights you benchmark are the weights you deploy.</p>
+<p>The MXFP8 base model on a 32 GB card is a different story. The Transformers path tells you to use <code>device_map="auto"</code> with CPU offload, which is fine for a smoke test and nothing more.</p>
+<h2>DFlash2: read the concurrency columns</h2>
+<p>KRAFTON ships a DFlash2 draft model and reports up to 2.18x output throughput on a single B300. That number holds at concurrency 1 on GSM8K. The full table, measured with vLLM 0.28.0, an MXFP8 target, 7 draft tokens, and thinking enabled, is more useful:</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Benchmark</th>
+<th>Accept length</th>
+<th>C=1</th>
+<th>C=8</th>
+<th>C=32</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GSM8K</td>
+<td>4.76</td>
+<td>2.18x</td>
+<td>1.65x</td>
+<td>1.71x</td>
+</tr>
+<tr>
+<td>MATH-500</td>
+<td>4.43</td>
+<td>2.16x</td>
+<td>1.68x</td>
+<td>1.68x</td>
+</tr>
+<tr>
+<td>HumanEval</td>
+<td>3.96</td>
+<td>1.99x</td>
+<td>1.54x</td>
+<td>1.65x</td>
+</tr>
+<tr>
+<td>MBPP</td>
+<td>3.85</td>
+<td>1.97x</td>
+<td>1.51x</td>
+<td>1.70x</td>
+</tr>
+<tr>
+<td>MT-Bench</td>
+<td>3.24</td>
+<td>1.87x</td>
+<td>1.38x</td>
+<td>1.56x</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Two things stand out. First, the speedup drops by roughly a quarter to a third once you batch, which is what you'd expect: at higher concurrency the GPU has less idle compute for speculation to use. Second, open-ended chat (MT-Bench) has the shortest acceptance length and the smallest gain. If your traffic is agentic chat rather than math, plan around 1.4–1.6x, not 2x. At C=32 on MATH-500, KRAFTON measured 5,166.9 output tok/s with DFlash2 against 3,082.5 without.</p>
+<h2>The commit log is the real release note</h2>
+<p>The <a href="https://huggingface.co/KRAFTON/Raon-1-mini-preview/commits/main" target="_blank" rel="noopener noreferrer">Hugging Face commit history</a> from launch day is short, and it's the most practical document in the release. Things I'd flag before anyone on my team tried this:</p>
+<ul>
+<li><strong>Kernel mismatch on the vLLM fork.</strong> One commit explains that <code>pip install git+...</code> checks out a detached HEAD, so the fork's <code>setup.py</code> couldn't resolve its upstream base. It then pulled nightly precompiled kernels whose op signatures didn't match, and "NVFP4 fails in <code>gptq_marlin_repack</code>." The fix: the fork's <code>setup.py</code> now defaults to the matching commit (<code>krafton-ai/vllm a9d4a5c85</code>). If you built from an early copy of the README, rebuild.</li>
+<li><strong>The draft repo was renamed.</strong> <code>KRAFTON/Raon-1-mini-preview-assistant</code> is now <code>KRAFTON/Raon-1-mini-preview-dflash2</code>. Old scripts will fail to find it.</li>
+<li><strong>MLX truncates thinking by default.</strong> <code>mlx_lm</code> defaults to 512 output tokens. Clients that don't send <code>max_tokens</code>, Hermes Agent among them, got thinking output cut off. The README now passes <code>--max-tokens 32768</code>. Also, <code>mlx_lm server</code> loads whatever model the request names, so the MLX path needs <code>KRAFTON/Raon-1-mini-preview-mlx</code> as the model ID or you get a 404.</li>
+<li><strong>Tokenizer warning is a false positive.</strong> Without <code>transformers_version</code> in <code>config.json</code>, Transformers 5 warns about an "incorrect regex pattern" and suggests <code>fix_mistral_regex=True</code>. The commit says the flag would change tokenization. Don't turn it on.</li>
+<li><strong>First vLLM start compiles kernels for about 10 minutes.</strong> Keep the compile cache on a persistent volume, or every pod restart costs you that time.</li>
+</ul>
+<p>None of these is unusual for a launch day. They all mean the same thing, though: this is a preview on forked runtimes. vLLM support is "beta" from <code>krafton-ai/vllm</code>, and llama.cpp support comes from <code>krafton-ai/llama.cpp</code> with "upstream support pending." The repos are also gated, with automatic approval, so a CI job needs an HF token.</p>
+<h2>Benchmarks, with the footnotes attached</h2>
+<p>The card compares against Qwen3.6-35B-A3B and Gemma 4 26B-A4B as MoE peers. Raon-1 mini leads on IFBench (84.2 vs 66.6 and 80.9), BrowseComp Plus (55.7 vs 34.8 and 32.2), and SWE-Verified (70.8 vs 63.2 and 61.6). It trails on MMLU Pro (76.5 vs 85.9 and 82.9), Terminal-Bench Lite (47.0 vs 63.3 and 52.0), and BFCL v4 (59.8 vs 64.7 and 65.8).</p>
+<p>Read the footnotes. Every evaluation used <code>gpt-5.6-luna</code> as judge and user simulator. SWE-Verified ran on the mini-SWE-agent harness. AutomationBench used the public split, not the official evaluation set. The Korean chatbot score comes from an internal benchmark that hasn't been released. These are KRAFTON's numbers on KRAFTON's harnesses. The weak terminal and function-calling scores are the ones I'd check first if I wanted this model for agents.</p>
+<h2>Where I'd use it</h2>
+<p>If you need long context on a single 32 GB card or a GB10 box, this is one of the better-documented options right now, mainly because of that 7-of-25 cache layout. For a shared serving cluster, I'd wait. The preview label, two forked runtimes, and a judge-scored benchmark table add up to something to benchmark, not something to put behind an SLO. Pull the pinned revisions, measure real per-sequence memory with RDA state included, run your own traffic mix through DFlash2 at your actual concurrency, and check again when the final release lands with upstream vLLM support.</p>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
