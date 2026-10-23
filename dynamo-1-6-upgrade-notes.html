@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dynamo 1.6 Upgrade Notes: Renamed Workers, a Mandatory Queue, and the Known Issues That Matter — Anpoo Sivanadi</title>
+  <meta name="description" content="NVIDIA&#x27;s distributed inference platform Dynamo v1.6.0 was published at 22:31 UTC on October 22, 2026, which was 3:31 PM PT." />
+  <link rel="canonical" href="https://asivanadi0.github.io/dynamo-1-6-upgrade-notes.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Dynamo 1.6 Upgrade Notes: Renamed Workers, a Mandatory Queue, and the Known Issues That Matter — Anpoo Sivanadi" />
+  <meta property="og:description" content="NVIDIA&#x27;s distributed inference platform Dynamo v1.6.0 was published at 22:31 UTC on October 22, 2026, which was 3:31 PM PT." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/dynamo-1-6-upgrade-notes.html" />
+  <meta property="article:published_time" content="2026-10-23T06:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Dynamo 1.6 Upgrade Notes: Renamed Workers, a Mandatory Queue, and the Known Issues That Matter</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-23T06:00:00-07:00">23 October 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>NVIDIA's distributed inference platform <a href="https://github.com/ai-dynamo/dynamo/releases/tag/v1.6.0" target="_blank" rel="noopener noreferrer">Dynamo v1.6.0</a> was published at 22:31 UTC on October 22, 2026, which was 3:31 PM PT. The release notes count 654 merged PRs from 148 contributors, 58 of them from outside NVIDIA. The headline features are pluggable flow control in the router, LPU-backed workers through LPX, active/standby engine failover through Dynamo Snapshot, and a Planner whose GPU budget can be changed at runtime.</p>
+<p>This post is not about those. When I upgrade a serving stack, the risk is rarely the feature I opt into. It's the default that moved, the name that changed, and the known issue that matches my topology. Dynamo 1.6 has plenty of all three, and the notes are candid about them. Below is what I'd check before rolling it, with every number taken from the release notes. Anything that is my reading rather than theirs is labeled.</p>
+<h2>1. Check the engine versions first</h2>
+<p>Dynamo pins its engines. v1.6.0 ships SGLang v0.5.21, TensorRT-LLM v1.3.0rc29 and vLLM v0.31.0, on CUDA 13.0 for SGLang and vLLM and 13.1 for TensorRT-LLM. NIXL is v1.5.0 for the Frontend and SGLang, v1.4.1 for vLLM and v1.3.1 for TensorRT-LLM. Grove moves to v0.1.0-alpha.14 and ModelExpress to v0.7.0.</p>
+<p>The vLLM line is the one to notice. vLLM itself shipped 0.32 on October 18 (UTC), and I wrote up its changed defaults in <a href="/vllm-0-32-upgrade-defaults.html">vLLM 0.32 Upgrade Notes</a>. Dynamo 1.6 is still on 0.31.0, so none of those 0.32 behaviors apply inside a stock Dynamo 1.6 image. If you've already tuned clients around 0.32 semantics, such as <code>max_tokens</code> no longer being reserved from the context window, they don't hold here. My reading: don't mix the two upgrades in one rollout, and don't assume a Dynamo image behaves like the standalone vLLM release with the same month on it.</p>
+<p>On TensorRT-LLM, rc29 deleted the AutoDeploy backend upstream, so <code>backend: _autodeploy</code> now raises an error.</p>
+<h2>2. vLLM workers have new names, and your dashboards use the old ones</h2>
+<p>vLLM worker services drop <code>VllmWorker</code>, <code>VllmPrefillWorker</code> and <code>VllmDecodeWorker</code> for <code>worker</code>, <code>prefill</code> and <code>decode</code>, matching the SGLang, TensorRT-LLM and Mocker backends (<a href="https://github.com/ai-dynamo/dynamo/pull/9848" target="_blank" rel="noopener noreferrer">#9848</a>). The stated reason is Grove's 45-character name limit.</p>
+<p>The rename isn't cosmetic. Pod names, Kubernetes Service names and the <code>dynamo_component</code> metric label all change. Any alert that filters on <code>dynamo_component="VllmDecodeWorker"</code> will go quiet after the upgrade without failing, which is the worst kind of breakage. I'd grep manifests, overrides, Grafana JSON and alert rules for the old names before touching the cluster.</p>
+<h2>3. The Operator stops adopting what it doesn't own</h2>
+<p>Three Operator changes can block a rollout outright:</p>
+<ul>
+<li><strong>No more adoption</strong> (<a href="https://github.com/ai-dynamo/dynamo/pull/13990" target="_blank" rel="noopener noreferrer">#13990</a>). If a Deployment or Service already exists with the same name as an Operator-managed child but has no controller owner, or a different one, the Operator no longer adopts, updates or deletes it. The deployment reports an ownership conflict instead. Clean up leftovers from hand-applied manifests first.</li>
+<li><strong>Stricter multinode validation</strong> (<a href="https://github.com/ai-dynamo/dynamo/pull/14468" target="_blank" rel="noopener noreferrer">#14468</a>). <code>multinode</code> is accepted only on <code>worker</code>, <code>prefill</code> and <code>decode</code>. <code>roles[]</code> takes at most two entries, and each declared role needs a complete PodTemplate that owns its launch command.</li>
+<li><strong>A reserved init container name</strong> (<a href="https://github.com/ai-dynamo/dynamo/pull/14927" target="_blank" rel="noopener noreferrer">#14927</a>). An init container called <code>runtime</code> with <code>restartPolicy: Always</code> now switches the component into native sidecar mode.</li>
+</ul>
+<p>New multinode deployments also require Grove v0.1.0-alpha.14, and the Operator now owns <code>DYNAMO_RANK</code> and <code>DYNAMO_LEADER_ADDRESS</code>. If you manage Grove yourself, upgrade it and its CRDs first. The platform chart now runs a preflight Job that blocks the Operator upgrade when Grove is incompatible or still rolling out (<a href="https://github.com/ai-dynamo/dynamo/pull/16891" target="_blank" rel="noopener noreferrer">#16891</a>). That Job pulls <code>docker.io/library/python:3.12-slim</code> by default, so air-gapped clusters need <code>dynamo-operator.grovePreflight.image</code> pointed at an internal registry.</p>
+<p>Also: Grove coherent updates are now opt-in through the <code>nvidia.com/grove-update-strategy: Coherent</code> annotation, a frontend in deployment <code>foo</code> no longer discovers workers in <code>foo-bar</code>, and GB200 nodes report GPU SKU <code>gb200</code> instead of <code>gb200_sxm</code>.</p>
+<h2>4. Every request now goes through the router's policy queue</h2>
+<p>Before 1.6, an uncontended request could bypass the router's queue. Now every request goes through the policy queue, which orders by deadline (<a href="https://github.com/ai-dynamo/dynamo/pull/14176" target="_blank" rel="noopener noreferrer">#14176</a>). A policy class with no registered workers returns a no-endpoints error, not a queue-rejected one. If your client retry logic matches on the old error, update it.</p>
+<p>The bigger change is configuration. Scoring knobs move into the YAML passed to <code>--router-policy-config</code>, and that file now takes precedence over the old flags and environment variables (<a href="https://github.com/ai-dynamo/dynamo/pull/15202" target="_blank" rel="noopener noreferrer">#15202</a>). The six scoring flags, <code>--load-aware</code> and the queue-threshold flags are deprecated and slated for removal in v1.7.0. One default to watch: when shared cache is enabled through YAML, shared-cache hits now earn a multiplier of <code>0.5</code>. Set <code>shared_cache_multiplier: 0.0</code> if you don't want that credit. The overlap-query response also drops <code>router_credit_blocks</code>.</p>
+<p>On the Planner side, throughput scaling is capped at 8 replicas per decision per component (<a href="https://github.com/ai-dynamo/dynamo/pull/14296" target="_blank" rel="noopener noreferrer">#14296</a>). If your autoscaling relied on jumping 20 replicas in one step during a traffic spike, raise <code>max_throughput_scaling_replicas</code>. The AIConfigurator options are renamed to AISimulate (<code>--aic-*</code> to <code>--ais-*</code>), and retired <code>DYN_AIC_*</code> variables now fail at startup.</p>
+<h2>5. Settings that used to fail quietly now fail loudly</h2>
+<p>These will bite anyone with a typo in a values file:</p>
+<ul>
+<li>Invalid <code>DYN_REQUEST_PLANE</code> and <code>DYN_EVENT_PLANE</code> values now stop startup. They used to fall back to TCP and ZMQ silently.</li>
+<li>Unbracketed IPv6 ZMQ endpoints such as <code>tcp://2001:db8::10:5555</code> are rejected instead of retrying forever.</li>
+<li>The documented <code>DYN_METRICS_*</code> histogram variables now actually change bucket boundaries. They were ignored before, so check whatever you set and forgot about.</li>
+<li>The default NIXL Prometheus port moves from 19090 to 9090. If your scrape config expects 19090, set <code>NIXL_TELEMETRY_PROMETHEUS_PORT</code> explicitly.</li>
+<li>On TensorRT-LLM, <code>--publish-kv-events</code> no longer enables performance metrics; add <code>--publish-metrics</code>.</li>
+</ul>
+<h2>6. Snapshot mode changes what NCCL does</h2>
+<p>Dynamo Snapshot now captures CUDA shared memory by default (<a href="https://github.com/ai-dynamo/dynamo/pull/15791" target="_blank" rel="noopener noreferrer">#15791</a>). The checkpoint target container must set <code>command</code>, and existing checkpoints get recaptured once because the compatibility hash now includes the annotation.</p>
+<p>The easy line to miss: snapshot mode no longer forces <code>NCCL_CUMEM_ENABLE</code>, <code>NCCL_NVLS_ENABLE</code> and <code>TLLM_NCCL_SYMMETRIC_ZERO_COPY</code> off. If you run snapshots and your collectives were stable only because those were off, set them to <code>0</code> yourself. To keep the old capture behavior, set <code>nvidia.com/cuda-shared-memory-support: disabled</code>.</p>
+<h2>7. Client-facing behavior changes</h2>
+<p>A few of these reach application teams, not just the platform team:</p>
+<ul>
+<li>Structural tags are now on by default for supported parsers. Valid tool schemas that use constructs the grammar backend rejects, such as regex lookahead, can now fail requests. <code>DYN_ENABLE_STRUCTURAL_TAG=false</code> restores the old behavior.</li>
+<li>Non-streaming <code>/v1/responses</code> no longer infers tool calls from assistant text. Only structured tool calls from the backend count, so enable a backend tool-call parser.</li>
+<li><code>/v1/models/&lt;model&gt;/ready</code> returns 503 for a known but unready model, instead of 200 with <code>ready: false</code>. Probes that only check the status code will see the difference.</li>
+</ul>
+<h2>8. The known issues, sorted by how much they'd hurt</h2>
+<p>The notes list known issues per component. The ones I'd check against my own setup:</p>
+<ul>
+<li><strong>SGLang scheduler crash.</strong> A request whose <code>stop_token_ids</code> includes an ID at or above the vocabulary size can crash the scheduler when any request in the batch sets <code>min_tokens</code>, failing every request on that worker until restart. No workaround yet, and it also affects v1.5.0. On a public endpoint, my reading is that you should validate <code>stop_token_ids</code> at your gateway.</li>
+<li><strong>vLLM without <code>max_tokens</code>.</strong> A request with no <code>max_tokens</code> can generate to the full remaining context when the model sets no default. Set it on every request.</li>
+<li><strong><code>logit_bias</code> is ignored.</strong> The Frontend accepts it on chat and completions and drops it before the engine. No workaround.</li>
+<li><strong>EFA silently falls back to sockets.</strong> Workers set up from the EFA on AWS guide use socket transport because the guide's <code>LD_LIBRARY_PATH</code> is wrong. Use <code>/opt/amazon/ofi-nccl/lib</code> instead of <code>/opt/aws-ofi-nccl/lib</code>. On EFA, I'd check this one first, since it costs bandwidth without any error.</li>
+<li><strong>Planner refuses to scale.</strong> For aggregated vLLM deployments, a regression model seeded from worker self-benchmarks can overestimate capacity and refuse to scale up under load. Use a pre-published AISimulate performance model.</li>
+<li><strong>Snapshot plus SGLang CUDA graphs.</strong> SGLang workers in Snapshot mode or with GPU Memory Service checkpointing fail at startup with <code>NotImplementedError</code>. The workaround is <code>--disable-cuda-graph</code>, which costs decode performance.</li>
+<li><strong>Smaller routing issues.</strong> Decode-only pins fail in disaggregated serving (pin both workers or neither), rolling updates can return 404s for about a second, and GlobalRouter pool requests can find no endpoints on Grove.</li>
+</ul>
+<h2>My upgrade order</h2>
+<ol>
+<li>Upgrade an externally managed Grove and its CRDs to v0.1.0-alpha.14, and mirror the preflight image if you're air-gapped.</li>
+<li>Grep manifests, dashboards and alerts for <code>VllmWorker</code>, <code>VllmPrefillWorker</code>, <code>VllmDecodeWorker</code>, <code>gb200_sxm</code> and any init container named <code>runtime</code>.</li>
+<li>Delete or rename leftover objects that collide with Operator-managed names.</li>
+<li>Move router scoring flags into <code>--router-policy-config</code>, and decide on <code>shared_cache_multiplier</code> on purpose.</li>
+<li>Validate every <code>DYN_*</code> and <code>NIXL_*</code> variable, since bad values now stop startup.</li>
+<li>On EFA, fix the <code>LD_LIBRARY_PATH</code>. On Snapshot, set the NCCL variables explicitly.</li>
+<li>After rollout, watch per-component metrics under the new labels, scale-up events and the 503 rate on readiness endpoints.</li>
+</ol>
+<p>Keep the vLLM 0.32 move as a separate change, after Dynamo ships an image that carries it.</p>
+<h2>Sources</h2>
+<ul>
+<li><a href="https://github.com/ai-dynamo/dynamo/releases/tag/v1.6.0" target="_blank" rel="noopener noreferrer">Dynamo v1.6.0 release notes</a></li>
+<li><a href="https://github.com/ai-dynamo/dynamo/pull/9848" target="_blank" rel="noopener noreferrer">#9848: vLLM worker short names</a></li>
+<li><a href="https://github.com/ai-dynamo/dynamo/pull/13990" target="_blank" rel="noopener noreferrer">#13990: Operator ownership</a></li>
+<li><a href="https://github.com/ai-dynamo/dynamo/pull/14176" target="_blank" rel="noopener noreferrer">#14176: policy queue for every request</a></li>
+<li><a href="https://github.com/ai-dynamo/dynamo/pull/14296" target="_blank" rel="noopener noreferrer">#14296: Planner scaling cap</a></li>
+<li><a href="https://github.com/ai-dynamo/dynamo/pull/15202" target="_blank" rel="noopener noreferrer">#15202: router policy config</a></li>
+<li><a href="https://github.com/ai-dynamo/dynamo/pull/15791" target="_blank" rel="noopener noreferrer">#15791: Snapshot CUDA shared memory</a></li>
+<li><a href="https://github.com/ai-dynamo/dynamo/pull/16891" target="_blank" rel="noopener noreferrer">#16891: Grove preflight</a></li>
+<li><a href="/vllm-0-32-upgrade-defaults.html">vLLM 0.32 Upgrade Notes</a></li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
