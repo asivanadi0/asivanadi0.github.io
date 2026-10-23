@@ -386,3 +386,17 @@ h1, h2, h3 { font-family: var(--display); font-weight: 700; color: var(--ink); t
 .home .writing-list li:first-child h3 { font-size: clamp(1.375rem, 1.1rem + 1vw, 2rem); text-wrap: pretty; }
 .home .writing-list li:first-child time { order: 2; }
 @media (max-width: 760px) { .home .writing-list li:first-child { margin: 0 0 1.75rem; } }
+
+/* Mobile margin fix: one inline inset on every page, and line breaking that fills the measure,
+   so the right edge of the text sits as close to the sheet edge as the left. */
+@media (max-width: 760px) {
+  :root { --inset: 1.25rem; }
+  .hero, .section, .page-header, .page-body, .article, .cv-header, .cv-section, .notfound, .contact-band, .footer-card { padding-inline: var(--inset); }
+  .article-body > pre, .article-body pre { margin-inline: calc(-1 * var(--inset)); padding-inline: var(--inset); }
+  h1, h2, h3 { text-wrap: pretty; }
+  p, li, dd, .dek { hyphens: auto; -webkit-hyphens: auto; text-wrap: pretty; overflow-wrap: break-word; }
+  .nav { width: 100%; justify-content: space-between; }
+  .link-row { display: grid; grid-template-columns: repeat(3, 1fr); }
+  .link-row a { text-align: center; }
+  .section-note, .article-body p, .writing-list p, .work-list p { max-width: none; }
+}
