@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MiniMax-M3.1-Flash on vLLM: What an NVFP4 KV Cache Changes for Capacity Planning — Anpoo Sivanadi</title>
+  <meta name="description" content="MiniMax put MiniMax-M3.1-Flash on Hugging Face on October 23, and the vLLM team published a day-0 support post the same day." />
+  <link rel="canonical" href="https://asivanadi0.github.io/minimax-m3-1-flash-serving-notes.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="MiniMax-M3.1-Flash on vLLM: What an NVFP4 KV Cache Changes for Capacity Planning — Anpoo Sivanadi" />
+  <meta property="og:description" content="MiniMax put MiniMax-M3.1-Flash on Hugging Face on October 23, and the vLLM team published a day-0 support post the same day." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/minimax-m3-1-flash-serving-notes.html" />
+  <meta property="article:published_time" content="2026-10-23T18:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>MiniMax-M3.1-Flash on vLLM: What an NVFP4 KV Cache Changes for Capacity Planning</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-23T18:00:00-07:00">23 October 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>MiniMax put <a href="https://huggingface.co/MiniMaxAI/MiniMax-M3.1-Flash" target="_blank" rel="noopener noreferrer">MiniMax-M3.1-Flash</a> on Hugging Face on October 23, and the vLLM team published a <a href="https://vllm.ai/blog/2026-10-23-minimax-m31-flash" target="_blank" rel="noopener noreferrer">day-0 support post</a> the same day. The model card says it's a native multimodal mixture-of-experts model with about 428B total parameters, 23B active per token, a context window of up to 1M tokens, and a DSpark draft head for speculative decoding.</p>
+<p>The part worth reading is that the model was quantization-aware trained to keep its KV cache in NVFP4. That's a training decision, not a serving flag someone bolted on afterward, and it changes the math on how many long sequences fit on a node. Here's how I read it as someone who has to size clusters.</p>
+<h2>The architecture, in operator terms</h2>
+<p>From the model card and the vLLM post:</p>
+<ul>
+<li><strong>About 428B total, 23B active.</strong> The routed experts are stored in NVFP4. The rest of the projections run in MXFP8.</li>
+<li><strong>MiniMax Sparse Attention (MSA) in every layer.</strong> M3 kept three full-attention layers at the front. M3.1 replaces them, so there's no dense-attention layer left in the stack.</li>
+<li><strong>60 layers, 64 query heads, 4 KV heads, head dim 128</strong>, from the config numbers shown in vLLM's memory figure.</li>
+<li><strong>DSpark replaces the earlier EAGLE-like MTP head.</strong> The drafter is non-causal GQA with a 4,096-token sliding window.</li>
+<li><strong>License is <code>minimax-community</code></strong>, not Apache or MIT. Read it before you put this behind a paid product.</li>
+</ul>
+<h2>How MSA reads memory</h2>
+<p>The <a href="https://arxiv.org/abs/2606.13392v1" target="_blank" rel="noopener noreferrer">MSA paper</a> splits the KV cache into 128-token blocks. A lightweight indexer scores every key against one shared index-key head, max-pools the scores to one value per block, and keeps the top 16 blocks plus the most recent one. Main attention then runs exactly over those blocks. That caps each query at 2,048 keys, no matter how long the context is.</p>
+<p>The vLLM post puts numbers on it. The indexer still scans the whole context each decode step, but at 128 bytes per token per layer instead of the 1,024 bytes of FP8 K/V a dense layer would read. Per-step HBM traffic at long context drops to about 12.5% of dense.</p>
+<p>The one thing to keep straight: <strong>MSA cuts what each query reads, not what the cache stores.</strong> Every token's K and V stay resident. Sparse attention helps your decode bandwidth. It does nothing for your capacity. That's why the quantization story matters more than the attention story for planning.</p>
+<h2>The capacity numbers</h2>
+<p>The vLLM post gives three numbers I'd put straight into a sizing sheet:</p>
+<ul>
+<li><strong>Checkpoint size: 250.1 GB</strong>, down from 451.5 GB for MiniMax-M3 in MXFP8. That's 44.6% smaller.</li>
+<li><strong>KV cache: 34,560 bytes per token in NVFP4</strong>, against 61,440 bytes in FP8. That's 43.75% less per token.</li>
+<li><strong>Concurrency: 76 sequences at 256K tokens on four B300 GPUs with DEP4</strong>, where M3 with an FP8 KV cache fits 28. About 2.7x on the same hardware.</li>
+</ul>
+<p>Two smaller details from the post's memory notes matter if you run tensor parallel. First, the index-key cache has a single head, so every TP rank keeps a full copy of it. At TP4 you pay for the index cache four times. Second, NVFP4 is 4-bit values plus one FP8 scale per 16 values, so it's effectively 4.5 bits per element, not 4. If you build your own sizing math, use 4.5.</p>
+<p>My reading: on a 4-GPU B300 or MI355X box, this model is limited by how much long context you want to keep resident, not by weights. 250 GB of weights over four 288 GB GPUs leaves most of the HBM for cache. If your traffic is long-horizon agent sessions with big shared prefixes, that's the right trade.</p>
+<h2>The kernels behind it</h2>
+<p>Blackwell has no tensor core path that multiplies an FP8 query against an NVFP4 cache directly. vLLM's kernels dequantize the cache to FP8 and run an FP8 MMA. To keep that cheap they use a new CUDA 13.4 PTX instruction, <code>mul.e4m3x4.e2m1x4.e4m3x4</code> (SASS <code>QMUL4</code>), which turns four NVFP4 values into four FP8 values in one instruction. The post reports up to 1.7x on the indexer QK decode kernel and 1.3x on sparse attention decode. The kernels live in <a href="https://github.com/vllm-project/MSA" target="_blank" rel="noopener noreferrer">vllm-project/MSA</a>.</p>
+<p>Other changes listed in the post:</p>
+<ul>
+<li><strong>NVFP4 MegaMoE</strong> in vLLM's <a href="https://github.com/vllm-project/DeepGEMM" target="_blank" rel="noopener noreferrer">DeepGEMM fork</a>, with the MXFP8 shared expert fused in and the TMEM stage released early in the FC1 epilogue. 20% lower kernel latency in prefill, 7% higher prefill throughput.</li>
+<li><strong>Indexer decode context parallelism.</strong> Instead of each GPU scoring its own index head over the full context, each GPU scores all four heads over a quarter of the pages and sends its local top-16 to the owning GPU over NVLink. The selection stays exact. Up to 3.3x faster per sparse layer at 512K context on 4x GB300.</li>
+<li><strong>One fused kernel for QKV GEMM, norm, RoPE and cache insert</strong>, so the QKV tensor never hits HBM. 1.1x to 1.6x faster prefill at 512+ tokens and about 19% lower P50 TTFT at TP4.</li>
+<li><strong>FlashInfer's PrimiTS backend for the DSpark drafter</strong>, 1.3x to 2x faster than FlashAttention 4 on those decode shapes.</li>
+</ul>
+<p>On Rubin (SM107), the indexer dequantizes NVFP4 straight to FP16 and runs the score MMA in FP16, which the post says cuts dequant instructions by about a third and makes the scores exact.</p>
+<h2>AMD is not an afterthought this time</h2>
+<p>CDNA4 has no native NVFP4 dequantize instruction, so the AMD kernels turn it into a table lookup: 256 possible E4M3 scales times eight E2M1 magnitudes, precomputed into a 2 KB table in LDS. The post says sparse decode attention runs up to 2.5x faster than converting selected blocks to FP8 first. The kernels are written in <a href="https://github.com/rocm/flydsl" target="_blank" rel="noopener noreferrer">FlyDSL</a>.</p>
+<p>Two AMD items stood out to me as cluster problems, not kernel problems:</p>
+<ul>
+<li><strong>KV transfer layout.</strong> vLLM's layer-by-layer layout split each KV block across 125 pages, each needing its own NIXL RDMA read. A block-outer layout stores each block as one contiguous 1.82 MB row, so it moves in a single read. Combined with sequence parallelism and dual-batch overlap, 16K+ token prefill batches got 1.8x to 2.1x faster on 4x MI355X. If you run disaggregated prefill and decode on any vendor, count the RDMA reads per block in your own setup.</li>
+<li><strong>Launch overhead.</strong> At low concurrency, decode on MI350X was launch-bound. A single FlyDSL "mono" kernel per decoder layer replaces roughly 1,170 launches and makes the decode step up to 2.3x faster at TP4.</li>
+</ul>
+<h2>Throughput, with the footnotes attached</h2>
+<p>All of these come from the SemiAnalysis AgentX benchmark, run by the vLLM team on their day-0 images:</p>
+<ul>
+<li><strong>GB300:</strong> 418.9 tok/s per user at the latency end; 153.8K tok/s per GPU at the throughput end with about 127 tok/s per user.</li>
+<li><strong>Rubin:</strong> 724.9 tok/s per user at the latency end; 191.5K tok/s per GPU at the throughput end with about 134 tok/s per user.</li>
+<li><strong>MI355X:</strong> 331.0 tok/s per user at the latency end; 133.3M total tokens per dollar of TCO at the cost end with about 79 tok/s per user.</li>
+</ul>
+<p>The fine print matters. The speculative decoding numbers use synthetic acceptance lengths: 3.16 to 3.26 tokens on GB300 with seven speculative tokens, and 2.45 or 3.2 on MI355X depending on the point. Your real acceptance rate on your traffic decides whether those numbers hold. Treat them as a ceiling.</p>
+<h2>What I'd check before deploying</h2>
+<ol>
+<li><strong>Wheels.</strong> Day-0 support ships as prebuilt images, <code>vllm/vllm-openai:minimax-m31-flash</code> and <code>vllm/vllm-openai-rocm:minimax-m31-flash</code>. The post says the model reaches the nightly PyPI wheel only after upstream review, usually about a week. Pin the image digest, and plan a move to a released vLLM later. My <a href="https://asivanadi0.github.io/vllm-0-32-upgrade-defaults.html" target="_blank" rel="noopener noreferrer">vLLM 0.32 upgrade notes</a> cover the defaults that will move under you when you do.</li>
+<li><strong>Toolkit.</strong> The NVIDIA recipe recommends CUDA 13.4, which is where <code>QMUL4</code> comes from. Check your driver and base image before you assume you'll see the posted decode numbers.</li>
+<li><strong>Flags.</strong> Both recipes use <code>--kv-cache-dtype nvfp4</code>, <code>--block-size 128</code> to match MSA blocks, and <code>--disable-hybrid-kv-cache-manager</code>. NVIDIA runs DSpark with 7 speculative tokens; AMD runs 3 and turns on <code>indexer_decode_cp</code>. The full recipes are on <a href="https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3.1-Flash" target="_blank" rel="noopener noreferrer">vLLM Recipes</a>.</li>
+<li><strong>Don't mix KV dtypes.</strong> The model was trained for an NVFP4 cache. Serving it with an FP8 or BF16 cache to "be safe" costs you capacity and isn't the configuration MiniMax evaluated.</li>
+<li><strong>Measure acceptance.</strong> Log DSpark acceptance length on real traffic in week one. It's the variable that most changes your per-user numbers.</li>
+</ol>
+<h2>Bottom line</h2>
+<p>MiniMax-M3.1-Flash is the clearest example so far of a model shipped with its serving format decided at training time. NVFP4 experts, an NVFP4 KV cache, sparse attention everywhere, and a bundled drafter add up to a 428B model that fits on four GPUs with room for real long-context concurrency. I'd benchmark it on a 4-GPU B300, GB300 or MI355X node with my own agent traces and my own acceptance rates before I believed any single number above, but the capacity math is the part I'd trust first, because it's just bytes.</p>
+<h2>Sources</h2>
+<ul>
+<li><a href="https://huggingface.co/MiniMaxAI/MiniMax-M3.1-Flash" target="_blank" rel="noopener noreferrer">MiniMax-M3.1-Flash model card</a></li>
+<li><a href="https://vllm.ai/blog/2026-10-23-minimax-m31-flash" target="_blank" rel="noopener noreferrer">vLLM: Day-0 Support for MiniMax-M3.1-Flash</a></li>
+<li><a href="https://arxiv.org/abs/2606.13392v1" target="_blank" rel="noopener noreferrer">MiniMax Sparse Attention paper (arXiv 2606.13392)</a></li>
+<li><a href="https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3.1-Flash" target="_blank" rel="noopener noreferrer">vLLM Recipes: MiniMax-M3.1-Flash</a></li>
+<li><a href="https://github.com/vllm-project/MSA" target="_blank" rel="noopener noreferrer">vllm-project/MSA kernels</a></li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
