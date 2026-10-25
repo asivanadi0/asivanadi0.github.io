@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>vLLM and SGLang Both Caught DeepInfer on DeepSeek-V4.1-Flash. Read the Setups Before the Headlines. — Anpoo Sivanadi</title>
+  <meta name="description" content="A few days after DeepSeek open-sourced DeepInfer, its own engine for DeepSeek-V4.1-Flash, both big general-purpose engines answered." />
+  <link rel="canonical" href="https://asivanadi0.github.io/deepseek-v4-1-flash-vllm-sglang-vs-deepinfer.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="vLLM and SGLang Both Caught DeepInfer on DeepSeek-V4.1-Flash. Read the Setups Before the Headlines. — Anpoo Sivanadi" />
+  <meta property="og:description" content="A few days after DeepSeek open-sourced DeepInfer, its own engine for DeepSeek-V4.1-Flash, both big general-purpose engines answered." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/deepseek-v4-1-flash-vllm-sglang-vs-deepinfer.html" />
+  <meta property="article:published_time" content="2026-10-25T06:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>vLLM and SGLang Both Caught DeepInfer on DeepSeek-V4.1-Flash. Read the Setups Before the Headlines.</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-25T06:00:00-07:00">25 October 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>A few days after DeepSeek open-sourced DeepInfer, its own engine for DeepSeek-V4.1-Flash, both big general-purpose engines answered. The vLLM team and Inferact published <a href="https://vllm.ai/blog/2026-10-23-deepseek-v41-flash-pd-wide-ep" target="_blank" rel="noopener noreferrer">Serving DeepSeek-V4.1-Flash at Scale</a> on October 23, 2026. The SGLang team followed with <a href="https://www.lmsys.org/blog/2026-10-24-dsv41-deepinfer/" target="_blank" rel="noopener noreferrer">More Than DeepInfer: What SGLang Delivers</a> on October 24.</p>
+<p>Both say the same thing in the title: we match the model-specific engine. I <a href="/deepseek-deepinfer-deployment-qa.html">wrote about DeepInfer's deployment Q&amp;A</a> when it came out, and the obvious question was whether you'd need to run DeepSeek's engine to get DeepSeek's numbers. The short answer from these two posts is no. The longer answer is that the two comparisons measure different things, and a few of the settings that make them fair also make them unlike production. Every number below comes from the two posts unless I say otherwise.</p>
+<h2>1. What each team actually compared</h2>
+<p><strong>vLLM, decode.</strong> Under DeepSeek's decode configuration (131K context, three draft tokens, a fixed 3.25 accepted tokens per step), vLLM on 32 GB200 GPUs (DEP32, 384 routed plus 32 redundant experts) lands within 6% of DeepInfer's published curve (EP64DP64, read off its README chart) across batch sizes 8 to 256.</p>
+<p><strong>vLLM, prefill.</strong> The post is careful here. DeepInfer's published prefill used EP4DP4, 32 redundant experts, a 140-token bounded replay, and hardware the chart doesn't name. vLLM ran DEP2 on GB300 with no redundant experts and a 128-token replay. The team says outright that the gap between the curves should not be read as an engine-to-engine speedup, only that vLLM tracks DeepSeek's curve.</p>
+<p><strong>SGLang, both phases.</strong> SGLang ran DeepInfer itself, at commit <code>774ce24</code>, next to SGLang on the same machines with DeepInfer's own benchmark scripts. Prefill ran on one 4x GB300 node and one 4x B300 node. Decode ran on 64 GB300 GPUs across 16 nodes at DP64/EP64. Results:</p>
+<ul>
+<li>Prefill, 4x GB300: up to 1.04x DeepInfer's throughput, ahead at 4K, 32K and 64K new tokens per GPU per step, on par at 8K and 16K.</li>
+<li>Prefill, 4x B300: up to 1.04x, ahead at 4K, 8K and 32K, on par at 16K and 64K.</li>
+<li>Decode, 64x GB300: steps 1.1% to 7.4% shorter from 16 to 256 requests per GPU, on par at 8.</li>
+</ul>
+<p>That's the stronger head-to-head of the two, because both engines ran on the same hardware. The launch commands for both sides are in a <a href="https://gist.github.com/sglang-bot/f03d7d0dd268b0386177eb2ef09f8b3b" target="_blank" rel="noopener noreferrer">public gist</a>, along with SGLang commits <code>7d996300b9</code> (prefill) and <code>3b95120f00</code> (decode).</p>
+<h2>2. The fine print that matters</h2>
+<p>Read the SGLang appendix before quoting the 7.4%. A few details:</p>
+<ul>
+<li>Both prefill runs used <strong>balanced expert routing with EPLB off</strong> and 32 redundant experts. The post says settings like balanced routing "exist for the comparison only."</li>
+<li>The two engines measured prefill differently. DeepInfer times about 9 batches on GPU 0. SGLang averages every complete batch on every GPU between the points where 20% and 90% of requests have finished. DeepInfer also repeats the same prompt across requests on each GPU; SGLang uses different new tokens per request.</li>
+<li>In decode, SGLang kept the Engram tables on device while DeepInfer kept them in host memory, and DeepInfer's draft model carried 64 redundant experts while SGLang's had none.</li>
+<li>Decode uses static verification: every drafted token is checked for every request, and step time is converted to tokens at a fixed 3.25 accepted per step. That's the same convention vLLM used. Real acceptance depends on your traffic.</li>
+</ul>
+<p>It's all written down, but "1.1% to 7.4% faster" is a small margin measured under synthetic routing and fixed acceptance. What I take from it is parity, not a winner.</p>
+<p>The balanced-routing point matters more than it looks, and the vLLM post shows why. On real routing with EPLB off, vLLM measured MoE balancedness (mean rank load over max rank load) of 0.35 for the target model and 0.21 for the DSpark draft. With EPLB on, those rose to 0.94 and 0.89. A benchmark that routes tokens evenly by construction skips the whole problem of expert imbalance, which on a real wide-EP deployment is one of the biggest things you tune.</p>
+<h2>3. What the vLLM post teaches about this model</h2>
+<p>The vLLM post is the more useful of the two if you're planning a deployment, because most of it is about the model's shape, not the comparison.</p>
+<p><strong>The KV cache is tiny.</strong> Global KV is 890 bytes per token, from cross-layer KV sharing and FP4 compression. KV capacity rarely limits batch size, so the team pushes each operation toward its compute or bandwidth limit instead.</p>
+<p><strong>Decode is MoE-bound, even at long context.</strong> At DEP4, 128K context and 64 requests per rank, MoE takes 62% of the target step; attention and the indexer together take 13%. At DEP32 with 16 requests per rank, target forward time goes from 8.93 ms at 128K context to 9.53 ms at 855K. That's 6.7x the context for 0.6 ms more. A practical consequence the post spells out: decode DP load balancing can just be least-load by request count, because context length barely moves step time.</p>
+<p><strong>Prefill wants small instances.</strong> In an AgentX prefill-only run at concurrency 256, DEP4 got only 83% of DEP2's per-GPU throughput (53.3K vs 64.4K tokens/s). Replaying identical requests with ranks out of step cost DEP2 5.9% of its throughput and DEP4 13.6%. That's DP imbalance, and smaller instances suffer less of it.</p>
+<p><strong>Three prefill fixes, about 40% together.</strong> On DEP2 after a 128K cache hit:</p>
+<ul>
+<li>Running layer 20 on only the 128-token replay batch, while it still writes KV for every token (<a href="https://github.com/vllm-project/vllm/pull/59894" target="_blank" rel="noopener noreferrer">#59894</a>): +19.9% at 32K new tokens.</li>
+<li>Moving the shared Engram host tables from <code>/dev/shm</code> (64 KB GPU pages, lots of TLB misses) to host-NUMA cuMem allocations with 2 MB pages (<a href="https://github.com/vllm-project/vllm/pull/62359" target="_blank" rel="noopener noreferrer">#62359</a>): another +2.8%.</li>
+<li>Using DeepSelect top-k in the prefill indexer (<a href="https://github.com/vllm-project/vllm/pull/62240" target="_blank" rel="noopener noreferrer">#62240</a>): another +15.6%.</li>
+</ul>
+<p>Combined, new-token prefill throughput rises 35.6% to 43.9% across 4K to 64K new tokens. At 64K it goes from 71.2K to 102.5K tokens/s per GPU. The TLB fix is the one I'd remember for other models: host-side tables read randomly by the GPU should sit on large pages.</p>
+<h2>4. Wide-EP has a knee, and the CPU becomes the problem</h2>
+<p>On GB200 with 64 requests per GPU at 128K context, output throughput per GPU goes 9,385 tokens/s at DEP4, 11,445 at DEP8 (+22%), 12,915 at DEP16 (+13%), and 13,274 at DEP32 (+3%). Target MegaMoE time falls from 13.4 to 6.0 ms as each rank holds fewer experts, but the rest of the step doesn't shrink. Past DEP16 you're mostly buying flexibility, not per-GPU throughput.</p>
+<p>The more interesting finding is that an unoptimized DEP32 ran slower than DEP16 (17.57 vs 13.84 ms per step) even though its GPU work was 1.1 ms faster. Wide-EP syncs every rank at every layer, so one late rank stalls everyone, and shorter GPU steps leave less room to hide CPU work. The fixes they list:</p>
+<ul>
+<li>KV reads posted synchronously on the decode worker thread, replaced by a NIXL push connector with UCX scatter-gather: 141K to 440K tokens/s per GPU on an 8P1D GB300 setup at concurrency 3,072.</li>
+<li>Gloo all-reduce latency growing linearly with rank count, replaced by a recursive-doubling CPU all-reduce (<a href="https://github.com/vllm-project/vllm/pull/61767" target="_blank" rel="noopener noreferrer">#61767</a>): DP sync from 10.8 to 1.5 ms per step.</li>
+<li>Admission bursts of up to 140 requests in one step, capped with an opt-in limit of 4 new KV loads per step (<a href="https://github.com/vllm-project/vllm/pull/61725" target="_blank" rel="noopener noreferrer">#61725</a>): 460K to 516K tokens/s per GPU, with P90 per-user speed from 109 to 153 tokens/s.</li>
+</ul>
+<h2>5. The headline numbers, read carefully</h2>
+<p>vLLM's top-line result is 954K tokens/s per GPU at a P90 of 196 tokens/s per user on one GB300 NVL72 rack, 7.9x its earlier single-node result, priced at $38.96 per GPU-hour at DeepSeek's off-peak rates. Two cautions. That throughput counts cached input, uncached input and output tokens, so on an agentic trace with heavy prefix reuse it's dominated by cache hits. And the deployment uses several DEP2 prefill instances plus one DEP16 or DEP32 decode instance, 34 to 64 GPUs, not necessarily the full 72.</p>
+<h2>6. What I'd do with this</h2>
+<p>If you were waiting to see whether DeepInfer was the only fast way to serve V4.1-Flash, it isn't. DeepInfer is an offline engine, and its README lists the KV cache system, prefill/decode disaggregation and cross-replica load balancing as not included. SGLang ships all three (radix cache with Linker to 3FS or Mooncake, P/D over Mooncake, NIXL or MORI, and a prefix-aware gateway), and vLLM's numbers are already from an online P/D deployment.</p>
+<p>So pick on operations, not on these margins. My order would be:</p>
+<ol>
+<li>Use whichever engine your team already runs. A 1% to 7% difference under balanced routing won't survive your real traffic either way.</li>
+<li>Turn on EPLB for both the target and the draft. The 0.35 balancedness figure is what you get without it.</li>
+<li>Start prefill at DEP2 and measure DEP4 against it on your own trace before going wider.</li>
+<li>Watch CPU time per step and admission bursts before you scale decode past DEP16. That's where the vLLM team found its losses.</li>
+<li>Report acceptance from your own traffic, not the fixed 3.25, when you compare anything.</li>
+</ol>
+<p>Both teams published commits, PR numbers and launch commands, so you can rerun all of it on your own routing before trusting any of these deltas, including the ones I've repeated here.</p>
+<h2>Sources</h2>
+<ul>
+<li>vLLM and Inferact, <a href="https://vllm.ai/blog/2026-10-23-deepseek-v41-flash-pd-wide-ep" target="_blank" rel="noopener noreferrer">Serving DeepSeek-V4.1-Flash at Scale: vLLM Matches DeepInfer and Scales to GB300 NVL72</a>, October 23, 2026</li>
+<li>The SGLang Team, <a href="https://www.lmsys.org/blog/2026-10-24-dsv41-deepinfer/" target="_blank" rel="noopener noreferrer">More Than DeepInfer: What SGLang Delivers</a>, October 24, 2026</li>
+<li><a href="https://github.com/deepseek-ai/DeepInfer" target="_blank" rel="noopener noreferrer">DeepInfer on GitHub</a></li>
+<li><a href="https://gist.github.com/sglang-bot/f03d7d0dd268b0386177eb2ef09f8b3b" target="_blank" rel="noopener noreferrer">SGLang benchmark launch commands (gist)</a></li>
+<li><a href="https://docs.sglang.ai/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1" target="_blank" rel="noopener noreferrer">SGLang DeepSeek-V4.1 cookbook</a></li>
+<li>My earlier post: <a href="/deepseek-deepinfer-deployment-qa.html">DeepSeek Open-Sourced DeepInfer. The Deployment Q&amp;A Is the Part to Read.</a></li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
