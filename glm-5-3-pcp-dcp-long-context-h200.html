@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Million-Token GLM-5.3 on 16 H200s: What PCP, DCP and HiSparse Actually Buy You — Anpoo Sivanadi</title>
+  <meta name="description" content="The vLLM team published GLM-5.3 Optimizations, Part 2 on October 23, 2026." />
+  <link rel="canonical" href="https://asivanadi0.github.io/glm-5-3-pcp-dcp-long-context-h200.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Million-Token GLM-5.3 on 16 H200s: What PCP, DCP and HiSparse Actually Buy You — Anpoo Sivanadi" />
+  <meta property="og:description" content="The vLLM team published GLM-5.3 Optimizations, Part 2 on October 23, 2026." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/glm-5-3-pcp-dcp-long-context-h200.html" />
+  <meta property="article:published_time" content="2026-10-24T18:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Million-Token GLM-5.3 on 16 H200s: What PCP, DCP and HiSparse Actually Buy You</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-24T18:00:00-07:00">24 October 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>The vLLM team published <a href="https://vllm.ai/blog/2026-10-23-glm53-part2-pcp-dcp-hisparse" target="_blank" rel="noopener noreferrer">GLM-5.3 Optimizations, Part 2</a> on October 23, 2026. <a href="https://vllm.ai/blog/2026-09-08-glm53-part1-hybrid-sparse-offloading" target="_blank" rel="noopener noreferrer">Part 1</a> kept long contexts decoding on one 8x H200 node. Part 2 goes to two nodes, splits prefill from decode, and stacks three techniques: prefill context parallelism (PCP), decode context parallelism (DCP), and Hybrid HiSparse on the decode side.</p>
+<p>The headline is a 1M-token context served on H200s, which is a generation-old part with 141 GB of HBM per GPU. More useful to me is why the usual knobs fail here, since it applies to any MLA model with a sparse indexer. Every number below is from the post unless I say it's my arithmetic.</p>
+<h2>1. Why tensor parallelism is the wrong split for sparse MLA</h2>
+<p>GLM-5.3 uses multi-head latent attention (MLA) with a sparse top-k: an indexer scores every earlier token and sparse MLA attends to the 2,048 it picks. The post walks through the two standard ways to run prefill on an 8x H200 node.</p>
+<ul>
+<li><strong>DP8</strong> puts each prompt on one GPU. The other seven don't help with that prompt's attention, so time to first token (TTFT) on long prompts suffers, and the whole prompt's KV has to fit on that one GPU.</li>
+<li><strong>TP8</strong> splits the 64 attention heads eight ways. But MLA's latent KV is shared by all 64 heads, so every GPU stores the full cache and reads it to serve only 8 heads. The indexer isn't partitioned at all, so its quadratic cost repeats on every GPU.</li>
+</ul>
+<p>That second point is the one I'd underline for anyone who reaches for TP by habit. With MLA, TP gives you no extra KV room and wastes memory bandwidth. The post's footnote puts numbers on it: each selected KV row is 660 bytes (656 bytes of FP8 KV in FlashMLA's <code>fp8_ds_mla</code> format plus a 4-byte index), and serving 8 heads per row gives about 26 FLOPs per byte moved. Serving all 64 heads per row gives about 191. The H200 SXM's ridge point, using the dense 989 BF16 TFLOP/s and 4.8 TB/s, is about 206 FLOPs per byte. So TP8 leaves sparse MLA deep in memory-bound territory, while serving every head per row gets it close to compute-bound.</p>
+<h2>2. PCP: split the prompt by token, and balance the causal mask</h2>
+<p>PCP gives each GPU one eighth of the prompt's query tokens with all 64 heads. A naive contiguous split would be lopsided, because under causal attention the GPU holding the end of the prompt does far more work than the one holding the start. vLLM cuts the prompt into 16 chunks and gives GPU <em>g</em> chunk <em>g</em> and chunk 15 minus <em>g</em>, so each GPU gets one cheap chunk and one expensive one. That's the load-balanced sharding from the <a href="https://arxiv.org/abs/2411.01783" target="_blank" rel="noopener noreferrer">Context Parallelism for Scalable Million-Token Inference</a> paper. New KV is all-gathered each layer so every query still sees the full context.</p>
+<p>Two things fall out of this. Each KV row now serves 64 heads, which is where the 26 to 191 FLOPs-per-byte jump comes from. And each GPU indexes only its own tokens, so the indexer stops being replicated. The post counts prefill FLOPs and finds the indexer overtakes sparse MLA under TP8 once a prompt reaches about 32K tokens. Under PCP8 that crossover moves out to about 256K.</p>
+<h2>3. DCP: PCP alone still replicates the cache</h2>
+<p>PCP has a catch. Because new KV is all-gathered every layer, every GPU still ends up holding the full KV cache. That replicated cache, not compute, caps context length.</p>
+<p>The post's KV math is worth copying into your own capacity sheet. Per token, GLM-5.3 stores 78 layers at 656 bytes of MLA KV, 21 indexer layers at 132 bytes (128 FP8 values plus a 4-byte scale), and 788 bytes for the MTP layer, for 54,728 bytes total. At 1,048,576 tokens that's 53.4 GiB of FP8 KV for one request. After weights, each H200 has room for about 15 GiB of KV.</p>
+<p>My arithmetic from the same per-token figure: a 256K-token request needs about 13.4 GiB, which is right at that 15 GiB budget. That matches the post's statement that past roughly 250K tokens, PCP8 alone can't hold the KV cache.</p>
+<p>DCP fixes this by dealing tokens round-robin across the eight GPUs, so token <em>i</em> lives on GPU <em>i</em> mod 8. The 1M-token request drops to 6.7 GiB per GPU. In this prefill engine it works the other way: each layer, every GPU all-gathers the shards into a temporary full-context copy, attends for its own queries, then frees the copy. Only the persistent cache is divided by eight.</p>
+<p>The post is direct that this isn't free. On one PCP8 node, running a 2K-token chunk with and without DCP8 at equal cached context, DCP8 adds about 6% per step up to 64K tokens of context and about 15% at 248K. The team says it's working on overlapping each layer's all-gather with the previous layer's compute. Until that lands, I'd treat DCP as something you turn on when your context limit requires it, not by default for short-context traffic.</p>
+<h2>4. The deployment, spelled out</h2>
+<p>Two 8x H200 nodes, both with FP8 KV cache and MTP speculative decoding at three draft tokens (MTP3):</p>
+<ul>
+<li><strong>Prefill:</strong> one PCP8 x DCP8 x EP8 engine with 512 GiB of CPU KV offload, so later turns reuse their prefix.</li>
+<li><strong>Decode:</strong> eight DP ranks with EP8 and Hybrid HiSparse, each with a 48 GiB host pool plus 16 GiB of offload, so decode concurrency is bounded by host memory rather than HBM.</li>
+</ul>
+<p>A prefix-aware <a href="https://github.com/llm-d/llm-d" target="_blank" rel="noopener noreferrer">llm-d</a> router sends each request to prefill, the NIXL connector moves its KV to a decode rank, and the decode rank streams tokens back. Baselines use the same 16 GPUs, 512 GiB of host memory and vLLM build: DP8 prefill, and plain CPU offload instead of HiSparse on decode.</p>
+<p>The less glamorous part is the KV handoff. Prefill holds each request's KV sharded by token across eight GPUs, while each decode rank needs the whole thing, including the MTP layer's KV, in its own paged layout. NIXL does that reassembly between nodes, and prefix reuse from CPU offload has to keep working alongside it. If you run a different connector, this is the piece I'd expect to break first.</p>
+<h2>5. The results, and how much weight to put on them</h2>
+<p>The benchmark is SemiAnalysis <a href="https://vllm.ai/blog/2026-09-08-vllm-agentx" target="_blank" rel="noopener noreferrer">AgentX</a>: Claude Code traces replayed with prefix reuse, a fresh server per concurrency, one-hour runs. Throughput is logical tokens per second per GPU including prefix-cached input. Interactivity is AgentX's P90 end-to-end-normalized output tokens per second per user.</p>
+<ul>
+<li>Up to concurrency 32 the deployment is mostly prefill-bound. With HiSparse decode on both sides, PCP8 x DCP8 prefill gives 1.7 to 3.2 times the interactivity of DP8 at the same throughput, and median TTFT drops from 1.5 to 5.2 seconds down to 0.8 to 0.9 seconds.</li>
+<li>At c8 and c16 the decoder choice barely matters, and offload-only decode is slightly ahead at c8.</li>
+<li>From c32 the deployment becomes decode-bound. At c64, HiSparse decode reaches 8,340 logical tok/s/GPU at 29.6 tok/s/user, while every other configuration drops to 1 to 2 tok/s/user.</li>
+<li>At 1M context, only the PCP8 x DCP8 plus HiSparse combination works. A DP8 prefill rank can't hold one 1M-token request, and neither can an offload-only decode rank.</li>
+</ul>
+<p>The caveat I'd keep in front of anyone quoting these numbers: MTP3 ran with a synthetic acceptance length fixed at 2.99, so every configuration got the same speculative speedup, and your real acceptance rate will move the absolute numbers. Throughput also counts cached prefix tokens, which flatters any workload with heavy prefix reuse. Agentic coding traces are exactly that kind of workload, so I'd compare these numbers only against other AgentX runs.</p>
+<h2>6. Trying it</h2>
+<p>The post says everything runs on vLLM v0.32.0 or later (<code>vllm/vllm-openai:v0.32.0</code>). Results were measured on vLLM main at <code>9e38b4111a</code>, and the <a href="https://gist.github.com/LucasWilkinson/b39792adeea1cc2b1505fb6b7a2a2654" target="_blank" rel="noopener noreferrer">reproduction gist</a> pins <code>2537629eb2</code>. To match the numbers, use the gist's commit. I covered what else changed in that release in my <a href="/vllm-0-32-upgrade-defaults.html">vLLM 0.32 upgrade notes</a>, and the router side in <a href="/llm-d-1-0-upgrade-notes.html">llm-d 1.0 upgrade notes</a>.</p>
+<p>The prefill engine's key flags:</p>
+<pre><code>--prefill-context-parallel-size 8 \
+--decode-context-parallel-size 8 \
+--dcp-comm-backend ag_rs \
+--enable-expert-parallel \
+--attention-config '{"sparse_mla_force_mqa":true}'</code></pre>
+<p>Don't drop the last one. Without <code>sparse_mla_force_mqa</code>, prefill batches whose prompts fit within the 2,048-token top-k take the dense MHA path. The flag keeps them on the sparse-MLA (MQA) kernel, so every KV row serves all heads.</p>
+<h2>What I'd take from this</h2>
+<ol>
+<li>For MLA models, budget KV per request from the per-token byte count, not from head count. TP won't give you more room.</li>
+<li>If prompts regularly pass 32K tokens, profile the indexer on its own. Under TP it repeats on every GPU.</li>
+<li>Turn on DCP when your context limit needs it, and expect 6% to 15% extra per prefill step until the all-gather overlap ships.</li>
+<li>Size decode host memory deliberately. With HiSparse, host RAM is what caps decode concurrency.</li>
+<li>Re-run with your own MTP acceptance rate before you promise anyone these per-user speeds.</li>
+</ol>
+<h2>Sources</h2>
+<ul>
+<li><a href="https://vllm.ai/blog/2026-10-23-glm53-part2-pcp-dcp-hisparse" target="_blank" rel="noopener noreferrer">GLM-5.3 Optimizations, Part 2: PCP, DCP, and Hybrid HiSparse on 16 H200s</a> (vLLM blog, October 23, 2026)</li>
+<li><a href="https://vllm.ai/blog/2026-09-08-glm53-part1-hybrid-sparse-offloading" target="_blank" rel="noopener noreferrer">GLM 5.3 Optimizations, Part 1: Hybrid HiSparse Offloading in vLLM</a> (vLLM blog, September 8, 2026)</li>
+<li><a href="https://vllm.ai/blog/2026-08-07-decode-context-parallelism" target="_blank" rel="noopener noreferrer">Decode Context Parallelism in vLLM</a> (vLLM blog)</li>
+<li><a href="https://vllm.ai/blog/2026-09-08-vllm-agentx" target="_blank" rel="noopener noreferrer">vLLM x AgentX: Optimizing for Real-World Agentic Serving</a> (vLLM blog)</li>
+<li><a href="https://arxiv.org/abs/2411.01783" target="_blank" rel="noopener noreferrer">Context Parallelism for Scalable Million-Token Inference</a> (arXiv)</li>
+<li><a href="https://gist.github.com/LucasWilkinson/b39792adeea1cc2b1505fb6b7a2a2654" target="_blank" rel="noopener noreferrer">Reproduction gist</a></li>
+<li><a href="https://resources.nvidia.com/en-us-hopper-architecture/hpc-datasheet-sc23" target="_blank" rel="noopener noreferrer">NVIDIA H200 datasheet</a></li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
