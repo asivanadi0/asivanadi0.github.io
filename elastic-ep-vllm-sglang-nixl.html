@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Adding GPUs to a Live MoE Deployment: What Elastic EP in vLLM and SGLang Actually Delivers — Anpoo Sivanadi</title>
+  <meta name="description" content="If you serve a big Mixture-of-Experts model with data-parallel attention and expert-parallel MoE layers, you already know the ugly part of capacity planning." />
+  <link rel="canonical" href="https://asivanadi0.github.io/elastic-ep-vllm-sglang-nixl.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Adding GPUs to a Live MoE Deployment: What Elastic EP in vLLM and SGLang Actually Delivers — Anpoo Sivanadi" />
+  <meta property="og:description" content="If you serve a big Mixture-of-Experts model with data-parallel attention and expert-parallel MoE layers, you already know the ugly part of capacity planning." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/elastic-ep-vllm-sglang-nixl.html" />
+  <meta property="article:published_time" content="2026-10-26T06:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Adding GPUs to a Live MoE Deployment: What Elastic EP in vLLM and SGLang Actually Delivers</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-26T06:00:00-07:00">26 October 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>If you serve a big Mixture-of-Experts model with data-parallel attention and expert-parallel MoE layers, you already know the ugly part of capacity planning. Your scaling unit is a whole replica. When one replica of DeepSeek-class weights spans 16 GPUs, "add a bit of capacity" means "add 16 more GPUs," or tear the deployment down and relaunch it wider.</p>
+<p>Two posts from last week attack exactly that, and both lean on the same new piece of plumbing. On October 19 the vLLM blog published <a href="https://vllm.ai/blog/2026-10-19-elastic-ep-near-zero-downtime" target="_blank" rel="noopener noreferrer">Achieving near-zero-downtime scaling in Elastic Expert Parallelism</a>. On October 21 LMSYS published <a href="https://www.lmsys.org/blog/2026-10-21-elastic-ep-scaling-nixl" target="_blank" rel="noopener noreferrer">Elastic Expert Parallelism Scaling in SGLang: Growing a Live MoE Deployment with NIXL</a>. Both use <a href="https://github.com/ai-dynamo/nixl/tree/main/examples/device/ep" target="_blank" rel="noopener noreferrer">NIXL EP</a> as the expert dispatch and combine data plane. Both are written by NVIDIA engineers working in the open projects.</p>
+<p>I read them as an operator: what is the actual pause, what was held constant, and what do I still have to build. Every number below comes from those two posts or from the vLLM test file they point to.</p>
+<h2>1. The headline number, and what it replaced</h2>
+<p>The vLLM post is built around one benchmark: DeepSeek V4 Pro on GB200 GPUs, TP=1, scaling between DP/EP 16 and 20.</p>
+<p>The baseline is grim. Restarting vLLM to go from 16 to 20 GB200 GPUs stopped serving for <strong>197 seconds</strong>. vLLM's first Elastic EP release (May 2026) avoided the restart but still paused serving while new workers initialized, communication groups were rebuilt, weights loaded and CUDA graphs were captured. That pause was <strong>100 seconds</strong> scaling up and <strong>56 seconds</strong> scaling back down.</p>
+<p>The new path breaks each resize into background preparation and a short commit, and the post reports three configurations side by side:</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>A: Blocking</th>
+<th>B: Async preparation</th>
+<th>C: Async prep + graph reuse</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>16 to 20 GPUs, downtime</td>
+<td>99.62 s</td>
+<td>58.04 s</td>
+<td><strong>0.82 s</strong></td>
+</tr>
+<tr>
+<td>20 to 16 GPUs, downtime</td>
+<td>56.25 s</td>
+<td>44.07 s</td>
+<td><strong>1.96 s</strong></td>
+</tr>
+<tr>
+<td>16 to 20 GPUs, total time</td>
+<td>99.72 s</td>
+<td>97.27 s</td>
+<td>92.34 s</td>
+</tr>
+<tr>
+<td>20 to 16 GPUs, total time</td>
+<td>56.21 s</td>
+<td>51.46 s</td>
+<td>9.32 s</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Read the bottom half of that table before you get excited about the top half. Scaling up still takes about 92 seconds end to end. What changed is that nearly all of it now happens while the old topology keeps serving. If your autoscaler reacts to a traffic spike, you still wait a minute and a half for the new GPUs to contribute. You just stop dropping traffic during that minute and a half. Configuration C is only available with NIXL EP.</p>
+<p>The setup details matter for reproducing it: weights were pre-downloaded as safetensors on shared Lustre storage, loaded with the default <code>--load-format auto</code>, and the Triton, TileLang and FlashInfer kernel caches were warm. Expect cold caches or slower storage to change the total time.</p>
+<h2>2. Why the pause was long, and why NIXL EP fixes it</h2>
+<p>The interesting engineering is in why configuration B still paused for 58 seconds even with async preparation.</p>
+<p>The EP communication backends vLLM had before NIXL EP used fixed membership. Changing the rank set meant building a new communicator instance, with its own buffers, memory registrations, IPC handles and RDMA queue pairs. Worse, switching communicators changed the buffers that the EP kernels were captured against, which invalidated every CUDA graph on every retained worker. Warmup and recapture across all the batch shapes had to happen during the commit, while serving was stopped.</p>
+<p>NIXL EP adds and removes ranks in place, reusing the same NIXL agent, buffers and connections. Its kernels read active membership from device state that can be updated in place, and it keeps the captured dispatch and combine entries valid across reconfiguration. vLLM did matching work on its side: it reuses retained workers' fused-MoE execution objects, keeps graph-visible workspace and dispatch-output addresses stable, and updates expert-routing mappings in place so EPLB can change contents without moving tensors (<a href="https://github.com/vllm-project/vllm/pull/54985" target="_blank" rel="noopener noreferrer">PR #54985</a>). New DP coordination and EPLB groups still get created, but their communication runs outside the captured forward pass, so they don't break graphs.</p>
+<p>Joining workers have the opposite problem. They have no graphs yet, and capturing them normally requires real EP traffic with peers that are busy serving. NIXL EP lets each joiner temporarily mask every remote peer, so it captures graphs against only its local rank, then reactivates peers without invalidating those graphs.</p>
+<p>After commit, asynchronous EPLB lets the new workers start on attention while expert placement is redistributed in the background.</p>
+<p>The SLO test is the part I'd show a skeptical SRE. The team replayed the same <strong>11,391-request</strong> scenario, ramping from about <strong>8 to 16 requests per second</strong>, against a static 16-GPU deployment, a restart to 20 GPUs, and an Elastic EP scale to 20. The SLO was rolling p95 TTFT under <strong>5 seconds</strong>. Elastic EP completed all 11,391 requests and stayed under the SLO the whole time, and the post says background preparation caused no visible degradation compared to the static deployment.</p>
+<h2>3. SGLang's version: same data plane, different shape</h2>
+<p>The SGLang post covers runtime scale-up, built on its earlier Elastic EP failure-recovery work. The architecture splits into three layers: SGLang owns the serving control plane, Mooncake Process Group handles elastic membership and barriers, and NIXL EP carries the expert traffic.</p>
+<p>The knob that matters is <code>max_ep_size</code>. Metadata and communication buffers for the largest topology you might reach are reserved at launch, while joining ranks only start when needed. The post is direct about the cost: higher ceilings reserve more buffer memory on the active GPUs, which leaves less memory for KV cache. Pick the ceiling you actually expect to hit.</p>
+<p>The measurement is smaller in scale than vLLM's: <strong>8x H100</strong>, DeepSeek-V3-Lite FP8, compared against a restart. Elastic EP reached the first completed request on the new topology <strong>5.3x to 8.2x faster</strong> than restart. Every repeated elastic transition completed and passed a post-scale GSM8K check. The post is also explicit that token delivery pauses during the topology transition, and the absolute seconds live in a chart rather than the text, so I won't quote them.</p>
+<p>The CUDA graph story differs from vLLM's. SGLang recaptures full-decode CUDA graphs for the expanded topology before commit (<a href="https://github.com/sgl-project/sglang/pull/33723" target="_blank" rel="noopener noreferrer">PR #33723</a>); prefill and piecewise recapture are not supported yet. You want graphs on. With 256 GSM8K examples and 50 request threads, post-scale output throughput was:</p>
+<div class="table-wrap" role="region" aria-label="Table 2" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Transition</th>
+<th>Eager</th>
+<th>Full-decode CUDA graph</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>EP4 to EP6</td>
+<td>371 tok/s</td>
+<td>1,241 tok/s</td>
+</tr>
+<tr>
+<td>EP7 to EP8</td>
+<td>358 tok/s</td>
+<td>1,120 tok/s</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>That's 3.1x to 3.3x. The post also lists what's merged as of October 4: runtime eager scale-up, EPLB after scale-up, graph recapture, and scaling at DP-attention shard granularity (TP2/CP1 shards, so DP2/EP4 grows to DP3/EP6). Scale-down and grow-back is still under review in <a href="https://github.com/sgl-project/sglang/pull/33111" target="_blank" rel="noopener noreferrer">PR #33111</a>. Recovery after scale-up is planned.</p>
+<h2>4. What you still have to own</h2>
+<p>Neither engine is an autoscaler. Both expose an API that admits processes. You bring the GPUs.</p>
+<p>On SGLang, the primary launches with <code>--elastic-ep-backend mooncake</code>, <code>--moe-a2a-backend nixl</code>, an initial size and <code>--max-ep-size</code>. Joiners launch with <code>--elastic-ep-join-mode scale</code> and a contiguous <code>--elastic-ep-join-rank-offset</code>. Then:</p>
+<pre><code class="language-bash">curl -X POST http://&lt;PRIMARY_HOST&gt;:21000/scale_elastic_ep \
+  -H 'Content-Type: application/json' \
+  -d '{"new_ep_size": 8}'
+curl http://&lt;PRIMARY_HOST&gt;:21000/is_scaling_elastic_ep</code></pre>
+<p>The POST means accepted, not done. Poll until <code>effective_ep_size</code> hits the target and <code>scale_phase</code> reads <code>serving_expanded</code>.</p>
+<p>On vLLM, the post points at the <code>cuda_graphs_heavy_nixl_ep</code> case in <a href="https://github.com/vllm-project/vllm/blob/v0.30.0/tests/distributed/test_elastic_ep.py#L224" target="_blank" rel="noopener noreferrer"><code>tests/distributed/test_elastic_ep.py</code></a>, which scales DeepSeek-V2-Lite-Chat from two GPUs to four and back under load. The serve flags it uses include <code>--enable-expert-parallel</code>, <code>--all2all-backend nixl_ep</code>, <code>--enable-elastic-ep</code>, <code>--elastic-ep-max-dp-size 4</code>, <code>--enable-eplb</code> with <code>--eplb-config.use_async true</code>, and <code>--data-parallel-backend ray</code>. Scaling is a POST to <code>/scale_elastic_ep</code> with <code>new_data_parallel_size</code>, and <code>/is_scaling_elastic_ep</code> is the probe. That test checks GSM8K accuracy before, after scale-up and after scale-down, with a tolerance of 0.08. I'd copy that habit into any rollout.</p>
+<p>Caveats I'd carry into a design review:</p>
+<ul>
+<li><strong>One model, one shape each.</strong> vLLM's numbers are DeepSeek V4 Pro at TP=1 on GB200 between 16 and 20 GPUs. SGLang's are a small FP8 model on one 8x H100 box. Neither shows a multi-rack resize.</li>
+<li><strong>No rollback in SGLang yet.</strong> Once joiners enter Mooncake <code>WORLD</code>, a failure during finalization can require restarting the deployment.</li>
+<li><strong>Lazy connections.</strong> In SGLang, the first wider dispatch can include connection setup cost.</li>
+<li><strong>Scale-up latency is unchanged in spirit.</strong> vLLM's total time to add four GPUs is still about 92 seconds. The planned fix is restoring warm workers with Dynamo Snapshot, while keeping GPU-to-GPU weight transfer from existing workers.</li>
+<li><strong>Orchestrator integration is in progress.</strong> vLLM links its <a href="https://github.com/vllm-project/vllm/pull/43202" target="_blank" rel="noopener noreferrer">external load balancer work</a> and <a href="https://github.com/ai-dynamo/dynamo/issues/13121" target="_blank" rel="noopener noreferrer">Dynamo's Elastic EP proposal</a>, and mentions llm-d. Until those land, the glue between your metrics and these endpoints is yours.</li>
+</ul>
+<h2>5. My read</h2>
+<p>The real change here is the scaling unit, more than the 0.82 seconds. With elastic EP, a 16-GPU replica can grow by four GPUs instead of sixteen, and on vLLM it can shrink back with about two seconds of interruption. That makes fractional capacity changes worth planning for on MoE serving, which wasn't true when every change cost a minute or more of dead GPUs.</p>
+<p>If I were trying it this week, I'd start on vLLM with NIXL EP, since of the two it's the one with graph reuse and merged scale-down today. I'd keep the ceiling (<code>--elastic-ep-max-dp-size</code> or <code>max_ep_size</code>) close to the real peak, run the accuracy check after every resize, and measure total time with my own storage and cold caches before I wired it to anything automatic.</p>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
