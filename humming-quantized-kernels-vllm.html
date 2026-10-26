@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Humming Is Already in Your vLLM Install. Here's What the Quantized Kernel Numbers Actually Say. — Anpoo Sivanadi</title>
+  <meta name="description" content="On October 21, 2026, Ant Group and the vLLM community published Announcing Humming: Fast, Flexible Kernels for Quantized Inference." />
+  <link rel="canonical" href="https://asivanadi0.github.io/humming-quantized-kernels-vllm.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Humming Is Already in Your vLLM Install. Here's What the Quantized Kernel Numbers Actually Say. — Anpoo Sivanadi" />
+  <meta property="og:description" content="On October 21, 2026, Ant Group and the vLLM community published Announcing Humming: Fast, Flexible Kernels for Quantized Inference." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/humming-quantized-kernels-vllm.html" />
+  <meta property="article:published_time" content="2026-10-25T18:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Humming Is Already in Your vLLM Install. Here's What the Quantized Kernel Numbers Actually Say.</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-25T18:00:00-07:00">25 October 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>On October 21, 2026, Ant Group and the vLLM community published <a href="https://vllm.ai/blog/2026-10-21-humming" target="_blank" rel="noopener noreferrer">Announcing Humming: Fast, Flexible Kernels for Quantized Inference</a>. It's a JIT-compiled GEMM library for quantized weights, dense and MoE, released under Apache-2.0 at <a href="https://github.com/vllm-project/humming" target="_blank" rel="noopener noreferrer">vllm-project/humming</a>.</p>
+<p>The part most people will skip is the one that matters for operators: starting with vLLM 0.29.0, CUDA builds of vLLM ship Humming as a dependency. If you run a recent vLLM on NVIDIA hardware, it's already on your nodes. It just isn't the default backend for most layers until you ask for it. So the useful question isn't "should I install this." It's "where does flipping two flags pay off, and what did the benchmarks actually hold constant." Every number below is from the announcement post or the repository README unless I say otherwise.</p>
+<h2>1. The problem it goes after</h2>
+<p>Quantized serving today is a zoo. WNA16, W8A8, W4A8 and W4A4 are all in production, and inside each of those you get INT4 versus NVFP4 versus MXFP4, different group sizes, different scale types, symmetric or asymmetric zero points. Each combination tends to get its own kernel, its own weight repacking, its own framework adapter and its own tests. Marlin handles one slice, DeepGEMM another, FlashInfer and CUTLASS others.</p>
+<p>Humming's bet is to stop writing one kernel per combination. It splits the problem in three:</p>
+<ul>
+<li><strong>A standard quantization format.</strong> Checkpoints from different export tools get converted into one description, with weight format, scaling granularity, scale dtype, zero points and secondary scales as separate parameters. Activations get their own format settings.</li>
+<li><strong>Three configs that define a kernel.</strong> A Layer Config (shapes, dtypes, quantization parameters, target arch), a Compute Config (GEMM type, batch invariance, input scale layout) and a Tuning Config (tile shapes, pipeline stages, warp specialization, MMA instruction choice, CTA concurrency, Stream-K, and TMA per tensor).</li>
+<li><strong>Composable CUDA components.</strong> Scheduling, data movement, dequant and scaling, Tensor Core math and epilogue are separate pieces. JIT compilation (NVRTC or NVCC) stitches together only the ones a given config needs, and caches the result.</li>
+</ul>
+<p>The practical upshot is in the tuning section. At small batch, a multistage <code>cp.async</code> plus MMA pipeline can beat a TMA plus UMMA pipeline. At large batch the reverse holds. Humming keeps both paths in the same framework and dispatches by input size at runtime. That's the decode-versus-prefill split most of us already tune around by hand.</p>
+<h2>2. Compile time is the quiet win</h2>
+<p>JIT kernel libraries live or die on warmup. The post gives one concrete measurement: a single W4A16 kernel on an H200 server with CUDA 13.4, caches disabled, took <strong>23.35 s with CUTLASS and NVCC</strong>, <strong>1.82 s with Humming and NVCC</strong>, and <strong>1.88 s with NVRTC</strong>. Compiling and loading kernels for every supported M size for one layer's GEMM takes about <strong>2 to 4 seconds</strong>, and it runs in parallel during model warmup.</p>
+<p>That's per layer shape, not per model, and the post doesn't publish a whole-model cold-start number. If you autoscale on fast restarts, measure your own first-boot time with an empty cache before you turn it on everywhere, and make sure the kernel cache lands somewhere that survives a pod restart.</p>
+<h2>3. What the kernel benchmarks held constant</h2>
+<p>The microbenchmarks were run by the vLLM community with M swept over every power of two from 1 to 8192, kernels fully warmed, each timed independently with a <strong>cold L2</strong> and a short pause between samples. MoE speedups are the sum of the gate-up and down GEMM latencies. Cold L2 is the honest choice for weight-streaming decode, but it's not how a fused layer stack runs back to back, so expect end-to-end gains to be smaller than kernel gains. They are, as section 4 shows.</p>
+<p>The headline results, grouped the way I'd read them:</p>
+<ul>
+<li><strong>Dense W4A16 versus Marlin.</strong> Matches or beats vLLM Marlin in most tested configurations. Against a cuBLAS baseline it shows roughly 3 to 4x at small batch on several devices, about 2x Marlin on large-batch H200, and more than 3x Marlin in some B300 cases.</li>
+<li><strong>MoE W4A16.</strong> MXFP4 on H20 and H200 reaches roughly 2x Marlin in several medium-to-large batch cases. On B300, the MXINT4 and NVFP4 grouped path reaches about 5x at large batch.</li>
+<li><strong>Odd bit widths.</strong> INT1, INT2, INT3 and FP4 through FP8 weights all run on the same paths. The lowest-bit configurations on SM120 exceed 5x BF16 cuBLAS at small and medium batch.</li>
+<li><strong>Hopper W8A8.</strong> Against DeepGEMM Contiguous with blockwise FP8, about 2.6x on H20 and 2.5x on H200 at small and medium batch.</li>
+<li><strong>Hopper W4A8 with MXFP4 weights.</strong> This is the interesting one. Hopper has no native MXFP4 Tensor Core path, so Humming dequantizes MXFP4 weights to FP8 as they load and runs FP8 MMA. Against DeepGEMM W8A8, about 4.2x on H20 and 4.5x on H200 at small and medium batch, and better than Humming's own W8A8.</li>
+<li><strong>B300 (SM103) MX formats.</strong> Against DeepGEMM Contiguous at matching precision, about 1.25x for W8A8, 1.6x for W4A8 and 1.4x for W4A4 at small and medium batch.</li>
+<li><strong>SM120 and SM121.</strong> MXFP4 x MXFP8 W4A8 and NVFP4 x NVFP4 W4A4 beat FlashInfer CUTLASS at most tested points, with small-batch gains of about 19% (W4A8) and 9% (W4A4) on SM121.</li>
+</ul>
+<p>Two caveats worth carrying. Nearly every big multiple is "at small and medium batch," which is decode territory. And the baselines shift by panel (cuBLAS, Marlin, DeepGEMM, FlashInfer), so don't stack the multiples against each other. The post also notes that FlashInfer's CUTLASS W4A8 is itself based on Humming's approach, which tells you the idea has already spread.</p>
+<h2>4. The end-to-end number</h2>
+<p>The one serving result is DeepSeek-V4.1-Flash on eight H20s at TP=8. The MXFP4 weights stay the same; only the MoE backend changes, from Marlin W4A16 with BF16 activations to Humming W4A8 with tokenwise FP8 activations.</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Concurrency</th>
+<th>Output tok/s, Marlin</th>
+<th>Output tok/s, Humming</th>
+<th>TTFT change</th>
+<th>TPOT change</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>88.30</td>
+<td>100.77</td>
+<td>-29.3%</td>
+<td>-8.5%</td>
+</tr>
+<tr>
+<td>8</td>
+<td>287.04</td>
+<td>383.04</td>
+<td>-32.3%</td>
+<td>-22.2%</td>
+</tr>
+<tr>
+<td>32</td>
+<td>398.83</td>
+<td>560.49</td>
+<td>-30.5%</td>
+<td>-28.5%</td>
+</tr>
+<tr>
+<td>64</td>
+<td>442.37</td>
+<td>633.94</td>
+<td>-29.0%</td>
+<td>-30.5%</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Across all tested concurrencies the gain runs from about 14% to 43% in throughput and 25% to 32% lower mean TTFT, with the gap widening as concurrency grows.</p>
+<p>What this table does not tell you: anything about accuracy. Moving activations from BF16 to tokenwise FP8 is a numerics change, not just a kernel swap, and the post reports no eval delta. It's also a single model, a single GPU type and TP-only, so expert parallelism and quantized all-to-all aren't in the picture yet (that's listed as future work). Before I'd ship this, I'd rerun my own quality evals at FP8 activations alongside the latency run.</p>
+<h2>5. Hardware details that will bite someone</h2>
+<p>A few lines in the post are easy to miss and matter for mixed fleets:</p>
+<ul>
+<li><strong>B300 dropped INT8 from UMMA.</strong> On SM103, UMMA no longer supports INT8. Humming can still run INT8 GEMM through older MMA instructions, but the post says plainly the performance is substantially lower. If you have INT8 checkpoints headed to B300, plan a format change.</li>
+<li><strong>Two hidden Blackwell formats.</strong> The community found that Blackwell Tensor Cores natively support <code>float4e0m3</code> and <code>float8e3m4</code>, which aren't in the PTX type system. Humming uses them on SM100, SM103, SM120 and SM121. Rubin does not support them, so any kernel choice that depends on them won't carry forward.</li>
+<li><strong>Silent fallback.</strong> If a GPU can't run the checkpoint's activation type, Humming falls back to a higher-precision type such as FP8, BF16 or FP16. That's what lets one checkpoint run across generations, but it also means two clusters can serve the "same" deployment at different precision and speed. Log which path you actually got.</li>
+<li><strong>Zero-exponent floats.</strong> Symmetric INT weights are converted automatically to a format like <code>float8e0m7</code>, which represents the same -127 to 127 range, for faster dequant.</li>
+<li><strong>Non-NVIDIA CUDA devices.</strong> T-Head's Zhenwu 810E is fully supported, and the Zhenwu M890 is on the roadmap.</li>
+</ul>
+<h2>6. How to try it</h2>
+<p>You don't need a separate install on vLLM 0.29.0 or later with CUDA. Two flags select it for dense and MoE GEMMs:</p>
+<pre><code class="language-bash">vllm serve deepseek-ai/DeepSeek-V4.1-Flash-1017 \
+    --tensor-parallel-size 8 \
+    --linear-backend humming --moe-backend humming</code></pre>
+<p>To override the MoE activation type, for example to MXFP8:</p>
+<pre><code class="language-bash">vllm serve openai/gpt-oss-20b --moe-backend humming \
+    --quantization-config.moe.activation mxfp8</code></pre>
+<p>There's also <code>--quantization humming</code>, but the post scopes that to formats vLLM doesn't natively support, such as GPTQ INT3. Don't reach for it as a general switch.</p>
+<p>Standalone, it's <code>pip install humming-kernels</code>, with <code>[cu12]</code> or <code>[cu13]</code> extras if the box has no CUDA compiler. The README lists PyTorch and NVCC as the only requirements.</p>
+<h2>What I'd do this week</h2>
+<ol>
+<li>Pick the one MoE model you serve with MXFP4 or INT4 weights on Hopper and A/B <code>--moe-backend humming</code> against your current backend at your real concurrency.</li>
+<li>Run your quality evals alongside it if the activation type changes, since the published numbers don't include accuracy.</li>
+<li>Time a cold start with an empty kernel cache and decide where that cache lives.</li>
+<li>Audit any INT8 plans for B300, and any kernel choices that lean on the hidden Blackwell formats if Rubin is on your roadmap.</li>
+</ol>
+<p>Autotune is on the roadmap because the heuristics won't pick the best config for every shape. Until then, the defaults are a starting point, and the per-shape tuning knobs are there if your traffic doesn't look like the benchmark sweep.</p>
+<h2>Sources</h2>
+<ul>
+<li>Ant Group and the vLLM Community, <a href="https://vllm.ai/blog/2026-10-21-humming" target="_blank" rel="noopener noreferrer">Announcing Humming: Fast, Flexible Kernels for Quantized Inference</a>, October 21, 2026</li>
+<li><a href="https://github.com/vllm-project/humming" target="_blank" rel="noopener noreferrer">vllm-project/humming on GitHub</a> (README and support matrix)</li>
+<li><a href="https://zhuanlan.zhihu.com/p/2059376150565089368" target="_blank" rel="noopener noreferrer">Blackwell hidden Tensor Core formats write-up (Zhihu)</a>, linked from the announcement</li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
