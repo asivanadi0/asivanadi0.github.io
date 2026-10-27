@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>When Is a KV Cache Page Actually Free? Reading the SGLang and Cloudflare PD Disclosure — Anpoo Sivanadi</title>
+  <meta name="description" content="If you run prefill/decode disaggregation, you have a distributed memory allocator whether you meant to build one or not." />
+  <link rel="canonical" href="https://asivanadi0.github.io/sglang-pd-kv-cache-exposure.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="When Is a KV Cache Page Actually Free? Reading the SGLang and Cloudflare PD Disclosure — Anpoo Sivanadi" />
+  <meta property="og:description" content="If you run prefill/decode disaggregation, you have a distributed memory allocator whether you meant to build one or not." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/sglang-pd-kv-cache-exposure.html" />
+  <meta property="article:published_time" content="2026-10-27T06:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>When Is a KV Cache Page Actually Free? Reading the SGLang and Cloudflare PD Disclosure</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-27T06:00:00-07:00">27 October 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>If you run prefill/decode disaggregation, you have a distributed memory allocator whether you meant to build one or not. Yesterday two posts made that point in the most expensive way possible.</p>
+<p>On October 26, SGLang published <a href="https://www.lmsys.org/blog/2026-10-26-cf-security" target="_blank" rel="noopener noreferrer">a coordinated disclosure</a> and Cloudflare published <a href="https://blog.cloudflare.com/kv-cache-exposure-remediation/" target="_blank" rel="noopener noreferrer">its incident report</a>. Between August 27 and September 9, 2026, GLM-5.3 on Workers AI (<code>@cf/zai-org/glm-5.3</code>) returned 155 responses that contained data from other customers' requests. Every one of them was a reply to a prompt longer than 681,280 tokens. Cloudflare says it found no evidence of deliberate exploitation, and no other Workers AI model was affected.</p>
+<p>There are really two bugs here, and they share one question: when is a KV cache page safe to hand to the next request?</p>
+<h2>1. Bug one: a rejected request that still looked alive</h2>
+<p>Cloudflare served GLM-5.3 with a configured context window of 1,048,576 tokens. The prefill KV pool on those nodes only had room for 681,280 tokens. SGLang sizes that pool from whatever GPU memory is left after the weights load, and nothing forces it to agree with the context setting. Cloudflare says it knew about the mismatch and assumed the engine would error on anything it could not fit.</p>
+<p>The engine did not error. When a prompt exceeded the pool, SGLang's scheduler marked it rejected and swapped the prompt for a one-token placeholder, so it could drain through normal batching. On a single node that works and the client gets an error. In disaggregated mode, both admission queues checked <code>req.finished()</code>, and a rejected request stored its rejection in <code>to_finish</code>, not <code>finished_reason</code>. So it reported itself as live.</p>
+<p>Decode reserved pages for the full prompt length. Prefill ran a forward pass on the placeholder token, sent one page, and signaled completion. Decode then attended over every reserved page, and all but the first still held what earlier requests had left. KV pages are not zeroed between requests, which is normal across engines, so the client got a coherent HTTP 200 containing other users' content.</p>
+<p>The engine fixes: <a href="https://github.com/sgl-project/sglang/pull/36988" target="_blank" rel="noopener noreferrer">#36988</a> retires aborted requests when their final prefill result is processed, and <a href="https://github.com/sgl-project/sglang/pull/38935" target="_blank" rel="noopener noreferrer">#38935</a>, merged September 16, rejects them at the admission queues before any bootstrap, allocation or transfer state exists.</p>
+<h2>2. Bug two: a distributed use-after-free with the pointer sitting in a NIC queue</h2>
+<p>The second half of the SGLang post is the part I would hand to anyone building PD on any engine.</p>
+<p>SGLang's KV transfer is push-based. Prefill writes chunks into decode's pre-reserved slots using one-sided RDMA WRITE through Mooncake, NIXL or MORI, overlapped with the prefill computation. If a request dies mid-transfer from a client disconnect, timeout, transport fault or prefill failure, older builds had decode return those slots to the allocator at abort time. Prefill could not recall a write it had already posted:</p>
+<ul>
+<li>RDMA verbs have no call to cancel a single work request already posted to a queue pair.</li>
+<li>Python cannot interrupt a blocking C++ transfer call such as Mooncake's <code>batch_transfer_sync</code>. If that call times out, its work requests remain posted with no completion accounting.</li>
+<li>One-sided writes bypass the receiver's CPU, so decode gets no per-write signal to wait on.</li>
+<li>The NIC places data per packet, so an interrupted write can still leave a partial prefix.</li>
+</ul>
+<p>So the allocator could mark a slot free, hand it to request B, and then A's late write lands inside B's KV cache. Nothing logs an error. The SGLang team calls this a distributed use-after-free, which is exactly right. Pull designs do not escape it either, since a posted RDMA READ cannot be taken back.</p>
+<p>The window scales with context length. A short prompt is in flight for milliseconds. A 128K to 1M token context keeps writes in flight for seconds to minutes. In their 2x H200 reproduction over Mooncake RDMA, with two prefill engines sharing one decode, a victim request counted correctly to 80 and then started emitting the aborted request's prompt text.</p>
+<p>The SGLang post says default PD configurations were exposed to this race from the v0.4.x line until v0.5.21, or v0.5.22 for MORI. The leak is one-way, but in multi-tenant serving it is still data leakage.</p>
+<h2>3. The fix: hold the slot until the writer proves it is done</h2>
+<p>Decode cannot cancel prefill's writes, so it keeps the aborted request's slots reserved longer than those writes can land. The design condition in the post is:</p>
+<pre><code>T_hold &gt; t_abort_propagation + t_remaining_chunks + t_in_flight_call</code></pre>
+<p>The pieces that make that hold true:</p>
+<ul>
+<li><strong>Abort notification to prefill</strong> (<a href="https://github.com/sgl-project/sglang/pull/27372" target="_blank" rel="noopener noreferrer">#27372</a>). Decode sends <code>ABORT</code> to every prefill rank, which drops queued chunks for that room. That shrinks the remaining-chunks term to near zero.</li>
+<li><strong>Deferred release</strong> (<a href="https://github.com/sgl-project/sglang/pull/35049" target="_blank" rel="noopener noreferrer">#35049</a>, NIXL port <a href="https://github.com/sgl-project/sglang/pull/35360" target="_blank" rel="noopener noreferrer">#35360</a>). On abort, decode holds the KV slots, the request-pool row and the metadata buffer entry. Each prefill rank replies <code>ABORT_ACK</code> only when its outstanding count for that room drains to zero. Decode releases on the last ack or on a timeout, 30 seconds by default in #35049.</li>
+<li><strong>Hold on every failure kind</strong> (<a href="https://github.com/sgl-project/sglang/pull/41404" target="_blank" rel="noopener noreferrer">#41404</a>) and a working ack fast path (<a href="https://github.com/sgl-project/sglang/pull/40645" target="_blank" rel="noopener noreferrer">#40645</a>, <a href="https://github.com/sgl-project/sglang/pull/41402" target="_blank" rel="noopener noreferrer">#41402</a>). A Cloudflare audit (<a href="https://github.com/sgl-project/sglang/pull/38961" target="_blank" rel="noopener noreferrer">#38961</a>) found the ack often never arrived and some fault types never armed the hold.</li>
+<li><strong>Failed sends never count as drained</strong> (<a href="https://github.com/sgl-project/sglang/pull/43719" target="_blank" rel="noopener noreferrer">#43719</a> for Mooncake, in v0.5.22; <a href="https://github.com/sgl-project/sglang/pull/45973" target="_blank" rel="noopener noreferrer">#45973</a> for NIXL and MORI, slated for v0.5.23).</li>
+<li><strong>Generation-tagged acks</strong> (<a href="https://github.com/sgl-project/sglang/pull/37077" target="_blank" rel="noopener noreferrer">#37077</a>, v0.5.22), so a reused room id cannot consume a stale ack.</li>
+</ul>
+<p>Deferred release became the default in v0.5.21. The cost they report is small: across 21 runs on 2x H100 (1P1D Mooncake, 1,024 requests at concurrency 256), throughput deltas stayed within plus or minus 2% with every 95% confidence interval spanning zero.</p>
+<h2>4. What I would actually change in a PD deployment this week</h2>
+<p>My checklist, combining both posts' guidance:</p>
+<ol>
+<li><strong>Compare KV pool size with context length on every prefill and decode node</strong>, from the engine's own startup log or metric, after any change to weights, quantization, parallelism, CUDA graph sizes or memory fraction. If the pool is smaller, lower the context length. This is the check Cloudflare says it did not enforce, and after the fix its GLM-5.3 prefill pool holds about 2.04 million tokens. Pool sizing belongs next to the parallelism choices I covered in <a href="/glm-5-3-pcp-dcp-long-context-h200.html">my GLM-5.3 PCP/DCP post</a>.</li>
+<li><strong>Upgrade to v0.5.22 or later.</strong> There are no backports to older branches. Cut builds past <a href="https://github.com/sgl-project/sglang/pull/41128" target="_blank" rel="noopener noreferrer">#41128</a> to get the release metrics. Watch for mixed-version prefill and decode during rollout: mismatched ack formats make the handshake fail and every release falls back to the timeout.</li>
+<li><strong>If you are stuck on v0.5.19 or v0.5.20</strong>, set <code>SGLANG_DISAGGREGATION_DEFERRED_DECODE_KV_RELEASE=1</code> on both roles. On v0.5.20 also set <code>SGLANG_MOONCAKE_MAX_TRANSFER_BATCH_INDICES</code> and a release timeout of 60 to 120 seconds.</li>
+<li><strong>Size the hold.</strong> If releases fall to the timeout, held capacity is roughly abort rate times <code>T_hold</code> times pages per request.</li>
+<li><strong>Alert on <code>sglang:decode_deferred_kv_release_total{outcome}</code>.</strong> Healthy deployments release almost everything through <code>drained</code>. A rising <code>timeout</code> share means the ack path is broken.</li>
+<li><strong>Turn on detection where it covers your model.</strong> <code>--disaggregation-enable-kv-checksum</code> (<a href="https://github.com/sgl-project/sglang/pull/39500" target="_blank" rel="noopener noreferrer">#39500</a>) computes an Adler-32 on the GPU at prefill and checks it at decode before the request joins a batch. Cloudflare notes the checksum and <code>--kv-canary</code> do not yet cover every architecture, including GLM-5.3 and DeepSeek V4, so check your logs to confirm requests are actually being verified.</li>
+<li><strong>Stop your proxy from creating aborts.</strong> Cloudflare changed its load balancer so a client disconnect no longer aborts mid-transfer: it keeps the prefill connection until prefill finishes and the decode connection until the first token. Also run a router that cancels both halves together.</li>
+</ol>
+<h2>5. The part that should bother everyone else</h2>
+<p>None of the mechanics in section 2 are unique to SGLang. Any engine that moves KV between nodes, memory tiers or pipeline stages with asynchronous DMA has to answer the same question, and "the allocator says free" is not the answer. SGLang's four closing rules are a good review checklist for any of them: never free a slot an async engine may still touch, hold until a positive drain signal or a bounded timeout, make every degradation lengthen the hold, and keep each fix small enough that its test proves one thing.</p>
+<p>Cloudflare's longer-term direction is integrity at read time: tag each physical page with a value that changes on reallocation and check the request's expected tags before decode reads the cache. Its prototype cost under 1% in tests but was disabled for reliability issues. Zeroing pages on release is still a draft proposal (<a href="https://github.com/sgl-project/sglang/pull/46435" target="_blank" rel="noopener noreferrer">#46435</a>). Until something like that ships in the engines we run, the controls are pool sizing, deferred release, and metrics that tell you whether the hold is actually working.</p>
+<p>The lesson I am taking from Cloudflare's write-up is the testing gap. Its long-context tests checked status codes and throughput, not whether the output belonged to the right request. A canary test that plants a unique string in one tenant's prompt and greps for it in everyone else's output is cheap to add to any PD qualification run.</p>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
