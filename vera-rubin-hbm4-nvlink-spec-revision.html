@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Vera Rubin's Spec Sheet Got Slower: Redoing the Capacity Math for HBM4 and NVLink 6 — Anpoo Sivanadi</title>
+  <meta name="description" content="If you have a Vera Rubin capacity model sitting in a spreadsheet, a few of its input cells are now wrong." />
+  <link rel="canonical" href="https://asivanadi0.github.io/vera-rubin-hbm4-nvlink-spec-revision.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Vera Rubin's Spec Sheet Got Slower: Redoing the Capacity Math for HBM4 and NVLink 6 — Anpoo Sivanadi" />
+  <meta property="og:description" content="If you have a Vera Rubin capacity model sitting in a spreadsheet, a few of its input cells are now wrong." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/vera-rubin-hbm4-nvlink-spec-revision.html" />
+  <meta property="article:published_time" content="2026-10-26T18:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Vera Rubin's Spec Sheet Got Slower: Redoing the Capacity Math for HBM4 and NVLink 6</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-26T18:00:00-07:00">26 October 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>If you have a Vera Rubin capacity model sitting in a spreadsheet, a few of its input cells are now wrong. NVIDIA revised the published memory and scale-up bandwidth for Rubin without an announcement. It surfaced in the last few days when <a href="https://www.ithome.com/1/017/812.htm" target="_blank" rel="noopener noreferrer">ITHome</a> and Guru3D compared the live spec table against archived copies, and on October 26 <a href="https://wccftech.com/nvidia-quietly-lowers-vera-rubin-hbm4-bandwidth-by-up-to-26-nvlink-speeds-also-reduced/" target="_blank" rel="noopener noreferrer">Wccftech</a> and <a href="https://hwbusters.com/news/nvidia-quietly-lowers-vera-rubin-hbm4-bandwidth-and-the-hgx-nvl8-loses-a-quarter-of-it/" target="_blank" rel="noopener noreferrer">Hardware Busters</a> wrote it up.</p>
+<p>I didn't want to plan around a news write-up, so I went to the primary pages myself: the current <a href="https://www.nvidia.com/en-us/data-center/vera-rubin-nvl72/" target="_blank" rel="noopener noreferrer">Vera Rubin NVL72 page</a> and <a href="https://www.nvidia.com/en-us/data-center/hgx/" target="_blank" rel="noopener noreferrer">HGX page</a>, plus the <a href="https://web.archive.org/web/20260901232916/https://www.nvidia.com/en-us/data-center/vera-rubin-nvl72/" target="_blank" rel="noopener noreferrer">September 1 Wayback snapshot of the NVL72 page</a> and the <a href="https://web.archive.org/web/20260901000000/https://www.nvidia.com/en-us/data-center/hgx/" target="_blank" rel="noopener noreferrer">September 1 snapshot of the HGX page</a>. The old and new numbers below come from those four pages. The ratios and per-GPU breakdowns are my arithmetic.</p>
+<h2>1. What changed</h2>
+<p>Per Rubin GPU, on the NVL72 page:</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Spec</th>
+<th>Sep 1 snapshot</th>
+<th>Current page</th>
+<th>Change</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>HBM4 capacity</td>
+<td>288 GB</td>
+<td>288 GB</td>
+<td>none</td>
+</tr>
+<tr>
+<td>HBM4 bandwidth</td>
+<td>22 TB/s</td>
+<td>19.2 TB/s</td>
+<td>-12.7%</td>
+</tr>
+<tr>
+<td>NVLink 6 bandwidth</td>
+<td>3.6 TB/s</td>
+<td>3 TB/s</td>
+<td>-16.7%</td>
+</tr>
+<tr>
+<td>Scale-out networking</td>
+<td>0.4 TB/s</td>
+<td>0.45 TB/s</td>
+<td>+12.5%</td>
+</tr>
+<tr>
+<td>NVFP4 inference (sparse)</td>
+<td>50 PFLOPS</td>
+<td>50 PFLOPS</td>
+<td>none</td>
+</tr>
+<tr>
+<td>NVFP4 training (dense)</td>
+<td>35 PFLOPS</td>
+<td>35 PFLOPS</td>
+<td>none</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>At rack level, the NVL72 goes from 1,580 TB/s to 1,400 TB/s of aggregate HBM4 bandwidth, from 260 TB/s to 216 TB/s of NVLink bandwidth, and from 28.8 TB/s to 32.4 TB/s of scale-out networking. The Vera Rubin Superchip (two GPUs, one Vera CPU) goes from 44 to 38.5 TB/s of HBM4 and from 7.2 to 6 TB/s of NVLink. Capacity (20.7 TB HBM4 per rack), NVLink-C2C (65 TB/s), and every FLOPS row are unchanged.</p>
+<p>The rack numbers are just the GPU numbers times 72. 72 x 19.2 is 1,382 TB/s, which NVIDIA rounds to 1,400, and 72 x 3 is exactly 216. So this is one per-GPU change rolled up, not separate rack-level decisions.</p>
+<p>Wccftech's comparison of Wayback snapshots puts the edit between September 1 and September 11. The cut has probably been on the page for six weeks.</p>
+<h2>2. HGX Rubin NVL8 took the larger hit, and the numbers don't add up</h2>
+<p>The eight-GPU HGX board is the one most of us will rack first, and it moved more:</p>
+<div class="table-wrap" role="region" aria-label="Table 2" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>HGX Rubin NVL8</th>
+<th>Sep 1 snapshot</th>
+<th>Current page</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>HBM4 capacity</td>
+<td>2.3 TB</td>
+<td>2 TB</td>
+</tr>
+<tr>
+<td>HBM4 bandwidth</td>
+<td>176 TB/s</td>
+<td>130 TB/s</td>
+</tr>
+<tr>
+<td>NVLink Switch bandwidth</td>
+<td>28.8 TB/s</td>
+<td>24 TB/s</td>
+</tr>
+<tr>
+<td>Networking</td>
+<td>1.6 TB/s</td>
+<td>1.8 TB/s</td>
+</tr>
+<tr>
+<td>NVFP4 training (dense)</td>
+<td>280 PFLOPS</td>
+<td>270 PFLOPS</td>
+</tr>
+<tr>
+<td>FP8/FP6 training (dense)</td>
+<td>140 PFLOPS</td>
+<td>130 PFLOPS</td>
+</tr>
+<tr>
+<td>NVFP4 inference (sparse)</td>
+<td>400 PFLOPS</td>
+<td>400 PFLOPS</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The marketing copy changed with it. In September the page said "3x more memory bandwidth at 176 TB/s, and 2x more NVLink Switch bandwidth at 28.8 TB/s" versus HGX B200. Now it says "2.1x more memory bandwidth at 130 TB/s, and 1.7x more NVLink Switch bandwidth at 24 TB/s."</p>
+<p>The old HGX totals were exact multiples of the per-GPU spec: 8 x 22 = 176 TB/s and 8 x 288 GB = 2.3 TB. The new totals aren't. Eight GPUs at 19.2 TB/s would be 153.6 TB/s, not 130. Divided back out, the HGX system numbers imply about <strong>16.25 TB/s and 250 GB per GPU</strong>. That is lower than the 19.2 TB/s and 288 GB the NVL72 page now lists for a Rubin GPU.</p>
+<p>The same HGX page also contradicts itself. Its individual GPU table still lists <strong>288 GB HBM4 at 22 TB/s and 3.6 TB/s of NVLink</strong>, the old figures. The system table directly above it uses the new totals. NVLink still divides cleanly (24 / 8 = 3 TB/s per GPU), so the odd one out is memory.</p>
+<p>I don't know whether HGX Rubin ships with a different memory configuration from the NVL72 parts, or whether one of these tables is simply stale. NVIDIA hasn't said. That ambiguity is the most useful thing to raise with your vendor this week: get the per-GPU HBM capacity and bandwidth for the exact SKU you're buying, in writing.</p>
+<h2>3. Why the bandwidth number matters more than the FLOPS number</h2>
+<p>Peak compute didn't move on the NVL72, so it's tempting to call this a footnote. For inference, it isn't.</p>
+<p>Small-batch decode reads weights and KV cache from HBM every step and does very little math per byte. In that regime, time per step scales roughly with bytes moved divided by bandwidth. 22 / 19.2 is 1.146, so a decode step that was purely bandwidth-bound gets up to about 14.6% slower on the new spec. As a back-of-envelope example, streaming all 288 GB of one GPU's HBM once takes about 13.1 ms at 22 TB/s and 15.0 ms at 19.2 TB/s.</p>
+<p>The other way to look at it is the machine balance. Dense NVFP4 is 35 PFLOPS per GPU. At 22 TB/s, a kernel needed about 1,590 FLOPs per HBM byte to become compute-bound. At 19.2 TB/s it needs about 1,820. On the HGX implied figure of 16.25 TB/s it's about 2,150. More of your kernels, including attention over long contexts, MoE expert GEMMs at modest batch sizes, and anything doing KV-heavy work, will sit on the bandwidth side of that line.</p>
+<p>What this doesn't tell you is delivered performance. These are datasheet peaks on both sides. Real kernels rarely hit peak HBM bandwidth, and nobody outside NVIDIA's partners has published sustained numbers on production Rubin parts yet. Treat 12.7% as the upper bound on the hit for bandwidth-bound phases, not as a measured regression.</p>
+<h2>4. NVLink at 3 TB/s per GPU</h2>
+<p>Scale-up bandwidth per GPU drops from 3.6 to 3 TB/s. The same HGX page lists Blackwell's GPU-to-GPU NVLink at 1.8 TB/s, so the generational step is now about 1.67x rather than 2x.</p>
+<p>On an NVL72, that's the fabric carrying tensor-parallel all-reduces and the expert-parallel dispatch and combine traffic of wide MoE serving. If your plan for a large MoE model assumed a certain all-to-all time inside one rack, scale it by 3.6 / 3 = 1.2 for the communication-bound portion.</p>
+<p>There's also a competitive detail I care about. When I wrote up <a href="/helios-ualoe.html">AMD Helios</a>, AMD's 260 TB/s rack-level scale-up figure matched NVIDIA's NVL72 figure of the time exactly. On paper, NVL72 is now at 216 TB/s. Both are vendor numbers for systems that aren't in volume yet, so I wouldn't make a buying decision on it. But "the same scale-up bandwidth per rack" is no longer a true sentence.</p>
+<p>Scale-out went up 12.5% (0.4 to 0.45 TB/s per GPU on NVL72, 1.6 to 1.8 TB/s per HGX board). NVIDIA didn't say what changed in the networking configuration.</p>
+<h2>5. Why it happened (unconfirmed)</h2>
+<p>NVIDIA has not given a reason. Two explanations are in circulation:</p>
+<ul>
+<li><strong>Signal integrity on NVIDIA's side.</strong> TechPowerUp, as summarized by Hardware Busters, reports that the HBM4 data rate target fell from 11.7 to 9.6 Gbps per pin and that the NVLink Nyquist frequency target fell from 56 GHz to 47 GHz. The NVLink ratio (47 / 56 = 0.84) roughly matches the bandwidth cut (3 / 3.6 = 0.83). The HBM ratio (9.6 / 11.7 = 0.82) is steeper than the 0.87 bandwidth change, so I'd treat the per-pin figures as reported, not confirmed.</li>
+<li><strong>HBM4 supply.</strong> Wccftech points to <a href="https://www.ithome.com/0/925/785.htm" target="_blank" rel="noopener noreferrer">earlier ITHome reporting based on SemiAnalysis research</a> that HBM4 suppliers were struggling to hit NVIDIA's original speed bins.</li>
+</ul>
+<p>They aren't mutually exclusive. Running the memory interface and the links slower is the standard fix for both a margin problem and a yield problem. For an operator the cause matters less than the consequence: plan on the current sheet, not on the one from the keynote.</p>
+<h2>6. What I'd do with this</h2>
+<ul>
+<li><strong>Find out which sheet your quote references.</strong> If a purchase order or a cloud reservation was priced against 22 TB/s and 3.6 TB/s, that's worth a conversation now rather than at acceptance testing.</li>
+<li><strong>Update the inputs, not just the headline.</strong> Per-GPU HBM bandwidth 19.2 TB/s on NVL72, NVLink 3 TB/s, scale-out 0.45 TB/s. For HGX, plan on the system totals (130 TB/s, 2 TB) until NVIDIA reconciles the per-GPU table.</li>
+<li><strong>Re-check memory capacity plans on HGX.</strong> If 2 TB is right, that is roughly 300 GB less HBM per board than the September sheet. That's KV cache or weight headroom you were counting on.</li>
+<li><strong>Discount the projected ratios.</strong> The NVL72 page's cost-per-token and tokens-per-megawatt comparisons versus GB200 are marked "subject to change" and are projections. They didn't change when the bandwidth did, so I wouldn't assume they reflect it.</li>
+<li><strong>Measure at acceptance.</strong> Run a STREAM-style HBM bandwidth test and an NCCL all-reduce and all-to-all sweep on the first nodes you get, and compare against 19.2 and 3 TB/s per GPU, not the launch numbers.</li>
+</ul>
+<h2>My read</h2>
+<p>This is a 13% memory bandwidth cut and a 17% NVLink cut on the per-GPU spec, rolled up to an 11% to 17% cut at rack level and a 26% memory bandwidth cut on HGX. Compute is untouched, which is the number that shows up in keynotes. Bandwidth is the number that usually shows up in tokens per second.</p>
+<p>None of this makes Rubin a bad part. Even at 3 TB/s per GPU, NVLink is still well above the 1.8 TB/s the same HGX page lists for Blackwell. But capacity plans are built on datasheet cells, and two of those cells were edited quietly in September. I'd rather redo the math now than find the gap in a benchmark after the racks are bolted down.</p>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
