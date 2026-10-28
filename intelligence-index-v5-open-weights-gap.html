@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Intelligence Index v5 Moved the Open-Weights Gap From 3 Points to 12. Here's What I'd Change in My Model Evals — Anpoo Sivanadi</title>
+  <meta name="description" content="Artificial Analysis shipped Intelligence Index v5 on October 27, and the headline most people will repeat is the leaderboard: Claude Opus 5.5 (max) at 58, GPT-6 Astra (max) at 57, GPT-6.1 Sol (max) at 55." />
+  <link rel="canonical" href="https://asivanadi0.github.io/intelligence-index-v5-open-weights-gap.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Intelligence Index v5 Moved the Open-Weights Gap From 3 Points to 12. Here's What I'd Change in My Model Evals — Anpoo Sivanadi" />
+  <meta property="og:description" content="Artificial Analysis shipped Intelligence Index v5 on October 27, and the headline most people will repeat is the leaderboard: Claude Opus 5.5 (max) at 58, GPT-6 Astra (max) at 57, GPT-6.1 Sol (max) at 55." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/intelligence-index-v5-open-weights-gap.html" />
+  <meta property="article:published_time" content="2026-10-28T06:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Intelligence Index v5 Moved the Open-Weights Gap From 3 Points to 12. Here's What I'd Change in My Model Evals</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-28T06:00:00-07:00">28 October 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>Artificial Analysis shipped <a href="https://artificialanalysis.ai/articles/artificial-analysis-intelligence-index-v5" target="_blank" rel="noopener noreferrer">Intelligence Index v5</a> on October 27, and the headline most people will repeat is the leaderboard: Claude Opus 5.5 (max) at 58, GPT-6 Astra (max) at 57, GPT-6.1 Sol (max) at 55. I care less about who is first. The more useful part, if you pick models to self-host or route traffic between, is what happened to open-weight models when the benchmark mix moved to private data, and how much more work each task now asks of a model.</p>
+<p>Under v4.3, the best open-weight model trailed the leader by 3 points. Under v5, it trails by 12. Nothing about the models changed overnight. The test did. That is worth understanding before anyone uses the new numbers to justify a migration in either direction.</p>
+<h2>1. What actually changed in the index</h2>
+<p>The short version: 60% of the index now comes from evaluations with private test sets or held-out answers. That's a first for this index.</p>
+<p>Two benchmarks are new:</p>
+<ul>
+<li><strong>FrontierCode 2.0</strong>, Cognition's private coding benchmark: 132 tasks in real open-source repositories, graded on whether a maintainer would merge the agent's change. Failing any blocking check scores zero. Artificial Analysis runs every task three times in its own agent harness.</li>
+<li><strong>Terminal-Bench-Science</strong>: 70 agentic research tasks run in a terminal, where a task passes only if every one of its tests passes.</li>
+</ul>
+<p>Three were upgraded: HLE-Diamond (a refined 1,000-question cut of Humanity's Last Exam, split evenly between reasoning and knowledge) replaces HLE, AA-Omniscience v1.1 drops saturated and public questions, and CritPt v2 is scored on a private 40-question hard subset. GDPval-AA v2.1, SciCode and AA-LCR v1.1 are out.</p>
+<p>The weights are four equal buckets of 25%:</p>
+<ul>
+<li><strong>Knowledge work:</strong> AA-Briefcase 15%, AutomationBench-AA 5%, GDP.pdf 5%</li>
+<li><strong>Coding:</strong> FrontierCode 2.0 15%, Terminal-Bench 4.0 10%</li>
+<li><strong>Science:</strong> Terminal-Bench-Science 15%, CritPt v2 hard subset 10%</li>
+<li><strong>General:</strong> AA-Omniscience v1.1 15% (10% accuracy, 5% non-hallucination), HLE-Diamond 10%</li>
+</ul>
+<p>So more than half the weight now sits on long-running agent tasks, and most of it can't be trained on because nobody outside the evaluators has seen the questions.</p>
+<h2>2. Where the open-weight gap opened up</h2>
+<p>Here are the open-weight numbers Artificial Analysis published:</p>
+<ul>
+<li><strong>Kimi K3.1 Pro</strong> is the top open-weight model at 46, but its weights are not out yet. Moonshot's <a href="https://www.kimi.ai/blog/kimi-k3-1-pro" target="_blank" rel="noopener noreferrer">launch post</a> describes it as a 3T-class model with a 1M-token context window and says full weights will be released by November 4.</li>
+<li>Among models whose weights you can actually download today, <strong>DeepSeek V4.1 Flash 1017 (max)</strong> and <strong>GLM-5.3 (max)</strong> lead at 32. That's 26 points behind the leader and below Claude Haiku 5.5 (max) at 36.</li>
+</ul>
+<p>The gap isn't spread evenly. It's widest on the two benchmarks that reward long, multi-step work:</p>
+<ul>
+<li><strong>Terminal-Bench-Science:</strong> GPT-6 Astra (max) 63%, Claude Opus 5.5 (max) 59%, Kimi K3.1 Pro 34%, DeepSeek V4.1 Flash 1017 (max) 13%. Artificial Analysis says most open-weight models it ran scored under 10%.</li>
+<li><strong>HLE-Diamond:</strong> Claude Opus 5.5 (max) 68%, Kimi K3.1 Pro 37%.</li>
+<li><strong>FrontierCode 2.0:</strong> Claude Opus 5.5 (max) 46%; GPT-6 Astra, GPT-6.1 Terra and Claude Sonnet 5.5 (all max) at 42%; DeepSeek V4.1 Flash 1017 (max) at 28%, the best open-weight score.</li>
+</ul>
+<p>There's one counterpoint worth keeping in view: Kimi K3.1 Pro leads every model on Terminal-Bench 4.0 at 67%. No single model leads all nine evaluations. Opus 5.5 leads three; five other models split the remaining six.</p>
+<p>My read is that the v4.3 gap of 3 points partly reflected public benchmarks that open models had effectively caught up on. When the tasks are private and the grading is "would a maintainer merge this" or "did every test pass," a lot of that parity goes away. I wouldn't call that a scandal. It's what private held-out sets are for. It does mean you shouldn't treat a v4.3 score and a v5 score as the same unit, and you shouldn't read the new gap as a new regression in any specific model.</p>
+<h2>3. The number I'd actually plan around: tokens per task</h2>
+<p>This is the part that matters if you run inference rather than just pick vendors.</p>
+<p>Artificial Analysis reports that every model it measured generates more output tokens per index task under v5 than under v4.3. The median went from 35k to 59k output tokens, a rise of about two thirds.</p>
+<p>Two details explain where those tokens go:</p>
+<ul>
+<li>Terminal-Bench-Science, Terminal-Bench 4.0, AA-Briefcase and FrontierCode 2.0 carry 55% of the index weight but account for a median of about 90% of output tokens.</li>
+<li>Terminal-Bench-Science alone accounts for about a third of output tokens per task.</li>
+</ul>
+<p>If you're sizing a self-hosted deployment for agent workloads, that's a useful signal. The tasks the field now treats as the real test are decode-heavy and long. That pushes on KV cache residency, on how long a single request holds a slot, and on whether your scheduler handles a handful of very long decodes next to a stream of short ones. A model that looks cheap per token can still be expensive per finished task if it needs more steps, and v5 makes that visible.</p>
+<h2>4. Effort settings are now a bigger lever than model choice</h2>
+<p>The other result I'd flag for anyone building a router:</p>
+<ul>
+<li>Claude Opus 5.5 scores 35 at low effort and 58 at max, at about 10x the cost per index task ($0.98 versus $10.04).</li>
+<li>Claude Sonnet 5.5 spans 29 points from low to max, up from 20 in v4.3.</li>
+<li>GPT-6.1 Sol's spread doubles, from 10 points to 20.</li>
+</ul>
+<p>Cost per task among the ten highest-scoring models varies by more than 13x, from $0.96 for GPT-6.1 Terra (max) to $13.04 for Claude Fable 5.1 (max). GPT-6.1 Sol (max) lands within 4 points of Opus 5.5 (max) at about an eighth of the cost per task ($1.27 versus $10.04).</p>
+<p>Put those together and a "which model" decision is really a "which model at which effort, for which task class" decision. A single index number at max effort hides the two-dimensional choice you're actually making. If your router only switches between model names, you're probably leaving the larger cost lever unused.</p>
+<h2>5. What I'd do with this</h2>
+<p>I don't think v5 should move anyone's production model by itself. I'd use it to fix how I evaluate. Here's the checklist I'm applying to my own setup:</p>
+<ol>
+<li><strong>Re-baseline, don't compare across versions.</strong> Keep v4.3 and v5 scores in separate columns. A 12-point gap that was 3 last week is a measurement change, not a model change.</li>
+<li><strong>Build a private slice of your own tasks.</strong> The lesson of v5 is that held-out tasks graded on real acceptance criteria separate models more than public ones do. Thirty to fifty real tasks from your own repos, graded on "would we merge this," will tell you more than any public score.</li>
+<li><strong>Measure tokens per finished task, not tokens per second.</strong> Log output tokens and wall-clock time per completed agent task for each candidate model and effort level. That's the number that sets your GPU bill.</li>
+<li><strong>Sweep effort before you swap models.</strong> Run your private slice at low, medium and max effort for your current model first. The spreads above suggest you may find the savings you were hoping a cheaper model would give you.</li>
+<li><strong>Test long-decode behavior on your serving stack.</strong> If median agent runs are near 59k output tokens, check KV cache pressure, preemption and slot occupancy at that length, not at the 2k-token chat lengths most load tests use.</li>
+<li><strong>Wait for Kimi K3.1 Pro's weights before drawing open-weight conclusions.</strong> The best open score in v5 belongs to a model nobody can self-host yet. If weights land by November 4 as promised, that's the one to put through your own evals.</li>
+</ol>
+<p>The leaderboard will keep moving. The shift underneath it, toward private, agentic, all-tests-must-pass tasks that burn far more tokens, is the part I expect to stick.</p>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
