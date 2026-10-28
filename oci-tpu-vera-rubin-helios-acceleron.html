@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>One Cloud, Three Scale-Up Fabrics: Reading OCI's TPU, Vera Rubin and Helios Announcements as a Cluster Operator — Anpoo Sivanadi</title>
+  <meta name="description" content="Day two of Oracle AI World was a hardware day, and most of the coverage I&#x27;ve seen reads it as a procurement story: more accelerator brands in one catalog." />
+  <link rel="canonical" href="https://asivanadi0.github.io/oci-tpu-vera-rubin-helios-acceleron.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="One Cloud, Three Scale-Up Fabrics: Reading OCI's TPU, Vera Rubin and Helios Announcements as a Cluster Operator — Anpoo Sivanadi" />
+  <meta property="og:description" content="Day two of Oracle AI World was a hardware day, and most of the coverage I&#x27;ve seen reads it as a procurement story: more accelerator brands in one catalog." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/oci-tpu-vera-rubin-helios-acceleron.html" />
+  <meta property="article:published_time" content="2026-10-27T18:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>One Cloud, Three Scale-Up Fabrics: Reading OCI's TPU, Vera Rubin and Helios Announcements as a Cluster Operator</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-27T18:00:00-07:00">27 October 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>Day two of Oracle AI World was a hardware day, and most of the coverage I've seen reads it as a procurement story: more accelerator brands in one catalog. I read it differently. If you schedule jobs on this stuff, the interesting part is that one cloud now plans to run three different scale-up domains, each with its own idea of how chips talk to each other, behind one scale-out network. That changes what you have to test before you trust a placement.</p>
+<p>Here is what was actually announced on October 27, from the primary posts.</p>
+<ul>
+<li><strong>Google TPUs on OCI</strong>, starting in calendar 2027. Google's <a href="https://cloud.google.com/blog/products/infrastructure/bringing-google-tpus-to-oracle-cloud-infrastructure" target="_blank" rel="noopener noreferrer">joint post with Oracle</a> calls OCI the first hyperscaler outside Google to offer TPUs.</li>
+<li><strong>NVIDIA Vera Rubin NVL72 and Vera CPUs, generally available</strong>, plus a planned <strong>Rubin NVL8</strong> x86 server, per <a href="https://blogs.oracle.com/cloud-infrastructure/nvidia-vera-rubin-vera-cpus-oci" target="_blank" rel="noopener noreferrer">Oracle's NVIDIA post</a>. The Vera rollout starts at 150,000 CPUs.</li>
+<li><strong>AMD Helios</strong> racks with 72 Instinct MI455X GPUs, per <a href="https://blogs.oracle.com/cloud-infrastructure/amd-helios-oci-ai-infrastructure" target="_blank" rel="noopener noreferrer">Oracle's AMD post</a>.</li>
+<li><strong>Cerebras CS-4 and SambaNova SN50</strong> capacity, both arriving in 2027, according to <a href="https://www.nextplatform.com/ai/2026/10/27/oracle-is-expanding-the-accelerator-options-in-oci-for-enterprises/5305815" target="_blank" rel="noopener noreferrer">The Next Platform's show report</a>.</li>
+</ul>
+<p>I'll stick to the first three, which have enough published detail to reason about.</p>
+<h2>1. The scale-up domain is the thing you schedule</h2>
+<p>Every one of these systems is built around a fixed group of accelerators that share a fast private fabric. Your tensor-parallel and expert-parallel groups want to live inside that group. Anything that crosses its boundary pays for the scale-out network.</p>
+<p>The three domains look like this on paper:</p>
+<ul>
+<li><strong>Vera Rubin NVL72</strong>: 72 Rubin GPUs on NVLink 6 with HBM4. Oracle repeats NVIDIA's claims of up to 30x inference throughput per watt and 4x training performance versus Blackwell. Those are vendor numbers, and NVIDIA <a href="/vera-rubin-hbm4-nvlink-spec-revision.html">quietly revised several Rubin bandwidth figures</a> on its own spec pages this fall, so I'd benchmark before planning around any of them.</li>
+<li><strong>AMD Helios</strong>: 72 MI455X GPUs across 18 four-GPU compute trays, in an Open Compute Project Open Rack Wide design, with up to 31 TB of HBM4 and up to 1.7 PB/s of aggregate peak memory bandwidth per rack. That works out to roughly 430 GB of HBM per GPU if you divide evenly, which is the number that decides how much KV cache and how many experts you can keep resident.</li>
+<li><strong>TPUs</strong>: chips linked by Inter-Chip Interconnect (ICI) with Optical Circuit Switching (OCS) between them. Google says its eighth-generation TPUs reach up to 12.6 PFLOPS of native FP4 per chip, at up to 2x the performance per watt of the previous generation. It also credits more on-chip SRAM, more HBM and a new low-diameter topology that cuts network hops by more than 50% for up to 80% better performance per dollar on low-latency serving.</li>
+</ul>
+<p>The fourth option, Rubin NVL8, is the small one: eight Rubin GPUs on NVLink in an x86 server with Intel Xeon 6 and RDMA networking. For teams whose model fits in eight GPUs and whose software assumes x86, that is the box they'll actually rent.</p>
+<p>The practical point is that "72" means different things. An NVL72 and a Helios rack both give you 72 accelerators, but the memory per device, the collective library (NCCL versus RCCL) and the topology inside the rack differ. A TPU slice has no fixed 72 at all, since OCS can reshape it. Any scheduler that treats these as interchangeable "GPU pools" will place jobs badly.</p>
+<h2>2. The scale-out network is where Oracle put its engineering</h2>
+<p>The most detailed part of the NVIDIA post isn't about NVIDIA. It's about Oracle Acceleron, the network that every Vera Rubin NVL72, Vera CPU and Rubin NVL8 deployment runs on.</p>
+<p>Acceleron is built from 102.4 Tb/s Spectrum-X Ethernet switches, ConnectX-9 SuperNICs and BlueField-4 DPUs. The design choices that matter:</p>
+<ul>
+<li><strong>Eight planes.</strong> Every server connects to all eight network planes, so any two servers have eight independent paths. The NIC acts as a small switch across physically and logically isolated planes.</li>
+<li><strong>Multipath Reliable Connection (MRC).</strong> Instead of pinning a GPU-to-GPU flow to one path, MRC sprays packets from a single connection across hundreds of paths. Oracle says it detects a congested or failed path and routes around it in microseconds.</li>
+<li><strong>Two tiers.</strong> With multiplanar networking and SRv6 source routing, Oracle says it can build two-tier networks of more than 131,000 GPUs, against three or four tiers in conventional designs.</li>
+</ul>
+<p>Fewer tiers means fewer hops and more uniform GPU-to-GPU latency, which is what all-reduce and all-to-all care about. Packet spraying also means your transport has to tolerate out-of-order arrival, which is exactly the property that per-flow ECMP setups avoid needing.</p>
+<p>TPUs keep their own fabric. Chip-to-chip traffic stays on ICI and OCS, and Acceleron connects TPU capacity to the rest of OCI: storage, databases and other services. Helios racks get Acceleron SmartNICs built on AMD Pensando DPUs. What I could not find in any of the posts is whether Helios racks scale out over the same eight-plane MRC fabric as the NVIDIA systems, or over something else. That is the first question I'd ask an account team.</p>
+<h2>3. Two goodput claims worth testing</h2>
+<p>Both vendors make a resilience claim that would change how often a long job checkpoints.</p>
+<p>Google says that pairing on-die ICI routing with OCS lets the control plane route optical paths around faulty hardware or links in real time, without job restarts, and that this sustains over 97% goodput across thousands of chips on large training runs. Oracle says that when one Acceleron plane gets congested or unstable, traffic shifts to another and training continues without checkpoint restarts.</p>
+<p>Those are strong statements, and neither post says how they were measured. Goodput depends on what you count as productive time, how often hardware fails at your scale and how long your checkpoint takes to write and restore. A 97% figure on Google's fleet tells you little about a fresh deployment in a new Oracle region in 2027. I'd want to inject faults myself: pull a link, degrade a plane, kill a host, and measure step-time impact and recovery time from the job's own logs.</p>
+<h2>4. The CPU side is now a separate sizing problem</h2>
+<p>Both the NVIDIA and AMD posts spend real space on CPUs, and the reason is agent workloads. Tool calls, sandboxes, retrieval and orchestration run on CPUs, and they sit in the request path.</p>
+<p>Vera is NVIDIA's custom Arm CPU built on its Olympus core: 88 cores and 176 threads per socket. (Oracle's memory figures for Vera in the same paragraph don't read consistently, so I'd check NVIDIA's own spec page before quoting them.) OpenAI says it is bringing Vera into production on OCI for agentic sandbox workloads. On the AMD side, OCI Compute E7 runs 6th Gen EPYC "Venice" with up to 256 cores and 512 threads per socket, up to 1,024 MB of L3 cache, 16 memory channels at up to 8000 MT/s and PCIe 6.0.</p>
+<p>The AMD post says it plainly: size the CPU tier alongside the GPU tier, and test. If your agent's time to first token includes three tool calls and a vector lookup, a perfectly tuned GPU pool still waits on whatever CPU instance hosts the sandbox.</p>
+<h2>5. Portability is the claim the whole story rests on</h2>
+<p>Three accelerator families in one cloud only helps if moving a model between them is cheap. The posts point at the software that is supposed to make it so: <a href="/torchtpu-open-source-vllm-sglang.html">TorchTPU, now open source</a>, with vLLM, SGLang, llm-d and TorchTitan on TPUs; ROCm with PyTorch, JAX, vLLM and SGLang on Helios; and NVIDIA Dynamo for disaggregated inference on Oracle Kubernetes Engine.</p>
+<p>In my experience, "runs" and "runs at the same cost per token" are different milestones. Kernel coverage for new attention variants, quantization formats and MoE routing lands on CUDA first and on the others later.</p>
+<h2>What I'd check before committing workloads</h2>
+<ol>
+<li>Which TPU generation and slice shapes OCI will actually offer in 2027, and in which regions. The joint post doesn't say.</li>
+<li>Whether Helios racks share the eight-plane MRC fabric with the NVIDIA systems, and what scale-out bandwidth each rack gets.</li>
+<li>Fault-injection results on Acceleron: step-time impact when a plane degrades, measured on your collective pattern, not a vendor benchmark.</li>
+<li>Per-device HBM and collective library for each scale-up domain, encoded as scheduler labels so jobs land on the topology they were tuned for.</li>
+<li>Cost per token for your own model on at least two of the three families, using the serving engine you already run.</li>
+<li>CPU instance placement relative to the accelerator racks for agent tool calls and sandboxes.</li>
+</ol>
+<p>Oracle's posts carry a standard future-product disclaimer, and most of this lands in 2027. Still, the direction is clear. The hard part of running a multi-accelerator cloud won't be getting the chips. It will be knowing, for each job, which fabric it is about to cross.</p>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
