@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Gemini 4 Carbon Takes #1 on Intelligence Index v5. What I'd Measure Before It Reaches the API — Anpoo Sivanadi</title>
+  <meta name="description" content="This morning I wrote about Intelligence Index v5 and how its move to private, agentic tasks reshuffled the leaderboard." />
+  <link rel="canonical" href="https://asivanadi0.github.io/gemini-4-carbon-index-v5.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Gemini 4 Carbon Takes #1 on Intelligence Index v5. What I'd Measure Before It Reaches the API — Anpoo Sivanadi" />
+  <meta property="og:description" content="This morning I wrote about Intelligence Index v5 and how its move to private, agentic tasks reshuffled the leaderboard." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/gemini-4-carbon-index-v5.html" />
+  <meta property="article:published_time" content="2026-10-28T18:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Gemini 4 Carbon Takes #1 on Intelligence Index v5. What I'd Measure Before It Reaches the API</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-28T18:00:00-07:00">28 October 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>This morning I wrote about <a href="/intelligence-index-v5-open-weights-gap.html">Intelligence Index v5</a> and how its move to private, agentic tasks reshuffled the leaderboard. A few hours later Google announced <a href="https://blog.google/innovation-and-ai/models-and-research/gemini-models/introducing-gemini-4-carbon/" target="_blank" rel="noopener noreferrer">Gemini 4 Carbon</a>, and Artificial Analysis <a href="https://artificialanalysis.ai/articles/gemini-4-carbon-new-number-1" target="_blank" rel="noopener noreferrer">scored it at 59</a>, one point above Claude Opus 5.5 (max) at 58. So the index was barely a day old before it had a new leader.</p>
+<p>The catch is that almost nobody can call Carbon yet. Google is releasing it first to a subset of cyber defenders through its <a href="https://deepmind.google/fairwind-program/" target="_blank" rel="noopener noreferrer">Fairwind Program</a>, as part of the U.S. government's voluntary pre-release testing process, with no date for developers. That makes this a good moment to read the numbers carefully and get an eval plan ready, rather than to plan a migration.</p>
+<h2>1. What we actually know about the model</h2>
+<p>From Google's post and the Artificial Analysis write-up:</p>
+<ul>
+<li><strong>Context window:</strong> 1M tokens.</li>
+<li><strong>Modalities:</strong> text, image, video and speech in; text out.</li>
+<li><strong>Pricing:</strong> $4 per million input tokens and $20 per million output tokens at standard rates, the same as Gemini 4 Argon. Google will launch it at an introductory $2 / $10. Cached input is 95% off, which is $0.20 per million at standard pricing.</li>
+<li><strong>Lineage:</strong> Google describes it as building on Gemini 4 Argon, which it launched two weeks earlier. <a href="https://arstechnica.com/ai/2026/10/google-announces-gemini-4-carbon-its-latest-frontier-ai-model-that-you-cant-use/" target="_blank" rel="noopener noreferrer">Ars Technica</a> points out that Google hasn't said whether Carbon is a new pretraining run or a post-training upgrade of Argon, and that Carbon beats Argon by small margins on every test Google published.</li>
+</ul>
+<p>One pricing detail is worth noting. Ars reports that Argon's introductory rate runs through the end of November, while Google declined to give an end date for Carbon's. If you budget at the introductory price, you're budgeting against a number with no expiry date attached.</p>
+<h2>2. Where the #1 comes from</h2>
+<p>The 59 isn't a clean sweep. Artificial Analysis says Carbon (high reasoning) holds the top score on 4 of the 9 evaluations in the index:</p>
+<ul>
+<li>HLE-Diamond</li>
+<li>Terminal-Bench-Science</li>
+<li>AA-Omniscience</li>
+<li>AutomationBench-AA</li>
+</ul>
+<p>It does not lead coding or knowledge work. On the Artificial Analysis Coding Agent Index, Carbon running in Antigravity CLI scores 59, three points behind Claude Code with Opus 5.5 (max) at 62. It's second on Terminal-Bench 4.0 at 64% and second on FrontierCode v1.1 at 51%, behind Opus 5.5 (max) at 56%. Artificial Analysis notes that Google has historically trailed in agentic coding, so a three-point gap is a real change even though it isn't a lead.</p>
+<p>On AA-Briefcase, the agentic knowledge-work benchmark that carries 15% of the index, Carbon (high) scores 1609 Elo. That's 126 points above Argon (high) at 1483, but behind Grok 4.7 (xhigh) at 1638, Muse Wonder (max) at 1659 and Kimi K3.1 Pro at 1678. Most of the gain came from the Presentation category, up 293 Elo to 1598.</p>
+<p>So Carbon wins the index on science and knowledge recall, and comes close on coding. If your workload is mostly coding agents, the overall number overstates how much Carbon would change things for you.</p>
+<h2>3. The cost-per-task numbers</h2>
+<p>Here's the section I'd show anyone who signs off on a model bill. Artificial Analysis prices everything at standard rates, not launch discounts:</p>
+<ul>
+<li><strong>Gemini 4 Carbon (high):</strong> $7.76 per index task.</li>
+<li><strong>Claude Opus 5.5 (max):</strong> $10.04, so Carbon is about 23% cheaper.</li>
+<li><strong>GPT-6 Astra (max):</strong> $6.25, so Carbon costs about 1.2x as much.</li>
+<li><strong>Gemini 4 Argon:</strong> $7.68, nearly the same as Carbon, with Carbon scoring 9 points higher.</li>
+</ul>
+<p>The token count is the number I'd plan capacity around. Carbon uses 123k output tokens per index task, 29% fewer than Opus 5.5 (max) at 173k. But this morning's post noted that the v5 median across all measured models is about 59k output tokens per task. Carbon still writes roughly twice the median. It's cheaper than Opus because it writes fewer tokens at a lower list price, not because it's terse.</p>
+<p>If the 50% introductory discount applies evenly, the per-task cost would be roughly half the standard figure while it lasts. I'd still plan on the standard rate, since that's the one with a known value.</p>
+<h2>4. Hallucination went up, and that's fine if you read it right</h2>
+<p>On AA-Omniscience v1.1, Carbon scores 54, ahead of Opus 5.5 (max) at 48 and Argon at 46. Accuracy rose 10 points over Argon to 58%.</p>
+<p>The detail people will skip: Carbon's hallucination rate rose from Argon's 4% to 11%. That's still the second lowest of any model Artificial Analysis has measured, behind only Argon, and far below the 50% it reports for both Opus 5.5 (max) and GPT-6 Astra (max). My read is that Carbon answers more questions it used to decline. It gets more of them right, and it's also wrong more often when it answers. For a retrieval or support pipeline, that's a real change in behavior between two models from the same family. If you'd tuned prompts or fallback logic around Argon's habit of refusing, re-test that logic before switching.</p>
+<h2>5. Google's own claims, labeled as such</h2>
+<p>Google's post leads with security. These are Google's numbers, run without guardrails, and I haven't seen independent reproductions yet:</p>
+<ul>
+<li><strong>SEC-bench Pro:</strong> 88.2% on finding real vulnerabilities.</li>
+<li><strong>ExploitGym:</strong> 54.8% on exploitation.</li>
+<li><strong>CWE-bench:</strong> 71.0% on patching.</li>
+<li><strong>WebDev Arena:</strong> up 89 Elo to #4 at 1768.</li>
+</ul>
+<p>The alignment claims are more relevant to running agents than the security scores:</p>
+<ul>
+<li>Successful cheating on Terminal-Bench 4.0 dropped to 0.0%, with attempted cheating at 0.4%.</li>
+<li>High-severity misalignment alerts in Google's internal coding environments dropped by almost 80%.</li>
+<li>Overreach went down 26% and under-service went down 29%.</li>
+<li>Unsupported claims fell by about half compared with Argon.</li>
+<li>On Gray Swan's indirect prompt injection benchmark, Carbon's attack success rate was 0.0%. Ars lists Argon at 0.7%, Opus 5.5 at 1% and GPT-6 Astra at 8.5%.</li>
+</ul>
+<p>Google also says internal teams have watched Carbon run for days on multi-step engineering tasks. I'd treat that as a statement about the harness as much as the model. Very few agent runners I've seen are built for a single task that runs for days.</p>
+<h2>6. What I'd do before access opens</h2>
+<p>Nothing here justifies moving production traffic, and nobody outside the Fairwind cohort can call it anyway. This is the prep I'd do now so the first week of access goes to real measurement:</p>
+<ol>
+<li><strong>Have a private task slice ready.</strong> Thirty to fifty tasks from your own repos or tickets, graded on real acceptance criteria. Run your current model and Argon on it now so you have a baseline when Carbon arrives.</li>
+<li><strong>Budget output tokens at about 2x the v5 median.</strong> With 123k output tokens per index task, long agent runs will hold KV cache and decode slots much longer than chat traffic does. Size per-request token caps and timeouts accordingly.</li>
+<li><strong>Plan on $4 / $20, not $2 / $10.</strong> The introductory price has no stated end date.</li>
+<li><strong>Use the 95% cache discount on purpose.</strong> At $0.20 per million cached input tokens, long agent loops that resend the same repo context get much cheaper if your prompts keep a stable prefix. Check that your harness keeps that prefix stable across turns.</li>
+<li><strong>Re-test refusal and fallback behavior.</strong> The jump in hallucination rate from 4% to 11% means code paths written around Argon declining to answer may fire less often and be wrong more often.</li>
+<li><strong>Add checkpoints and budget limits for long runs.</strong> If multi-day tasks are the intended use, the runner needs resumable state, per-task spend limits, and a way for a human to inspect and stop a run partway through.</li>
+<li><strong>Compare against Opus 5.5 on coding agents specifically.</strong> The index lead comes from science and knowledge. For coding agents, Opus 5.5 is still ahead on the Coding Agent Index, and that's the comparison that matters for the work I do most.</li>
+</ol>
+<p>A one-point lead on a day-old index, for a model most of us can't call, isn't a reason to change anything yet. The cost-per-task and token figures are what I'd act on, because they'll still apply once access opens.</p>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
