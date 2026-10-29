@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Agentic RL on MI355X: The Bottleneck Was Never the GPU — Anpoo Sivanadi</title>
+  <meta name="description" content="The most useful line in the LMSYS write-up on agentic RL with Miles on AMD Instinct MI355X is in the middle of a table of fixes: &quot;Almost every problem looked like a GPU issue at first." />
+  <link rel="canonical" href="https://asivanadi0.github.io/agentic-rl-mi355x-miles-long-tail.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Agentic RL on MI355X: The Bottleneck Was Never the GPU — Anpoo Sivanadi" />
+  <meta property="og:description" content="The most useful line in the LMSYS write-up on agentic RL with Miles on AMD Instinct MI355X is in the middle of a table of fixes: &quot;Almost every problem looked like a GPU issue at first." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/agentic-rl-mi355x-miles-long-tail.html" />
+  <meta property="article:published_time" content="2026-10-29T06:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Agentic RL on MI355X: The Bottleneck Was Never the GPU</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-29T06:00:00-07:00">29 October 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>The most useful line in the LMSYS write-up on <a href="https://www.lmsys.org/blog/2026-10-22-miles-mi355x-agentic-rl" target="_blank" rel="noopener noreferrer">agentic RL with Miles on AMD Instinct MI355X</a> is in the middle of a table of fixes: "Almost every problem looked like a GPU issue at first. Almost none were."</p>
+<p>What makes this post worth reading is that the team put numbers on where the time went when they trained a coding agent with reinforcement learning, and most of those numbers point at schedulers, CPU fleets and default limits, not the silicon.</p>
+<p>Here is the setup, what they found, and the checks I would copy into any agentic RL cluster, whatever vendor the GPUs come from.</p>
+<h2>1. The setup</h2>
+<p>The model is Qwen3-30B-A3B-Instruct. The recipe is two stages:</p>
+<ul>
+<li><strong>SFT:</strong> one epoch on about 4,000 successful agent traces from <a href="https://huggingface.co/datasets/nvidia/Open-SWE-Traces" target="_blank" rel="noopener noreferrer">Open-SWE-Traces</a>, mainly to teach the tool format.</li>
+<li><strong>RL:</strong> fully asynchronous GRPO on about 1,350 <a href="https://github.com/SWE-bench/SWE-smith" target="_blank" rel="noopener noreferrer">SWE-smith</a> tasks from 47 repositories that do not appear in SWE-bench Verified. Eight attempts per task, reward 1 if the repository's tests pass, no KL penalty.</li>
+</ul>
+<p>Limits per trajectory: 8,192 generated tokens per turn, 65,536 tokens total, 80 turns.</p>
+<p>The stack is all open source and ships as one ROCm 7.2 container: <a href="https://github.com/radixark/miles" target="_blank" rel="noopener noreferrer">Miles</a> for the RL loop, SGLang for rollouts, Megatron-LM for training, <a href="https://github.com/harbor-framework/harbor" target="_blank" rel="noopener noreferrer">Harbor</a> for agents and sandboxes, and <a href="https://github.com/SWE-agent/mini-swe-agent" target="_blank" rel="noopener noreferrer">mini-swe-agent</a> as the agent. Each node has 8x MI355X with 288 GB of HBM3E per GPU. Inference and training run on separate nodes: the inference node runs eight single-GPU SGLang engines, and the training node pushes new weights back to them.</p>
+<p>The headline result: pass@1 on a 100-task stratified subset of SWE-bench Verified (4 attempts per task) went from 7.3% for the base model to 12.8% after SFT and 27.5% after RL. RL accounts for 14.7 of the 20.2 points gained, and it was measured on codebases the policy never saw during RL.</p>
+<p>It is a 100-task subset and a 30B-A3B model, so the systems findings are the part that transfers.</p>
+<h2>2. Where the step time goes</h2>
+<p>On the trainer side, the 384-trajectory run averaged a 208-second step (mean of 16 steps):</p>
+<ul>
+<li>Actor update: 131 s (63%)</li>
+<li>Waiting for rollouts: 60 s (29%)</li>
+<li>Log-probability recomputation: 16 s (8%)</li>
+<li>Weight sync, logged separately: 23 s</li>
+</ul>
+<p>Even with fully asynchronous training, almost a third of the step is the trainer waiting on rollouts, which were dominated by LLM calls and sandbox starts.</p>
+<h2>3. The long tail is the real enemy</h2>
+<p>In GRPO, a group cannot be scored until its slowest attempt finishes. Agentic trajectories have brutal variance. Two attempts at the same task differed 2.5x in length, and in one example the slowest attempt on an AnyIO task took 28.8 minutes.</p>
+<p>The numbers that stood out to me:</p>
+<ul>
+<li>84% of trajectories ran to the turn cap.</li>
+<li>Successful trajectories needed a median of only 8 turns.</li>
+<li>32% of rollout time came after 90% of trajectories had already finished.</li>
+</ul>
+<p>During that tail, each engine is decoding a handful of sequences at a batch size near 1, which is the least efficient way to use an accelerator. Before the cap, failing agents could loop for 200+ turns.</p>
+<p>The fix was not clever. Fully asynchronous training plus a tighter length cap made steps 3x faster (850 s to 284 s) on the same 8-GPU inference node, with no effect on successful runs. If your agents that will eventually succeed finish in 8 turns, a trajectory at turn 60 is mostly burning GPU time to produce a zero reward.</p>
+<h2>4. KV cache math you should do before the run, not after</h2>
+<p>Each turn appends tool output to the context, so KV usage grows monotonically through an episode. The post gives 96 KB per token for this model, which means a 64K-token trajectory holds about 6.3 GB of KV cache.</p>
+<p>In one run, the engine had no context cap. A few generations grew to 113K to 186K tokens, and about 10 of them filled the engine's 1.5M-token KV cache. The other 99 requests queued on that engine got zero tokens until they timed out.</p>
+<p>That is head-of-line blocking, and GPU utilization will not show it, because the GPU is busy. Capping context at 64K in the engine fixed it. With 288 GB of HBM, one MI355X engine holds tens of 64K-token trajectories at once, which is part of why a single-GPU-per-engine layout works here.</p>
+<p>The lesson I take: the trajectory cap in your RL config and the context cap in your inference engine are two different settings, and only the engine one protects the KV pool.</p>
+<h2>5. Sandboxes are a CPU fleet on the critical path</h2>
+<p>Every trajectory needs a clean environment with the repository, its dependencies and its tests. With hundreds in flight, the sandbox fleet becomes part of the training loop.</p>
+<p>The team moved sandboxes off the inference node to E2B cloud microVMs (2 vCPUs and 4 GB each) and ran 384 concurrent trajectories: 24 single-GPU SGLang engines at 16 trajectories each, across 4 nodes. Results at that scale:</p>
+<ul>
+<li><strong>Sandbox start:</strong> 1.9 s median and 3.7 s at p99, flat at 384, versus 11.7 s for local Docker under load.</li>
+<li><strong>Fetch and compute steps got slower:</strong> agent install took 7.5 s longer and tests 8.5 s longer in a 2-vCPU microVM, and each LLM call crossed a tunnel at about 0.26 s. A trajectory took 15 to 40 s longer overall, 4% to 11% of its time.</li>
+<li><strong>Time split:</strong> LLM calls were 77% of a cloud trajectory; tests, tool calls, agent install and start together were 22%.</li>
+<li><strong>GPU headroom:</strong> engines had an empty queue and used at most 23% of KV cache. The limit was sandbox concurrency.</li>
+<li><strong>Reliability:</strong> 2.6% of trajectories failed in steady state, and 0.09% of 300,500 tunneled LLM calls returned an error.</li>
+</ul>
+<p>Rollout throughput went from about 860 to about 3,480 trajectories per hour, and LLM call latency under load dropped from 12.6 s to 4.4 s. The authors are careful to say the 4x combines three changes (scaling inference from one to three nodes, cloud sandboxes, and removing concurrency limits), and that the 3x step-time gain is a separate comparison.</p>
+<h2>6. Infrastructure errors become wrong rewards</h2>
+<p>This is the finding I would put on a wall. 3.1% of trajectories ended in an infrastructure error, and an infrastructure error scores 0, exactly like a wrong fix. The policy gets penalized for your flaky sandbox.</p>
+<p>At a 13% to 17% mean training reward, a 3% rate of silent zeros is not noise. You have to tag these failures and drop them from the batch, not just count them.</p>
+<h2>7. The hidden caps that broke first</h2>
+<p>Every scaling failure they hit came from a fixed default, not from bandwidth:</p>
+<ul>
+<li>At most 31 Docker networks per machine.</li>
+<li>100 image downloads per hour for the whole cluster.</li>
+<li>100 agent connections in Miles (an HTTP pool limit).</li>
+<li>One proxy process, on one CPU core, serializing all LLM calls.</li>
+</ul>
+<p>Two more from the fixes table that I have seen in other clusters:</p>
+<ul>
+<li><strong>Cross-node weight sync hung</strong> because NCCL picked a duplicate Docker IP. Pinning the NCCL interface fixed it.</li>
+<li><strong>Rare GPU faults</strong> tempted them to disable HIP graphs, which halved throughput. They kept graphs on and added a watchdog with auto-resume instead.</li>
+</ul>
+<p>The run trained for 145 steps through three checkpoint restarts, with the trainer versus SGLang log-probability gap holding near 0.011 and no drift in response length.</p>
+<h2>8. What I would check before an agentic RL run</h2>
+<p>None of this is specific to MI355X. If I were standing up an agentic RL cluster on any accelerator, this is the preflight list I would take from the post:</p>
+<ol>
+<li>Measure the turn distribution of successful trajectories in a pilot, then set the turn and length caps from it, not from the model's maximum context.</li>
+<li>Set a hard context cap in the inference engine, separate from the RL config, and compute worst-case KV per engine as concurrency times cap times bytes per token.</li>
+<li>Alert on per-engine queue depth and time-to-first-token, not just GPU utilization.</li>
+<li>Treat sandbox start time at target concurrency as a first-class SLO, and keep warm pools or snapshots; the post notes a first call in a fresh sandbox was 15x slower than a repeat call in microbenchmarks.</li>
+<li>Tag infrastructure failures separately from task failures and exclude them from rewards.</li>
+<li>Grep your stack for default limits: Docker networks per host, registry pull quotas, HTTP connection pools, single-process proxies.</li>
+<li>Pin the collective-communication network interface explicitly in containerized multi-node setups.</li>
+<li>Log the trainer versus inference log-prob gap and effective sample size every step, so a numerics drift shows up before the reward curve does.</li>
+</ol>
+<p>The team's next steps are the same recipe on DeepSeek-V4-Flash, GLM-5.3 and other models already tested with Miles on MI350-series GPUs, going past 384 sandboxes, and teaching the agent to submit instead of looping to the cap. That last one is the right instinct. The cheapest rollout is the one that ends when it should.</p>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
