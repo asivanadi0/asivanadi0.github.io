@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mistral Large 4 Weights Are Out: What It Takes to Serve a 1T MoE — Anpoo Sivanadi</title>
+  <meta name="description" content="Mistral put the weights for Mistral Large 4 (&quot;Le Chonk&quot;) on Hugging Face on October 29." />
+  <link rel="canonical" href="https://asivanadi0.github.io/mistral-large-4-open-weights-serving.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Mistral Large 4 Weights Are Out: What It Takes to Serve a 1T MoE — Anpoo Sivanadi" />
+  <meta property="og:description" content="Mistral put the weights for Mistral Large 4 (&quot;Le Chonk&quot;) on Hugging Face on October 29." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/mistral-large-4-open-weights-serving.html" />
+  <meta property="article:published_time" content="2026-10-29T18:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Mistral Large 4 Weights Are Out: What It Takes to Serve a 1T MoE</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-29T18:00:00-07:00">29 October 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>Mistral put the weights for <a href="https://mistral.ai/news/mistral-large-4-oss/" target="_blank" rel="noopener noreferrer">Mistral Large 4</a> ("Le Chonk") on Hugging Face on October 29. The announcement is mostly about coding and cyber defense. The part I care about is in the repository: two checkpoints, a <code>params.json</code>, and serving recipes that tell you a lot about what this model costs to run.</p>
+<p>Here is what I pulled out of the files, the numbers that disagree, and the arithmetic I would do before pointing a node at it.</p>
+<h2>1. What actually shipped</h2>
+<p>There are two official checkpoints, both ungated:</p>
+<ul>
+<li><a href="https://huggingface.co/mistralai/Mistral-Large-4-1T-A52B" target="_blank" rel="noopener noreferrer"><code>Mistral-Large-4-1T-A52B</code></a>: FP8 with 128x128 block scales, 54 safetensors shards, 1,060.6 GB on disk by the Hub API.</li>
+<li><a href="https://huggingface.co/mistralai/Mistral-Large-4-1T-A52B-NVFP4" target="_blank" rel="noopener noreferrer"><code>Mistral-Large-4-1T-A52B-NVFP4</code></a>: NVFP4 MoE experts with FP8 linear layers, 32 shards, 610.0 GB. The card names B200, B300, GB200 and GB300 as targets.</li>
+</ul>
+<p>The model card describes a 1-trillion-parameter natively multimodal MoE with 49B active parameters per token, or 52B once embeddings and output layers are counted, trained from scratch on 3,800 Grace Blackwell GPUs. Context is 1M tokens. Day-zero support covers Transformers, vLLM, SGLang and llama.cpp, with <a href="https://huggingface.co/ggml-org/Mistral-Large-4-1T-A52B-GGUF" target="_blank" rel="noopener noreferrer">GGUFs from ggml-org</a>.</p>
+<p>The license is the "Mistral Ecosystem Open-Weight License", a modified MIT. It is free to use, modify and commercialize, with one condition: if you run a model-as-a-service business, you need a separate commercial license from Mistral. Internal deployments are fine. A hosted API for other people's traffic is not, without that second license.</p>
+<p>Hosted pricing through Mistral's API is $0.70 per million input tokens, $0.07 cached, and $2.10 output. <a href="https://the-decoder.com/paris-based-mistral-releases-le-chonk-a-strong-coding-model-that-still-trails-china-overall/" target="_blank" rel="noopener noreferrer">The Decoder</a> notes the preview list price was $1.36 and $4.18.</p>
+<h2>2. The architecture, from params.json</h2>
+<p>The <a href="https://huggingface.co/blog/mistral-large4" target="_blank" rel="noopener noreferrer">Hugging Face launch post</a> summarizes it well, and the config confirms it:</p>
+<ul>
+<li>72 decoder layers, hidden size 6,144, 64 attention heads, vocab 204,800.</li>
+<li>MoE: layer 0 is dense, the other 71 route each token to 4 of 128 experts plus 1 shared expert, expert hidden size 6,144.</li>
+<li>Attention is Multi-head Latent Attention (MLA) with a KV LoRA rank of 512 and a 64-dim RoPE component, plus a DeepSeek Sparse Attention (DSA) indexer that picks the top 2,048 key positions per query. The indexer runs with an FP8 cache.</li>
+<li>A 3:1 RoPE to NoPE pattern: every fourth layer has no positional encoding.</li>
+<li>A 1.6B Pixtral vision encoder with 30 layers and 14x14 patches, images up to 1,540 pixels.</li>
+<li>An embedded DSpark speculative decoding head: 3 dense MLA draft layers that propose blocks of 3 tokens. Mistral reports up to 1.9x throughput from it.</li>
+</ul>
+<p>Two details in the config are worth calling out because the coverage gets them slightly wrong.</p>
+<p><strong>KV sharing is narrow, not broad.</strong> The <code>kv_sharing.source_layers_str</code> field maps layers 39, 43, 47, 51, 55, 59, 63, 67 and 71 to layer 35. Those are the NoPE layers after layer 35, and they all reuse layer 35's KV. So 63 of 72 layers keep their own cache. Separately, the DSA indexer is marked <code>shared</code> on 28 of 72 layers. That is useful compression, but it is not "most layers share KV".</p>
+<p><strong>The 1M context comes from extrapolation.</strong> The YaRN block sets an original window of 512 positions and a factor of 2,048, which is exactly 1,048,576. That does not tell you how long the training sequences were. The card shows a long-context eval at Graphwalks 512k, which is the longest evidence I found. I would test my own long-document workload before trusting the last half of that window.</p>
+<h2>3. KV cache, roughly</h2>
+<p>From the config I can do a back-of-envelope KV estimate. Treat it as approximate; it ignores quantization scales and block padding.</p>
+<ul>
+<li>MLA stores 512 + 64 = 576 values per token per layer. With 63 layers holding their own cache, that is about 36.3 KB per token at one byte per value.</li>
+<li>The FP8 indexer adds 128 values per token on the 44 layers that do not share it, about 5.6 KB.</li>
+<li>Total: roughly 42 KB per token. A full 1M-token sequence is about 44 GB. A 131K-token sequence is about 5.5 GB.</li>
+</ul>
+<p>That is small for a model this size. The catch is how MLA behaves under tensor parallelism. The latent KV is effectively a single head, so plain TP does not split it; every rank holds a full copy. That is why the vLLM command in the HF post adds <code>--decode-context-parallel-size 8</code> next to <code>--tensor-parallel-size 8</code>: decode context parallelism shards the KV across ranks instead of replicating it.</p>
+<h2>4. Fitting it on real nodes</h2>
+<p>This is where the two checkpoints stop being interchangeable.</p>
+<p><strong>FP8 on 8x H200 (141 GB each, 1,128 GB total).</strong> The weights alone are 1,060.6 GB, which is about 132.6 GB per GPU. That leaves roughly 8 GB per GPU for KV, activations, CUDA graphs and the runtime. The model card's default <code>--gpu-memory-utilization 0.85</code> caps usable memory at about 120 GB per GPU, which is below the weight size, so on H200 you would have to raise it. Hugging Face's Inference Endpoints recipe does run on 8x H200 with the FP8 weights, capped at 131K context and 16 concurrent requests. Their measured numbers: about 0.6 s time to first token on a 1K prompt, about 65 tok/s single-stream (120 to 138 tok/s on chat prompts where DSpark's drafts are accepted), about 4,300 tok/s prefill for four 16K prompts at once, and about 480 tok/s aggregate generation across 1,000 ShareGPT conversations. It works, but it is tight. If KV is replicated across 8 ranks, a few GB per GPU is a small budget, and 16 full 131K sequences would need about 88 GB by my estimate.</p>
+<p><strong>NVFP4 on Blackwell.</strong> 610 GB over 8 GPUs is about 76 GB per GPU. On B300 (288 GB) that leaves over 200 GB per GPU. Even 4x B300 leaves room, which matches the SGLang recipe (<code>--tp-size 4</code>) and the Dell recipe for 4 GPUs on an XE9780 B300 node. The NVFP4 card says the checkpoint matches FP8 across multimodal, long-context (Graphwalks 512k), coding agent, AutomationBench and CyberGym evals, and it includes a chart of FP8 versus NVFP4 scores and completion lengths. That is the vendor's measurement. I would still run a like-for-like on my own tasks, especially long agent loops where small drift compounds.</p>
+<p><strong>The serving flags that matter.</strong> For NVFP4, vLLM needs <code>--kv-cache-dtype fp8_ds_mla</code>. Tool calls and reasoning separation need <code>--tool-call-parser mistral</code> and <code>--reasoning-parser mistral</code>. DSpark is one flag: <code>--speculative-config '{"method": "dspark", "num_speculative_tokens": 3}'</code>. In SGLang, the recipe pins <code>--max-running-requests 64</code> with DSpark on; without the flag it falls back to 48. Reasoning effort is <code>low</code>, <code>medium</code> or <code>high</code> (default), and per the HF post it cannot be turned off: <code>none</code> maps to <code>high</code>. Budget output tokens for that.</p>
+<h2>5. The benchmark numbers do not line up</h2>
+<p>Mistral's announcement and the Hugging Face post, published the same day, quote different figures for what appears to be the same model:</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Mistral post</th>
+<th>HF post</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Terminal-Bench 4.0</td>
+<td>41% (up from 28% in preview)</td>
+<td>28.3%</td>
+</tr>
+<tr>
+<td>AA Coding Agent Index</td>
+<td>48%</td>
+<td>49.8%</td>
+</tr>
+<tr>
+<td>B3 agent security (attack resistance)</td>
+<td>97.1% (93.3% preview)</td>
+<td>93.3%</td>
+</tr>
+<tr>
+<td>Cyber</td>
+<td>51% on the AA Cyber Index</td>
+<td>82% on the reproduce-and-patch subtest</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>My read is that some HF figures are from the preview checkpoint, and the 82% is one subtest, not the index. Either way, quote the source and the date when you cite a number for this model.</p>
+<p>The independent picture is more modest. Per <a href="https://the-decoder.com/paris-based-mistral-releases-le-chonk-a-strong-coding-model-that-still-trails-china-overall/" target="_blank" rel="noopener noreferrer">The Decoder</a>, Artificial Analysis scores the final model at 26 on Intelligence Index v5, up one point from the preview, behind DeepSeek V4.1 Flash and GLM-5.3 at 32. It runs at 161 output tokens per second and costs $2.06 per index task, versus $5.01 for GLM-5.3 and $0.60 for DeepSeek V4.1 Flash. On Mistral's own Cyber Index chart, two open models sit above it. Where it does lead is coding: 19.7% on Cognition's FrontierCode 2.0 among open models, and a Coding Agent Index tie with GLM-5.3 using 47% fewer tokens per task.</p>
+<h2>6. What I would check before deploying</h2>
+<ol>
+<li>Pick the checkpoint by hardware. On Hopper, FP8 is your only official option and it nearly fills an 8x H200 node. On Blackwell, start with NVFP4.</li>
+<li>Turn on decode context parallelism or plan for replicated KV. With MLA under TP, every rank pays for the full cache.</li>
+<li>Raise <code>--gpu-memory-utilization</code> on H200 or the FP8 weights will not load under the default.</li>
+<li>Cap context to what you need. 131K is the tested endpoint setting; 1M is reachable by config, and the longest eval I saw is 512K.</li>
+<li>Enable DSpark and measure acceptance on your own prompts. The 1.9x is a best case, and HF saw a wide spread between chat and other prompts.</li>
+<li>Account for always-on reasoning in latency and token budgets.</li>
+<li>Read the license if anyone outside your company will call the endpoint.</li>
+<li>Re-run your evals. The published numbers disagree with each other, and the independent index has it well behind the best open models overall.</li>
+</ol>
+<p>The weights are real and the serving story is unusually complete for a day-zero release. The parts that decide your bill, KV layout and which checkpoint fits your GPUs, are all in the config if you read it.</p>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
