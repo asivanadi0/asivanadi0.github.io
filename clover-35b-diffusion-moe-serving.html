@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Clover-35B-A3B: Serving a Diffusion Language Model Built on a Qwen MoE — Anpoo Sivanadi</title>
+  <meta name="description" content="DiffuSpace, a team that grew out of the HKU group behind Dream 7B, released Clover-35B-A3B-Preview on October 30 under Apache 2.0." />
+  <link rel="canonical" href="https://asivanadi0.github.io/clover-35b-diffusion-moe-serving.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Clover-35B-A3B: Serving a Diffusion Language Model Built on a Qwen MoE — Anpoo Sivanadi" />
+  <meta property="og:description" content="DiffuSpace, a team that grew out of the HKU group behind Dream 7B, released Clover-35B-A3B-Preview on October 30 under Apache 2.0." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/clover-35b-diffusion-moe-serving.html" />
+  <meta property="article:published_time" content="2026-10-31T06:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Clover-35B-A3B: Serving a Diffusion Language Model Built on a Qwen MoE</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-31T06:00:00-07:00">31 October 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>DiffuSpace, a team that grew out of the HKU group behind Dream 7B, <a href="https://huggingface.co/blog/Diffuspace/clover-35b-a3b-preview" target="_blank" rel="noopener noreferrer">released Clover-35B-A3B-Preview</a> on October 30 under Apache 2.0. It is a diffusion language model: instead of emitting one token per forward pass, it fills a block of masked positions in parallel and commits the ones it is confident about. The headline claims are 680 tokens/s at batch size 1 on a single GB300 and 515 tokens/s on an H200, with agentic scores above the autoregressive model it came from.</p>
+<p>What makes this one worth an hour is that it ships with a real config, a Transformers path, and open serving PRs against SGLang and llama.cpp. Here is what I pulled out of the files.</p>
+<h2>1. What shipped</h2>
+<p>The <a href="https://huggingface.co/Diffuspace/Clover-35B-A3B-Preview" target="_blank" rel="noopener noreferrer">model card</a> says Clover is derived from <a href="https://huggingface.co/Qwen/Qwen3.6-35B-A3B" target="_blank" rel="noopener noreferrer">Qwen3.6-35B-A3B</a> and keeps its backbone. The <a href="https://huggingface.co/Diffuspace/Clover-35B-A3B-Preview/blob/main/config.json" target="_blank" rel="noopener noreferrer"><code>config.json</code></a> confirms it:</p>
+<ul>
+<li>40 layers in a 3:1 pattern: 30 Gated DeltaNet (linear attention) layers and 10 full-attention layers (<code>full_attention_interval: 4</code>).</li>
+<li>256 routed experts, top-8 routing, one shared expert per layer, expert intermediate size 512, hidden size 2048.</li>
+<li>Full attention uses 16 query heads and 2 KV heads with <code>head_dim</code> 256 and partial RoPE (25%).</li>
+<li>131,072-token context, prompt and output combined.</li>
+<li><code>block_size: 32</code>, a <code>low_confidence</code> denoising algorithm with threshold 0.95, and a <code>mask_token_id</code>.</li>
+</ul>
+<p>The Hub API reports 34,661,350,848 BF16 parameters in 26 shards, so about 69.3 GB of weights. The card says the same: one GPU with roughly 69 GB free plus inference state. Two extra small safetensors files hold the new parts: right-side convolution weights and softmax scalars for the bidirectional DeltaNet.</p>
+<p>The Transformers path needs <code>trust_remote_code=True</code> and pins <code>transformers==5.19.0</code>. There is no official quantized checkpoint.</p>
+<h2>2. How decoding works</h2>
+<p>In the Hugging Face implementation, each block starts as 32 masked tokens. On every denoising step the model scores all masked positions, fills every position whose confidence clears 0.95, and if none does, fills the single most confident one so it always makes progress. When the block is fully resolved it becomes part of the causal prefix and the next block starts.</p>
+<p>The architecture change that makes this work sits in the DeltaNet layers. Per the <a href="https://huggingface.co/blog/Diffuspace/clover-35b-a3b-preview" target="_blank" rel="noopener noreferrer">launch post</a>, everything before the current block is compressed into the recurrent state, tokens inside the block attend to each other with bidirectional softmax attention, and the readout from the recurrent state is treated as one extra entry in that same softmax. A zero-initialized convolution branch adds right-side context, and a learned calibration offsets the way history gets diluted as the block grows.</p>
+<p>The serving backends do something different. The <a href="https://github.com/sgl-project/sglang/pull/46927" target="_blank" rel="noopener noreferrer">SGLang PR</a> and the <a href="https://github.com/ggml-org/llama.cpp/pull/31306" target="_blank" rel="noopener noreferrer">llama.cpp PR</a> both use self-speculative decoding: the diffusion pathway drafts a block, the same model verifies it causally, and the accepted prefix is committed. No separate draft model. That reuses plumbing engines already have for KV rollback and acceptance.</p>
+<h2>3. Memory: the KV cache is small, the weights are not</h2>
+<p>These are my estimates from the config, not numbers DiffuSpace published.</p>
+<p>Only the 10 full-attention layers keep a KV cache. With 2 KV heads of dimension 256 in BF16, that is 10 x 2 x 2 x 256 x 2 bytes = 20 KiB per token. A full 131,072-token sequence costs about 2.7 GB of KV. That is very cheap for a model of this class.</p>
+<p>The 30 DeltaNet layers each carry a fixed recurrent state instead. With 32 value heads of 128 x 128 and the state kept in FP32 (<code>mamba_ssm_dtype: float32</code>), that is about 63 MB per sequence regardless of length, plus a couple of megabytes of convolution state. Any engine serving this has to snapshot and roll back that state on rejected drafts, which is exactly what the SGLang PR says it adds.</p>
+<p>So on an H200 with 141 GB, BF16 weights take about half the card and you have plenty of room for concurrent long-context sequences. On an 80 GB H100, 69.3 GB of weights leaves little headroom until someone publishes an FP8 checkpoint.</p>
+<h2>4. Where the speed comes from, and where it goes</h2>
+<p>A 3B-active MoE at batch 1 is bandwidth bound. Each autoregressive token reads the 8 routed experts plus the shared expert in each layer, a small slice of the model. A diffusion block is different: 32 masked positions each pick their own top-8, so one denoising step can touch most of the 256 experts in every layer. At batch 1 you have turned decode into a small-batch MoE pass, and the weight bytes read per step go up.</p>
+<p>Clover handles this with block-level expert selection. With <code>moe_block_coreset_enabled</code>, the model sums routing scores across the block and keeps only enough experts to cover 90% of that routing mass (<code>moe_block_coreset_top_p: 0.9</code>). The card is clear that this reduces distinct experts touched during denoising, not stored weights. It is the knob I would sweep first, because it trades quality against how many expert weights each step has to stream.</p>
+<p>The second thing to watch is concurrency. Like any speculative scheme, the gain is largest at batch 1. DiffuSpace's own SGLang validation on H200, MATH500 with thinking on and block size 16:</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Setup</th>
+<th>Accuracy</th>
+<th>Aggregate tok/s</th>
+<th>Per-request tok/s</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>DP=1, concurrency 1</td>
+<td>96.6% (483/500)</td>
+<td>450.59</td>
+<td>453.59</td>
+</tr>
+<tr>
+<td>DP=4, concurrency 8 per rank</td>
+<td>95.2% (476/500)</td>
+<td>4,268.73</td>
+<td>192.13</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Per-request speed falls from about 454 to about 192 tokens/s once each GPU holds eight requests. Aggregate throughput is still good, but if you are buying this for latency, measure at the concurrency you will actually run.</p>
+<h2>5. Numbers that need context</h2>
+<p>The 680 tokens/s (GB300) and 515 tokens/s (H200) figures are BF16, batch size 1, on "internal agent workloads". The H200 comparison is against a similarly sized Qwen model with DFlash2 speculative decoding at 365 tokens/s. That is a fair baseline to choose, but the workload is not public.</p>
+<p>The llama.cpp PR is honest about where local inference stands: its current implementation runs at "around 32 tokens/s on an H200", with optimizations planned in later PRs. So the 515 tokens/s is an SGLang-class number, not a llama.cpp one yet.</p>
+<p>The consumer claim is harder to square. The launch post says Clover runs INT4 on an RTX 5070 Ti with 16 GB and reaches 101.8 tokens/s on MATH-500, against 48.5 tokens/s for similar MiniCPM and Qwen models. At 4 bits, 34.66B parameters is about 17.3 GB before any scales, which is more than 16 GB. Some layers or experts must be offloaded or kept outside the GPU, and the post doesn't say which. I would treat that number as a configuration I can't reproduce from what is published.</p>
+<p>Quality figures are all self-reported: 73.6 on SWE-bench Verified, 51.7 on Terminal-Bench 2.1, 65.3 on tau-cubed overall, 83.8 on GPQA Diamond and 84.8 on MMLU-Pro. The card also ships fairly heavy default generation controls: presence penalty 0.9, repetition penalty 1.05, a length penalty that starts at 8,192 response tokens, and a bias that pushes the model to close its thinking section after 4,096 tokens. The card says plainly that very long generations can become repetitive. Those defaults apply even under greedy decoding, so leave them on when you compare results to the published scores.</p>
+<h2>6. Serving status today</h2>
+<ul>
+<li><strong>Transformers:</strong> works now, single GPU, BF16, standalone PyTorch. Good for evals, not for serving.</li>
+<li><strong>SGLang:</strong> <a href="https://github.com/sgl-project/sglang/pull/46927" target="_blank" rel="noopener noreferrer">PR #46927</a> is open, about 5,300 lines, and adds a <code>CLOVER</code> speculative algorithm, CUDA graph support and a <code>--speculative-clover-accept-rule {threshold,exact}</code> flag. Pipeline parallelism is restricted to 1, attention DP and context parallelism are gated off, and TP=2 with EP=2 has only smoke tests. As of this morning it still needs the <code>run-ci</code> label before upstream CI runs.</li>
+<li><strong>llama.cpp:</strong> <a href="https://github.com/ggml-org/llama.cpp/pull/31306" target="_blank" rel="noopener noreferrer">PR #31306</a> is open and adds GGUF conversion and a <code>draft-self</code> speculative mode that reuses the DFlash block construction. BF16 only in the examples.</li>
+</ul>
+<p>The card notes that the Transformers path and SGLang can produce different text, and DiffuSpace evaluates on SGLang.</p>
+<h2>7. What I would check before deploying</h2>
+<ol>
+<li>Run it from DiffuSpace's SGLang branch, not Transformers, and pin the commit until the PR merges.</li>
+<li>Benchmark at your real concurrency. The batch-1 speedup roughly halves per request at eight concurrent requests on H200.</li>
+<li>Sweep <code>moe_block_coreset_top_p</code> and the acceptance rule (<code>threshold</code> vs <code>exact</code>) on your own prompts, and track both speed and task success.</li>
+<li>Keep the shipped repetition and length controls on, and watch outputs past 8K tokens.</li>
+<li>Budget about 70 GB for weights in BF16 and a modest KV cache, about 20 KiB per token plus about 63 MB of recurrent state per sequence.</li>
+<li>Don't plan on the 16 GB consumer setup until someone publishes the exact quantization and offload layout.</li>
+<li>Re-run your own evals. Everything above, speed included, comes from the vendor.</li>
+</ol>
+<p>Diffusion decoding has finally shown up in a form an inference team can try on Monday: an Apache-licensed model, a known MoE backbone, and serving code that reuses speculative-decoding machinery engines already have. Whether it beats a well-tuned autoregressive model with a good drafter depends on your batch size, and that is the measurement to make first.</p>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
