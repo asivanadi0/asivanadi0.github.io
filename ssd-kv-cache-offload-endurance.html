@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>KV Cache Offload Can Wear Out an SSD in Days: Reading the Gandalf Paper — Anpoo Sivanadi</title>
+  <meta name="description" content="Every KV tiering design I have looked at this year treats local NVMe as the cheap, big tier under host DRAM." />
+  <link rel="canonical" href="https://asivanadi0.github.io/ssd-kv-cache-offload-endurance.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="KV Cache Offload Can Wear Out an SSD in Days: Reading the Gandalf Paper — Anpoo Sivanadi" />
+  <meta property="og:description" content="Every KV tiering design I have looked at this year treats local NVMe as the cheap, big tier under host DRAM." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/ssd-kv-cache-offload-endurance.html" />
+  <meta property="article:published_time" content="2026-11-01T06:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>KV Cache Offload Can Wear Out an SSD in Days: Reading the Gandalf Paper</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-01T06:00:00-08:00">1 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>Every KV tiering design I have looked at this year treats local NVMe as the cheap, big tier under host DRAM. The argument is about capacity and restore bandwidth. Almost nobody talks about the write budget. A new paper from the LMCache group at UChicago, with a co-author from Samsung Semiconductor, puts numbers on it: "<a href="https://arxiv.org/abs/2610.30791" target="_blank" rel="noopener noreferrer">Gandalf: Flash Shall Not Die! Increasing Flash Storage Lifetime for KV Cache Offloading in LLM Serving</a>" (arXiv 2610.30791, v1 dated Oct 22).</p>
+<p>The headline is blunt. In their replay of a real agentic trace on Kimi-K3, a plain LRU write-back cache wrote 42.2 TB to a 1 TB SSD in two hours, which they convert to a drive that lasts 3.5 days. The rest of the paper is about why that happens with hybrid attention models specifically, and what an admission policy can do about it. Below are the numbers I think matter if you run a KV tier on local flash, plus my own arithmetic, which I label as such.</p>
+<h2>1. How much KV state agentic traffic actually produces</h2>
+<p>The authors replayed two one-day SemiAnalysis Claude Code traces against two hybrid models. Their Table 2:</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Trace</th>
+<th>Model</th>
+<th>KV state generated per day</th>
+<th>SSD lifetime (paper)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>cc-traces-062126</td>
+<td>Qwen3.5-27B</td>
+<td>98 TB</td>
+<td>0.4 years</td>
+</tr>
+<tr>
+<td>cc-traces-062126</td>
+<td>Kimi-K3</td>
+<td>240 TB</td>
+<td>0.2 years</td>
+</tr>
+<tr>
+<td>cc-traces-060826</td>
+<td>Qwen3.5-27B</td>
+<td>81 TB</td>
+<td>0.4 years</td>
+</tr>
+<tr>
+<td>cc-traces-060826</td>
+<td>Kimi-K3</td>
+<td>199 TB</td>
+<td>0.2 years</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>At peak, the concurrently active KV working set hit 8.6 TB. That is the core reason flash shows up at all: you cannot hold that in host DRAM at sane cost, so it spills to NVMe. The paper says even a 30 TB enterprise SSD can exhaust its rated TBW in under a year at these rates.</p>
+<h2>2. The endurance math, in the paper's own terms</h2>
+<p>The paper uses the standard budget: a drive of capacity C rated for D drive writes per day over Y years has E = C x D x 365 x Y of host-write endurance. Their simulator assumes 1 DWPD for 5 years and a write amplification factor of 1, and they note that WAF = 1 likely overestimates real lifetime. Their FEMU emulation used a harsher 1 TB drive at 0.3 DWPD.</p>
+<p>Table 3 turns that into the DWPD rating you would need to survive the trace:</p>
+<div class="table-wrap" role="region" aria-label="Table 2" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Trace</th>
+<th>Model</th>
+<th>Required DWPD, 1 TB SSD</th>
+<th>Required DWPD, 4 TB SSD</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>cc-traces-weka-062126</td>
+<td>Qwen3.5-27B</td>
+<td>34.4</td>
+<td>8.60</td>
+</tr>
+<tr>
+<td>cc-traces-weka-062126</td>
+<td>Kimi-K3</td>
+<td>48.2</td>
+<td>12.0</td>
+</tr>
+<tr>
+<td>qwen_traceA</td>
+<td>Qwen3.5-27B</td>
+<td>130</td>
+<td>32.4</td>
+</tr>
+<tr>
+<td>qwen_traceA</td>
+<td>Kimi-K3</td>
+<td>274</td>
+<td>68.5</td>
+</tr>
+<tr>
+<td>aiperf-100r-500o-noshare</td>
+<td>Qwen3.5-27B</td>
+<td>278</td>
+<td>69.4</td>
+</tr>
+<tr>
+<td>aiperf-100r-500o-noshare</td>
+<td>Kimi-K3</td>
+<td>579</td>
+<td>145</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The paper calls 1 DWPD over 5 years the majority enterprise spec, and mixed-use drives are typically rated around 3 DWPD. Every row here is above both, even on 4 TB.</p>
+<p>My sums, to make it concrete. A 1 TB drive at 1 DWPD for 5 years has 1,825 TB of budget. LRU writing 42.2 TB in a 2-hour window is about 506 TB/day if the rate held, which gives roughly 3.6 days. That lines up with the paper's 3.5 days. The same budget arithmetic for drives people actually buy, using the roughly 48 TB/day implied by the Claude Code plus Kimi-K3 row (48.2 DWPD on 1 TB, 12.0 on 4 TB):</p>
+<div class="table-wrap" role="region" aria-label="Table 3" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Drive (my estimate, WAF = 1)</th>
+<th>Rated budget over 5 years</th>
+<th>Days to rated budget at ~48 TB/day</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>3.84 TB, 1 DWPD</td>
+<td>7,008 TB</td>
+<td>~146</td>
+</tr>
+<tr>
+<td>7.68 TB, 1 DWPD</td>
+<td>14,016 TB</td>
+<td>~292</td>
+</tr>
+<tr>
+<td>7.68 TB, 3 DWPD</td>
+<td>42,048 TB</td>
+<td>~876</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Treat those as order-of-magnitude. The write rate depends on the paper's simulated serving throughput and DRAM size (100 GB), not yours. The point is that "the NVMe tier is free" stops being true at agentic reuse rates.</p>
+<h2>3. Why hybrid models make it worse</h2>
+<p>This is the part I had not thought through. Hybrid models such as Kimi-K3 (the paper describes it as 72% linear-attention layers) and Qwen3.5 store two very different things. Full-attention layers keep per-token KV that grows with the prefix. Linear-attention or sliding-window layers keep a fixed-size recurrent state per checkpoint. The paper says one linear state is as large as the full-attention KV for 2k to 16k tokens. In the model sweep, the ratio of one linear state to a full-attention KV chunk runs from 147x for Qwen3.5-27B to 1,016x for Kimi-K3.</p>
+<p>The problem is reuse. A linear state is superseded at every turn of a conversation, so it is referenced at most about twice. Write-back caches push it to flash anyway. On TraceA with Kimi-K3, linear states were 96% of the bytes the write-back baselines (LRU, Marconi, Workload-aware) wrote, and only 1.6 to 8.5% of those states were ever hit on the SSD. Frequency filters don't fix it either. On ClaudeCode with Qwen3.5-27B, LRU-K at K=2 wrote 62.6k linear states, 90% of which had already served their hit before being written, and only 13% were hit on SSD.</p>
+<p>This matters for stacks you can deploy today. LMCache's <a href="https://docs.lmcache.ai/mp/hybrid_models.html" target="_blank" rel="noopener noreferrer">hybrid model support</a> now lists Qwen3.5/3.6/3.8, Kimi-Linear, Kimi K3, gpt-oss, Gemma 3 and 4, and DeepSeek-V4.x Flash as validated hybrid layouts. Per the paper, Dynamo's KVBM offloads a block to disk once its access frequency reaches 2, a filter you can turn off with <code>DYN_KVBM_DISABLE_DISK_OFFLOAD_FILTER</code> (default <code>false</code>, per the <a href="https://docs.nvidia.com/dynamo/reference/components/kvbm-configuration" target="_blank" rel="noopener noreferrer">KVBM configuration reference</a>). That is the LRU-K style of filter the paper shows misfiring on linear states.</p>
+<h2>4. What Gandalf changes</h2>
+<p>Gandalf is an SSD admission gate plus placement policy:</p>
+<ul>
+<li><strong>Type-aware placement:</strong> keep linear states in DRAM, put full-attention KV on SSD, and let either borrow the other tier when capacity is lopsided (short sessions are dominated by linear states, long ones by full KV).</li>
+<li><strong>Admission by future reuse, not past frequency:</strong> an online approximation of an offline oracle that weighs recompute cost saved against SSD write cost, with a knob α that trades lifetime against hit rate.</li>
+</ul>
+<p>Results from the paper (100 GB DRAM, 1 TB SSD unless noted):</p>
+<div class="table-wrap" role="region" aria-label="Table 4" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Baseline</th>
+<th>Gandalf</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>TraceA, Kimi-K3, bytes written (2 h)</td>
+<td>LRU 42.2 TB, 3.5 days</td>
+<td>0.58 TB, 253 days</td>
+</tr>
+<tr>
+<td>TraceA miss ratio</td>
+<td>LRU 0.697</td>
+<td>0.818 (α=1), 0.603 (α=0)</td>
+</tr>
+<tr>
+<td>ClaudeCode, similar load latency</td>
+<td>LRU-K K=2: 5.7 months, 0.81 s</td>
+<td>21.2 months, 0.79 s</td>
+</tr>
+<tr>
+<td>ClaudeCode, longest life</td>
+<td>LRU-K K=3: 7.3 months, 0.93 s</td>
+<td>38.6 months, 0.91 s (α=64)</td>
+</tr>
+<tr>
+<td>Cost per 1k requests</td>
+<td>LRU-K K=2: $0.74</td>
+<td>$0.30 (α=1)</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The averaged claim is 7.3x longer SSD life with a small hit-rate impact, and at α=0 (its lowest miss ratio) it writes 2.0 to 6.5x fewer bytes than the lowest-miss baseline. Across four hybrid models on AIPerf with a 4 TB SSD, the gain was 3.6 to 6.6x over LRU-K and 3.6 to 7.1x over HotPrefix. The cost model is the interesting framing: SSD wear was 66 to 86% of baseline cost per request, and Gandalf cut its wear share to $0.16 against $0.49 to $0.73.</p>
+<p>The honest caveat is in the TraceA row. At α=1 Gandalf writes only 25 linear states, so when a conversation's state leaves DRAM it is recomputed from scratch, and the miss ratio climbs from 0.697 to 0.818. You buy flash life with GPU recompute, and the paper's latency model (SSD to DRAM at 10 GB/s, DRAM to GPU at 50 GB/s, recompute at 60k tokens/s) decides whether that trade is cheap on your hardware.</p>
+<h2>5. What I'd check on my own nodes</h2>
+<ol>
+<li><strong>Measure host writes, not just hit rate.</strong> NVMe SMART "Data Units Written" counts thousands of 512-byte units (multiply by 512,000 for bytes), and "Percentage Used" is the vendor's endurance estimate (<a href="https://hesela.com/analyses/nvme-health-log-coverage/" target="_blank" rel="noopener noreferrer">field notes</a>). Scrape both from <code>nvme smart-log</code> per KV node and graph TB/day next to cache hit rate.</li>
+<li><strong>Split writes by state type.</strong> If your connector can tag linear or sliding-window state separately from full KV, check what fraction of linear-state bytes is ever read back from flash. Under 10% is the paper's failure mode.</li>
+<li><strong>Know your DWPD before you size the tier.</strong> A 4 TB tier rated at 1 DWPD is 4 TB/day of sustainable writes. Compare that with the measured rate from step 1.</li>
+<li><strong>Don't trust a frequency threshold on hybrids.</strong> Frequency-2 style filters (LRU-K, KVBM's default) are tuned for objects that persist. Recurrent state is a one-turn object.</li>
+<li><strong>Price recompute honestly.</strong> If GPUs are the scarce resource, a higher miss ratio may cost more than SSD replacement. Run your own version of the paper's cost per 1k requests.</li>
+</ol>
+<p>I like this paper because it measures something operators actually pay for and that rarely shows up in TTFT charts. I'd want to see a WAF above 1 and real drive telemetry before trusting the absolute months, and there's no public code link in v1 yet. But the direction is clear: once hybrid models with big recurrent states sit behind an SSD KV tier, admission policy is an endurance decision as much as a latency one. I wrote about the restore side of this ladder in my <a href="/lightbits-inferra-kv-cache-prefetch.html">Lightbits Inferra note</a>; this is the write side.</p>
+<h2>Sources</h2>
+<ul>
+<li>Irawan, Du, Yao, Seo, Huang, Gunawi, Jiang, "Gandalf: Flash Shall Not Die! Increasing Flash Storage Lifetime for KV Cache Offloading in LLM Serving," <a href="https://arxiv.org/abs/2610.30791" target="_blank" rel="noopener noreferrer">arXiv 2610.30791</a> (<a href="https://arxiv.org/html/2610.30791v1" target="_blank" rel="noopener noreferrer">HTML</a>)</li>
+<li>LMCache, <a href="https://docs.lmcache.ai/mp/hybrid_models.html" target="_blank" rel="noopener noreferrer">Hybrid Attention Models</a></li>
+<li>NVIDIA Dynamo, <a href="https://docs.nvidia.com/dynamo/reference/components/kvbm-configuration" target="_blank" rel="noopener noreferrer">KVBM Configuration Reference</a></li>
+<li>Hesela, <a href="https://hesela.com/analyses/nvme-health-log-coverage/" target="_blank" rel="noopener noreferrer">NVMe health log: warning bits, wear estimates and counter limits</a></li>
+<li>My earlier note: <a href="/lightbits-inferra-kv-cache-prefetch.html">Lightbits Inferra: KV cache prefetch beyond HBM</a></li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
