@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NVIDIA's NVFP4 DeepSeek-V4.1-Flash: Smaller on Disk, Bigger on the GPU, and a vLLM PR You Have to Carry — Anpoo Sivanadi</title>
+  <meta name="description" content="On October 30, NVIDIA published DeepSeek-V4.1-Flash-1017-NVFP4, a Model Optimizer quantization of DeepSeek&#x27;s October 17 checkpoint." />
+  <link rel="canonical" href="https://asivanadi0.github.io/deepseek-v4-1-flash-nvfp4-checkpoint.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="NVIDIA's NVFP4 DeepSeek-V4.1-Flash: Smaller on Disk, Bigger on the GPU, and a vLLM PR You Have to Carry — Anpoo Sivanadi" />
+  <meta property="og:description" content="On October 30, NVIDIA published DeepSeek-V4.1-Flash-1017-NVFP4, a Model Optimizer quantization of DeepSeek&#x27;s October 17 checkpoint." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/deepseek-v4-1-flash-nvfp4-checkpoint.html" />
+  <meta property="article:published_time" content="2026-10-31T18:00:00-07:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>NVIDIA's NVFP4 DeepSeek-V4.1-Flash: Smaller on Disk, Bigger on the GPU, and a vLLM PR You Have to Carry</h1>
+        <p class="article-meta">
+          <time datetime="2026-10-31T18:00:00-07:00">31 October 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>On October 30, NVIDIA published <a href="https://huggingface.co/nvidia/DeepSeek-V4.1-Flash-1017-NVFP4" target="_blank" rel="noopener noreferrer">DeepSeek-V4.1-Flash-1017-NVFP4</a>, a Model Optimizer quantization of <a href="https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017" target="_blank" rel="noopener noreferrer">DeepSeek's October 17 checkpoint</a>. The card's headline is a checkpoint that drops from about 475 GiB to about 400 GiB with benchmark scores that barely move, served on four GB300 GPUs.</p>
+<p>That summary is true, but it hides where the bytes actually went. I pulled the safetensors headers for all 48 shards of both repos and summed them by component. The 75 GiB saving does not come from the experts at all. It comes from the Engram lookup tables, which on this command line live in host memory, not HBM. The experts actually got slightly bigger.</p>
+<h2>1. What NVIDIA changed</h2>
+<p>The card describes two conversions, and the <a href="https://huggingface.co/nvidia/DeepSeek-V4.1-Flash-1017-NVFP4/blob/main/config.json" target="_blank" rel="noopener noreferrer"><code>config.json</code></a> matches it:</p>
+<ul>
+<li><strong>Routed experts, MXFP4 to NVFP4, weights and activations (W4A4).</strong> The <code>w1</code>, <code>w2</code> and <code>w3</code> projections of all 384 experts in all 40 layers move to NVFP4 with group size 16. The config marks only <code>layers.N.ffn.experts</code> as NVFP4 and ignores <code>*.attn.*</code>, <code>*.ffn.shared_experts.*</code>, <code>head</code> and <code>mtp.*</code>.</li>
+<li><strong>Engram tables, FP8 to MXFP4.</strong> The two Engram embedding tables (layers 1 and 14, 384,006,168 and 384,016,682 rows) go from FP8 E4M3 to packed E2M1 with UE8M0 scales per block of 32 (<code>engram_embed_quant: mxfp4</code>).</li>
+</ul>
+<p>Everything else (attention, shared experts, vision tower, MTP heads) keeps its source precision. Calibration used 1,024 samples at sequence length 512, half from cnn_dailymail and half from Nemotron post-training data. Per the card, 24 of the 46,080 expert projections fell back to default activation scales.</p>
+<h2>2. Where the bytes went</h2>
+<p>Here is what the shard headers add up to. These are my sums from the published files, not numbers from the card:</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Source (MXFP4 experts, FP8 Engram)</th>
+<th>NVIDIA NVFP4</th>
+<th>Change</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Routed experts</td>
+<td>275.67 GiB</td>
+<td>291.49 GiB</td>
+<td>+15.82 GiB</td>
+</tr>
+<tr>
+<td>Engram tables</td>
+<td>189.13 GiB</td>
+<td>97.57 GiB</td>
+<td>-91.56 GiB</td>
+</tr>
+<tr>
+<td>Attention</td>
+<td>4.87 GiB</td>
+<td>4.87 GiB</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Embeddings and head</td>
+<td>2.47 GiB</td>
+<td>2.47 GiB</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Shared experts, vision, MTP, other</td>
+<td>3.11 GiB</td>
+<td>3.11 GiB</td>
+<td>0</td>
+</tr>
+<tr>
+<td><strong>Total</strong></td>
+<td><strong>475.24 GiB</strong></td>
+<td><strong>399.51 GiB</strong></td>
+<td><strong>-75.73 GiB</strong></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The expert growth is just scale overhead. In the source, each expert matrix is packed FP4 (two values per <code>I8</code> byte) plus one <code>F8_E8M0</code> scale per 32 values, which works out to 4.25 bits per weight. In the NVFP4 file it's the same packed payload plus one <code>F8_E4M3</code> scale per 16 values, a single FP32 <code>weight_scale_2</code> per tensor and an FP32 <code>input_scale</code> for activations, so about 4.5 bits per weight. You can see it in one tensor: <code>layers.5.ffn.experts.7.w1</code> keeps a 5,898,240-byte weight, but its scale tensor doubles from 368,640 to 737,280 bytes. Scaling 275.67 GiB by 4.5/4.25 gives about 291.9 GiB, which matches the file.</p>
+<p>The Engram tables are the opposite story. Each row in the source is 256 bytes of FP8 plus 8 scale bytes. In the NVFP4 repo it's 128 bytes of packed FP4 plus the same 8 scale bytes. With about 768 million rows across the two tables, that halving accounts for more than the whole checkpoint shrink.</p>
+<h2>3. What that means on a GB300 node</h2>
+<p>The card's reference command runs on four GB300 GPUs with tensor parallelism 4 and <code>--engram-config '{"cpu_offload":true}'</code>. With offload on, the Engram tables are in pinned host memory. So, by my estimate:</p>
+<ul>
+<li><strong>GPU-resident weights grow.</strong> Everything except Engram comes to about 301.9 GiB in the NVFP4 checkpoint versus about 286.1 GiB in the source. Split evenly over four GPUs that's roughly 75.5 GiB per GPU instead of 71.5 GiB. This is an estimate: some small pieces may be replicated per rank.</li>
+<li><strong>Host memory is what shrinks.</strong> The Engram tables go from about 189 GiB to about 98 GiB per serving instance. How that splits across ranks depends on vLLM's Engram configuration, but either way you free about 90 GiB of pinned host memory per instance.</li>
+<li><strong>The reason to switch is compute, not capacity.</strong> W4A4 means the expert GEMMs take FP4 activations as well as FP4 weights, which is what Blackwell's FP4 tensor cores are built for. The card lists Blackwell as the only supported microarchitecture, so this checkpoint is not for Hopper.</li>
+</ul>
+<p>If you are running several DP replicas on one host, the host saving compounds. The <a href="https://github.com/vllm-project/vllm/pull/61530" target="_blank" rel="noopener noreferrer">vLLM PR</a> behind this checkpoint measured a DP=4 setup with one shared MXFP4 Engram table at 48.64 GiB across all four replicas, using <code>{"dp_shared_memory": true}</code>. That figure is from the PR's test on the earlier V4.1-Flash release, so I wouldn't assume it carries over exactly to the 1017 tables.</p>
+<h2>4. "Lossless" means the weights, not the outputs</h2>
+<p>The card says all 16,986,931,200 expert weight blocks passed lossless conversion, "preserving dequantized weight values with signed-zero canonicalization." That number checks out: 384 experts times 40 layers times three 5,120 x 2,304 projections is about 543.6 billion weights, and dividing by 32 gives exactly that block count.</p>
+<p>My reading of why it can be lossless: an MXFP4 block scale is always a power of two, and E4M3 can represent powers of two exactly across a wide range. Splitting each 32-value block into two 16-value halves that both use that same power of two, with the per-tensor FP32 scale absorbing the offset, reproduces every value bit for bit as long as a tensor's scales fit inside E4M3's exponent range. The only change is that negative zero becomes positive zero.</p>
+<p>The card is careful to add that "lossless weight conversion does not imply identical inference outputs." Two things are actually lossy:</p>
+<ol>
+<li><strong>Activations.</strong> They're now quantized to FP4 in groups of 16 against a static calibrated per-tensor scale. The calibration samples were only 512 tokens long, for a model with a 1,048,576-token context.</li>
+<li><strong>Engram.</strong> Going from 8-bit to 4-bit values is a real precision cut.</li>
+</ol>
+<h2>5. What the evals show</h2>
+<p>The card reports these vLLM results at <code>reasoning_effort=max</code> and <code>temperature=1.0</code>, in percent:</p>
+<div class="table-wrap" role="region" aria-label="Table 2" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Precision</th>
+<th>GPQA Diamond</th>
+<th>AA-LCR</th>
+<th>SciCode</th>
+<th>IFBench</th>
+<th>MMMU-Pro</th>
+<th>Terminal-Bench 2.1</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MXFP4 (source)</td>
+<td>92.77</td>
+<td>80.41</td>
+<td>57.58</td>
+<td>76.33</td>
+<td>78.38</td>
+<td>81.81</td>
+</tr>
+<tr>
+<td>NVFP4 + MXFP4 Engram</td>
+<td>92.93</td>
+<td>80.19</td>
+<td>57.32</td>
+<td>76.47</td>
+<td>78.73</td>
+<td>81.11</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The repeat counts are decent: GPQA 16, AA-LCR 16 per run over two runs, SciCode 8, Terminal-Bench two runs of eight trajectories per task. Three scores went up and three went down, and the biggest drop is 0.7 points on Terminal-Bench. AA-LCR is the one I care about given the short calibration, and it moved by 0.22 points. I read the table as no measurable regression on these tasks. It is not a long-context stress test past what AA-LCR covers, and MTP speculative decoding wasn't exercised at all.</p>
+<p>On the Engram side alone, the PR's own numbers: GSM8K 0.967 packed versus 0.966 FP8, which the author calls within noise. A lookup microbenchmark shows host-pinned lookups at 365 versus 356 microseconds for 8,192 tokens, so offloaded mode barely notices. GPU-resident lookups are about 36% slower (156 versus 115 microseconds) because of the nibble decode. With this checkpoint you want offload on anyway.</p>
+<h2>6. Serving status today</h2>
+<ul>
+<li><strong>vLLM:</strong> stock images can't load the MXFP4 Engram tables. The card's results used <code>vllm/vllm-openai:v0.31.0</code> with <a href="https://github.com/vllm-project/vllm/pull/61530" target="_blank" rel="noopener noreferrer">#61530</a> applied. As of this evening that PR is still open and unmerged, last updated October 22. Its own notes say the <code>/dev/shm</code> sizing for shared tables still assumes FP8 rows, so it over-reserves by about 2x.</li>
+<li><strong>SGLang:</strong> not validated with this checkpoint, per the card.</li>
+<li><strong>Load time:</strong> the reference command sets <code>VLLM_ENGINE_READY_TIMEOUT_S=3600</code>. Expect a slow first start, and set your health-check grace periods to match.</li>
+<li><strong>Flags worth copying:</strong> <code>--kv-cache-dtype fp8</code>, <code>--max-num-seqs 128</code>, the <code>FLASHINFER_MLA_SPARSE_DSV41</code> attention backend with an MXFP4 indexer KV, and <code>--tokenizer-mode deepseek_v41</code> plus the matching reasoning parser.</li>
+</ul>
+<h2>7. What I'd check before switching</h2>
+<ol>
+<li>Build vLLM with #61530 on top of a pinned commit, and plan to rebase when it merges or changes.</li>
+<li>Size host RAM for about 98 GiB of Engram tables per instance, or use <code>dp_shared_memory</code> if you run DP replicas on one host.</li>
+<li>Don't expect more KV headroom. GPU-resident weights go up by roughly 4 GiB per GPU at TP4 (my estimate).</li>
+<li>Benchmark expert GEMM time and end-to-end decode against the source checkpoint on your own traffic. The card publishes accuracy, not throughput, so the W4A4 speedup is the part nobody has measured in public yet.</li>
+<li>Run your longest real prompts and look for drift, since activation scales were calibrated on 512-token samples.</li>
+<li>Turn MTP on and measure acceptance yourself before trusting the eval table for speculative serving.</li>
+</ol>
+<p>What makes this checkpoint useful is that it's honest about its parts: which tensors changed, which conversion is exact, which runtime patch it needs. Read the header sums before reading the size headline, though. The 75 GiB you save lands in host memory, and the GPU side gets slightly heavier in exchange for FP4 activations.</p>
+<h2>Sources</h2>
+<ul>
+<li>NVIDIA, <a href="https://huggingface.co/nvidia/DeepSeek-V4.1-Flash-1017-NVFP4" target="_blank" rel="noopener noreferrer">DeepSeek-V4.1-Flash-1017-NVFP4 model card and files</a>, released October 30, 2026</li>
+<li>DeepSeek, <a href="https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017" target="_blank" rel="noopener noreferrer">DeepSeek-V4.1-Flash-1017</a> (source checkpoint and config)</li>
+<li>vLLM, <a href="https://github.com/vllm-project/vllm/pull/61530" target="_blank" rel="noopener noreferrer">PR #61530: Support MXFP4-packed Engram embedding tables</a></li>
+<li>NVIDIA, <a href="https://github.com/NVIDIA/Model-Optimizer" target="_blank" rel="noopener noreferrer">Model Optimizer</a></li>
+<li>My earlier post: <a href="/deepseek-v4-1-flash-vllm-sglang-vs-deepinfer.html">vLLM and SGLang Both Caught DeepInfer on DeepSeek-V4.1-Flash</a></li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
