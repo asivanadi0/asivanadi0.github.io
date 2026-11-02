@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>B300 Is Not a Faster B200: What an Independent Two-Cluster Benchmark Found — Anpoo Sivanadi</title>
+  <meta name="description" content="Most of what I have read about Blackwell Ultra comes from the vendor or from rack-scale token economics." />
+  <link rel="canonical" href="https://asivanadi0.github.io/b200-vs-b300-blackwell-ultra-workloads.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="B300 Is Not a Faster B200: What an Independent Two-Cluster Benchmark Found — Anpoo Sivanadi" />
+  <meta property="og:description" content="Most of what I have read about Blackwell Ultra comes from the vendor or from rack-scale token economics." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/b200-vs-b300-blackwell-ultra-workloads.html" />
+  <meta property="article:published_time" content="2026-11-02T06:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>B300 Is Not a Faster B200: What an Independent Two-Cluster Benchmark Found</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-02T06:00:00-08:00">2 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>Most of what I have read about Blackwell Ultra comes from the vendor or from rack-scale token economics. Both are useful, and neither tells you what happens when you move your own mixed workload from a B200 node to a B300 node. A paper from the University of Chicago Research Computing Center does exactly that: "<a href="https://arxiv.org/abs/2610.41919" target="_blank" rel="noopener noreferrer">Matching Workloads to Blackwell: Power-Resolved Benchmarking of NVIDIA B200 and B300 across HPC and AI Workloads</a>" (Zand, Nguyen and Runesha, arXiv 2610.41919, submitted Oct 30).</p>
+<p>The short version is in the abstract: the B300 "is not a uniform successor to the B200." It trails by up to 5.6x on convolutional inference, 8x on 3D vision transformer training, 24 to 27% on 70B LLM throughput, and 16x on double-precision Quantum ESPRESSO. What makes the paper worth reading is not the losses. It is how they used board power to explain them, and how a second cluster exposed a 2.1x software gap that would otherwise have been blamed on the silicon.</p>
+<h2>1. The setup</h2>
+<p>Two independently run eight-GPU clusters, one from Lenovo and one from Schmidt Sciences, each with B200 and B300 nodes. The specs as the paper records them:</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th></th>
+<th>B200</th>
+<th>B300</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GPUs per node</td>
+<td>8 SXM</td>
+<td>8 SXM6</td>
+</tr>
+<tr>
+<td>HBM3e per GPU (driver-reported)</td>
+<td>179 GiB (192 GB)</td>
+<td>269 GiB (288 GB)</td>
+</tr>
+<tr>
+<td>TDP per GPU</td>
+<td>1000 W</td>
+<td>1100 W</td>
+</tr>
+<tr>
+<td>HGX FP64 (NVIDIA spec, 8 GPUs)</td>
+<td>296 TFLOP/s</td>
+<td>10 TFLOP/s</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Both clusters ran CUDA 13.2, PyTorch 2.9.0, cuDNN 9.15.1.9, cuBLAS 13.1.0.3 and NCCL 2.28.9. Vision benchmarks keep input tensors resident in device memory, so there is no data loader in the timed region. Board power is sampled through NVML at 20 Hz on rank 0. LLM runs use vLLM with tensor parallelism, 150 prompts and greedy decoding capped at 256 tokens. One detail matters later: <code>torch.backends.cudnn.benchmark</code> was left at its default of <code>False</code>, so cuDNN picked convolution algorithms by heuristic.</p>
+<h2>2. The results that surprised me</h2>
+<p>At 8 GPUs in BF16:</p>
+<div class="table-wrap" role="region" aria-label="Table 2" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Workload</th>
+<th>B200</th>
+<th>B300</th>
+<th>B300/B200</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ResNet-50 inference (FPS)</td>
+<td>110.7K</td>
+<td>35.6K</td>
+<td>0.32</td>
+</tr>
+<tr>
+<td>ConvNeXt-Base inference (FPS)</td>
+<td>52.9K</td>
+<td>9.4K</td>
+<td>0.18</td>
+</tr>
+<tr>
+<td>EfficientNet-B4 inference (FPS)</td>
+<td>45.8K</td>
+<td>39.0K</td>
+<td>0.85</td>
+</tr>
+<tr>
+<td>ViT-Large inference (FPS)</td>
+<td>39.5K</td>
+<td>47.7K</td>
+<td>1.21</td>
+</tr>
+<tr>
+<td>ResNet-50 DDP training (img/s)</td>
+<td>20.3K</td>
+<td>6.8K</td>
+<td>0.34</td>
+</tr>
+<tr>
+<td>ViT-Large DDP training (img/s)</td>
+<td>9.1K</td>
+<td>10.6K</td>
+<td>1.16</td>
+</tr>
+<tr>
+<td>Llama-3-70B serving (tok/s)</td>
+<td>11.0K to 11.2K</td>
+<td>8.7K to 9.0K</td>
+<td>24 to 27% behind</td>
+</tr>
+<tr>
+<td>Pangu-Weather 3D ViT training (samples/s)</td>
+<td>8.3</td>
+<td>1.0</td>
+<td>0.12</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The B300 wins exactly the workload you would expect it to win, a few large GEMMs, and loses badly on almost everything else. The 3D vision transformer result is the one that breaks the easy story. It is a transformer, and the B300 still runs it at about an eighth of the B200's rate.</p>
+<h2>3. Board power as a diagnostic</h2>
+<p>This is the part I would copy. Throughput tells you the B300 is slower. It does not tell you whether the GPU is working hard and losing, or sitting idle between kernels. Board power does.</p>
+<div class="table-wrap" role="region" aria-label="Table 3" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Workload (8 GPUs, BF16)</th>
+<th>B200 % of TDP</th>
+<th>B300 % of TDP</th>
+<th>B300/B200 throughput</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ViT-Large inference</td>
+<td>97</td>
+<td>95</td>
+<td>1.21</td>
+</tr>
+<tr>
+<td>EfficientNet-B4 inference</td>
+<td>65</td>
+<td>57</td>
+<td>0.85</td>
+</tr>
+<tr>
+<td>ResNet-50 inference</td>
+<td>80</td>
+<td>53</td>
+<td>0.32</td>
+</tr>
+<tr>
+<td>ConvNeXt-Base inference</td>
+<td>76</td>
+<td>36</td>
+<td>0.18</td>
+</tr>
+<tr>
+<td>ViT-Large training</td>
+<td>93</td>
+<td>92</td>
+<td>1.16</td>
+</tr>
+<tr>
+<td>ResNet-50 training</td>
+<td>58</td>
+<td>46</td>
+<td>0.34</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The ordering is monotonic. On ConvNeXt-Base the B300 draws 36% of its 1100 W envelope while delivering a fifth of the B200's throughput. A GPU that is compute or bandwidth bound saturates its power budget; one drawing a third of it is waiting. Because inputs live in device memory, a host data pipeline is ruled out by construction. The authors say they first assumed it was the data path, and the measurement refuted that.</p>
+<p>Energy efficiency follows the same split. Per GPU, the B200 does 17.3 img/J on ResNet-50 against 7.6 on the B300, and 8.8 against 2.9 on ConvNeXt-Base. ViT-Large flips it: 5.68 img/J on the B300 against 5.11.</p>
+<p>Two explanations remain and the paper is honest that it cannot separate them: CPU-side launch overhead on networks made of many small kernels, or immature <code>sm_103</code> convolution kernels and heuristic tables in cuDNN 9.15. They name the experiment that would settle it: capture the forward pass in a CUDA graph or use <code>torch.compile(mode="reduce-overhead")</code>, or read kernel durations against gaps in an <code>nsys</code> timeline. I wish they had run it, but I respect that they say so instead of guessing.</p>
+<p>Their synthesis is the useful part: the predictor is kernel granularity, not model family. EfficientNet-B4 is a CNN but issues fewer, larger kernels, and it lands in the middle on both power (57%) and throughput (0.85). A PyTorch diffusion training job in their HPC set, Gen-COMPAS, regresses to 9.3 iterations/s on the B300, 3.2x below an A100. Same signature, nothing to do with vision.</p>
+<h2>4. The same silicon, 2.1x apart</h2>
+<p>The two B300 nodes are identical parts. Lenovo ran a development vLLM build (<code>v0.1.dev0</code>); Schmidt ran vLLM 0.11.2. The Lenovo B300 showed 2.1x higher time-to-first-token at 8B and 1.6x at 70B, which the authors attribute to less optimized CUDA-graph compilation for <code>sm_103</code>. FP8 at 8B lifted the Schmidt B300 by 19% and the Lenovo B300 by only 7%.</p>
+<p>A single-cluster evaluation would have reported all of that as a property of the chip. With FP8 on a production build, the Schmidt B300 hit 22.7K tok/s at 8B against 19.0K on the Schmidt B200, a 19% lead, which the paper calls the clearest evidence of Blackwell Ultra's low-precision orientation. To use FP8 at all on the B300, vLLM had to be built from source with <code>TORCH_CUDA_ARCH_LIST='10.3'</code>. NVFP4 was not tested because the vLLM release they used could not load the modelopt-quantized Llama-3 checkpoints.</p>
+<p>There is a smaller software effect on the B200 too. At 70B, BF16 beat FP16 by 28% at 8 GPUs while the two were level at 1 GPU (4.1K vs 4.1K tok/s). Since the formats share tensor-core throughput, the authors read it as FP16 picking a worse collective or attention backend under tensor parallelism.</p>
+<h2>5. FP64 is a different chip</h2>
+<p>For anyone running scientific codes next to AI jobs, this is the procurement line. NVIDIA's HGX spec lists 296 TFLOP/s FP64 for B200 and 10 TFLOP/s for B300, roughly 37 vs 1.25 per GPU. Measured, the dominant Quantum ESPRESSO kernel on a 511-atom diamond supercell ran 16x slower on the B300, about half the nominal ratio because the code is not purely FP64 bound. LAMMPS double precision on the B300 trailed an H200 by 2.6 to 2.7x. Single-precision molecular dynamics did not care: GROMACS on the one-million-atom STMV system was within 1% between the two parts on 4 GPUs.</p>
+<h2>6. Limits before you quote it</h2>
+<ul>
+<li><strong>Single runs for the AI numbers.</strong> The vision and LLM figures are single timed runs with 2 to 4% spot-checked variation; only the HPC and 3D ViT numbers are medians of five. The big gaps are far outside that band; the precision comparisons are not.</li>
+<li><strong>Old software.</strong> vLLM 0.11.2 and PyTorch 2.9.0 are well behind current releases. vLLM is at <a href="https://github.com/vllm-project/vllm/releases" target="_blank" rel="noopener noreferrer">v0.32.0</a> as I write this. My read, not the paper's: the LLM numbers are the most likely to move, since the paper itself shows build maturity swinging TTFT by 2.1x.</li>
+<li><strong>Power from one GPU.</strong> NVML power is rank 0 only, and the authors note they did not verify that the other seven draw the same.</li>
+<li><strong>Artifact not complete yet.</strong> The paper says the harness and raw CSVs are at <a href="https://github.com/MohsenZand/GPUBenchmarking" target="_blank" rel="noopener noreferrer">MohsenZand/GPUBenchmarking</a>. When I checked on Nov 2, the public repo had <code>src/</code>, <code>figures/</code> and <code>run_bench.sh</code> but no <code>results/</code> directory, though the README describes one.</li>
+<li><strong>Workload mix.</strong> Llama-3 8B and 70B with 256-token outputs is not a long-context or MoE serving test. Don't extrapolate this to your agent traffic.</li>
+</ul>
+<h2>7. What I'd do before buying or migrating</h2>
+<ol>
+<li><strong>Log power next to throughput.</strong> Run <code>nvidia-smi dmon</code> or NVML sampling during every benchmark. A new part at 40% of TDP is telling you it is idle, not slow.</li>
+<li><strong>Turn on <code>cudnn.benchmark</code> and try graph capture.</strong> These are cheap and they directly test the two hypotheses the paper left open. If a 3x gap shrinks, the problem was launch overhead or heuristic tables, not the silicon.</li>
+<li><strong>Classify jobs by kernel granularity, not model name.</strong> Count kernels per step and median kernel duration in <code>nsys</code>. Many small kernels is the profile that regressed here.</li>
+<li><strong>Pin and record every build.</strong> Driver, CUDA, cuDNN, NCCL, PyTorch and the serving engine commit. Ideally benchmark on two independently administered systems.</li>
+<li><strong>Keep FP64 work off B300.</strong> No software update recovers a hardware ratio near 30x on paper.</li>
+</ol>
+<p>I like this paper because it is the kind of test most of us should run and rarely write up: same harness, two clusters, power alongside throughput, and the limits stated plainly. If you run a mixed fleet, treat the B300 as a large-GEMM, low-precision, high-capacity part, and benchmark everything else before assuming it gets faster.</p>
+<h2>Sources</h2>
+<ul>
+<li>Zand, Nguyen and Runesha, "Matching Workloads to Blackwell: Power-Resolved Benchmarking of NVIDIA B200 and B300 across HPC and AI Workloads," <a href="https://arxiv.org/abs/2610.41919" target="_blank" rel="noopener noreferrer">arXiv 2610.41919</a> (<a href="https://arxiv.org/html/2610.41919v1" target="_blank" rel="noopener noreferrer">HTML</a>); Sections III to VI, Tables I to VI, Appendix A</li>
+<li>Benchmark harness: <a href="https://github.com/MohsenZand/GPUBenchmarking" target="_blank" rel="noopener noreferrer">MohsenZand/GPUBenchmarking</a>; 3D ViT code: <a href="https://github.com/ndtrung81/3dViT-training" target="_blank" rel="noopener noreferrer">ndtrung81/3dViT-training</a></li>
+<li>NVIDIA, <a href="https://www.nvidia.com/en-us/data-center/hgx/" target="_blank" rel="noopener noreferrer">HGX platform specifications</a> (as cited by the paper for the FP64 figures)</li>
+<li>vLLM, <a href="https://github.com/vllm-project/vllm/releases" target="_blank" rel="noopener noreferrer">GitHub releases</a></li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
