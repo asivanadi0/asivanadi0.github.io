@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FSDP2 Pays for More Than Wire Time: Reading the TIDE Collectives Paper — Anpoo Sivanadi</title>
+  <meta name="description" content="When an FSDP2 job underperforms, the first thing most of us check is whether all-gather and reduce-scatter are hitting link bandwidth." />
+  <link rel="canonical" href="https://asivanadi0.github.io/fsdp2-zero-copy-collectives-tide.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="FSDP2 Pays for More Than Wire Time: Reading the TIDE Collectives Paper — Anpoo Sivanadi" />
+  <meta property="og:description" content="When an FSDP2 job underperforms, the first thing most of us check is whether all-gather and reduce-scatter are hitting link bandwidth." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/fsdp2-zero-copy-collectives-tide.html" />
+  <meta property="article:published_time" content="2026-11-01T18:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>FSDP2 Pays for More Than Wire Time: Reading the TIDE Collectives Paper</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-01T18:00:00-08:00">1 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>When an FSDP2 job underperforms, the first thing most of us check is whether all-gather and reduce-scatter are hitting link bandwidth. If NCCL looks close to wire speed, we move on. A new paper from KlingAI Research argues that this check misses most of the cost: "<a href="https://arxiv.org/abs/2610.38228" target="_blank" rel="noopener noreferrer">The Endgame of FSDP Communication: Layout-Aware Collectives on Copy Engines, RDMA, and NVSwitch</a>" (arXiv 2610.38228, submitted Oct 28).</p>
+<p>Their system, TIDE, replaces FSDP2's all-gather and reduce-scatter with collectives built on public NCCL 2.31+ APIs. On 64 GPUs it cuts step time by up to 27.1% against stock FSDP2 and 6.0% against FSDP2 with PyTorch Symmetric Memory. The headline matters less to me than where the time was going in the first place, because those costs exist in any FSDP2 job I run today, with or without TIDE.</p>
+<h2>1. Three costs that are not wire time</h2>
+<p>The paper splits FSDP2's communication overhead into three parts.</p>
+<p><strong>Layout conversion.</strong> FSDP2 keeps parameters and gradients as per-parameter DTensor shards, but NCCL wants flat, rank-major buffers. So every all-gather output gets copied into parameter storage, and every group's bf16 gradients get packed into a temporary full-group fp32 buffer before reduce-scatter. On Llama-3.1 70B at 8K tokens per GPU, those copies take 0.33 s per step, which the paper puts at 6.4% of step time. My own arithmetic: that implies a step of roughly 5.2 s at that setting (estimate).</p>
+<p><strong>SM wave quantization.</strong> This was the part I found most useful. Big TMA GEMMs use over 200 KB of shared memory per thread block, so only one block fits per SM, and they launch as thread-block clusters. The paper works through a 256 x 8192 x 8192 GEMM, the kind of shape you get in MoE experts or narrow projections at small token counts. It forms 32 four-CTA clusters and the GPU has 33 slots for them, so it runs in exactly one wave. NCCL 2.31's default 32 MiB reduce-scatter on 8 nodes runs 16 CTAs in four clusters, takes three of those slots, and pushes 12 GEMM CTAs into a second wave. The GEMM slows by 69%.</p>
+<p><strong>HBM direction contention.</strong> Per byte served, remote reads hurt a co-running memory-bound kernel 2.2 to 4x more than inbound copy-engine writes. NVSwitch switch reductions are reads.</p>
+<h2>2. The reduce-scatter tradeoff, in one table</h2>
+<p>The obvious fix for wave quantization is to cap NCCL's CTA count. The paper's numbers show why that only moves the cost:</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>32 MiB reduce-scatter, 8 nodes</th>
+<th>Reduce-scatter time</th>
+<th>Slowdown of the one-wave GEMM</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>NCCL default (16 CTAs, 4-CTA clusters)</td>
+<td>6.75 ms</td>
+<td>69.0%</td>
+</tr>
+<tr>
+<td>NCCL capped at 8 CTAs</td>
+<td>not given</td>
+<td>67.8%</td>
+</tr>
+<tr>
+<td>NCCL capped at 4 CTAs</td>
+<td>26.35 ms</td>
+<td>2.7%</td>
+</tr>
+<tr>
+<td>NCCL, 8 CTAs, cluster size 1</td>
+<td>13.0 ms</td>
+<td>6.3%</td>
+</tr>
+<tr>
+<td>TIDE training config (16 sum + 4 landing CTAs)</td>
+<td>6.96 ms</td>
+<td>2.9%</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>You either get a fast reduce-scatter that wrecks the overlapping GEMM, or a polite one that takes four times as long. Stream priority doesn't help, the authors point out, because CUDA does not preempt resident CTAs. And a grouped GEMM that fills every SM, like the Qwen3-30B-A3B experts (128 groups of 512 rows), has no spare slots at all: every NCCL and symmetric-memory reduce-scatter they measured slowed it by about 70%, against about 5% for TIDE.</p>
+<p>The HBM direction numbers are just as concrete. With GPUs 1 to 7 of a node driving traffic at GPU 0 while it runs a 256 MiB memory-bound kernel:</p>
+<div class="table-wrap" role="region" aria-label="Table 2" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Initiator</th>
+<th>Pull: served GB/s, victim slowdown</th>
+<th>Push: served GB/s, victim slowdown</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SM</td>
+<td>788, 46.7%</td>
+<td>721, 12.1%</td>
+</tr>
+<tr>
+<td>Copy engine</td>
+<td>838, 43.9%</td>
+<td>798, 11.0%</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Normalized, pulls cost 5.2 to 5.9% per 100 GB/s and pushes 1.4 to 1.7%. A 2-CTA switch-reduction collective slowed the same victim by 27%; TIDE's reduce-scatter by 2.6%.</p>
+<h2>3. What TIDE does differently</h2>
+<p>The idea is that layout conversion is a collective problem, not a copy problem. If the collective reads each tensor where the model stores it and writes each result to its final address, the copies and the packing buffers go away.</p>
+<ul>
+<li><strong>All-gather (TIDE-AG):</strong> copy engines multicast shards through NVSwitch inside a node, and paced recursive-doubling RDMA carries them across nodes, landing directly in parameter storage. It uses no SMs.</li>
+<li><strong>Reduce-scatter (TIDE-RS):</strong> copy engines push unreduced bf16 gradients (half the bytes, and the cheap push direction) into small staging chunks, 4 to 16 short-lived TMA CTAs sum the 8-to-1 node reduction in fp32, and then each node sends one fp32 partial per element over rail RDMA. A Latin-square placement lets the destination NVSwitch fold up to 8 nodes' partials per wave with <code>multimem.ld_reduce.add.v4.f32</code>.</li>
+<li><strong>fp32 semantics kept.</strong> Reducing bf16 gradients into fp32 shards is, per the paper, a mixed-precision mode NCCL does not provide. They also explain why a bf16 symmetric window doesn't work: the <code>acc::f32.bf16x2</code> form accumulates in fp32 but returns bf16, so node partials get rounded before cross-node accumulation.</li>
+</ul>
+<p>The CTAs it does use are short-lived, about 0.2 to 0.4 ms each, resident for roughly a third of a reduce-scatter. That is the whole trick against wave quantization: residence time, not just CTA count.</p>
+<h2>4. Results on 64 GPUs</h2>
+<p>All training runs use 8 nodes of 8 GPUs per NVSwitch domain, one RDMA rail per GPU, median step time over 40 to 100 post-warm-up steps.</p>
+<div class="table-wrap" role="region" aria-label="Table 3" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Model and tokens/GPU</th>
+<th>Step-time cut vs stock FSDP2</th>
+<th>vs FSDP2+SymmMem</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Qwen3-30B-A3B, 16K / 24K / 32K</td>
+<td>27.1% / 21.4% / 17.3%</td>
+<td>6.0% / 4.8% / 4.3%</td>
+</tr>
+<tr>
+<td>Llama-3.1 70B, 8K / 32K</td>
+<td>16.2% / 3.1%</td>
+<td>1.9 to 2.4x SymmMem's saving from 16K to 32K</td>
+</tr>
+<tr>
+<td>Wan2.2 14B expert, 7.8K / 15.6K / 31.2K</td>
+<td>7.4% / 2.8% / 1.4%</td>
+<td>about 2x SymmMem's saving at the two larger sizes</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The MoE result is the expected one. Communication overhead scales with sharded parameter bytes, while useful compute scales with activated parameters times tokens. Sparse routing makes the recoverable overhead a bigger share of the step. On dense Llama the absolute saving stays at 0.51 to 0.54 s per step from 16K to 32K tokens, so the percentage shrinks only because the step grows.</p>
+<p>Other numbers worth keeping:</p>
+<ul>
+<li>Communication SM time on a Llama 8K step dropped from 78 SM-seconds (stock) and 34 (SymmMem) to 3.8. A communication kernel was resident for 8% of the step instead of 89% and 59%.</li>
+<li>TIDE-AG is 1.06 to 1.42x faster than FSDP2's fastest all-gather plus copy-out, growing from 1.13x at 16 GPUs to 1.42x at 64 on 128 MiB shards.</li>
+<li>FSDP2's reduce-scatter buffer doubles with GPU count, reaching 2.03 and 8.12 GiB at 64 GPUs; TIDE's stays near 0.6 and 2.4 GiB, a 3.2x gap.</li>
+<li>Peak memory is up to 4.7 GiB below FSDP2+SymmMem. On Qwen3 at 32K: 87.3 vs 91.0 GiB, within 0.3 GiB of stock. Its in-place mode does add 1.9 GiB over stock on Llama at 24K tokens.</li>
+<li>Loss on a 1,000-step Qwen3-30B-A3B run on C4 stayed within stock's own run-to-run spread: 0.73% max deviation for TIDE against 1.12% between two stock runs.</li>
+</ul>
+<h2>5. Limits before you get excited</h2>
+<ul>
+<li><strong>No code yet.</strong> The authors "intend to release" the implementation, benchmark drivers and correctness gate on publication.</li>
+<li><strong>Narrow contract.</strong> PyTorch 2.13, dimension-0 sharding, up to 8 GPUs per NVSwitch domain, rail-aligned RDMA NICs, NVSwitch multicast, compute capability 9.0 or higher with at least 207 KB of shared memory per block. No CUDA-graph capture or async unshard yet. Groups with more than 256 trainable parameters fall back to stock collectives.</li>
+<li><strong>One cluster shape.</strong> All results are 64 GPUs. The paper describes 148 SMs per GPU but doesn't name the part in what I read; 148 SMs matches a B200-class GPU, which is my inference, not the paper's statement.</li>
+<li><strong>Related work is moving.</strong> NVIDIA's <a href="https://github.com/NVIDIA/nccl/tree/master/contrib/pace" target="_blank" rel="noopener noreferrer">PACE</a> in NCCL contrib already fuses layout conversion and casting into AG/RS kernels on NCCL's GIN device API, and AMD has an <a href="https://github.com/pytorch/pytorch/issues/186601" target="_blank" rel="noopener noreferrer">open PyTorch RFC</a> for SDMA all-gather with zero-copy output. The paper positions TIDE as the one that keeps per-parameter storage, fp32 reduction and off-SM transport all at once.</li>
+</ul>
+<h2>6. What I'd check on my own jobs</h2>
+<ol>
+<li><strong>Profile for copies, not just collectives.</strong> Look for the all-gather copy-out and <code>_chunk_cat</code> style packing kernels in an Nsight trace and add up their time per step. If it's near 6% on a dense model, that's real money.</li>
+<li><strong>Measure GEMM slowdown under overlap.</strong> Time your hottest small-M expert or projection GEMM alone, then with a reduce-scatter running beside it. A near-2x jump means wave quantization.</li>
+<li><strong>Try cluster size 1 before capping CTAs.</strong> In the paper, 8 single CTAs cut the GEMM penalty from 69% to 6.3% while costing less reduce-scatter time than a 4-CTA cap.</li>
+<li><strong>Watch reduce-scatter buffer growth as you add nodes.</strong> If it doubles with GPU count at fixed shard size, that memory is coming out of your activation budget.</li>
+<li><strong>Expect the biggest wins on sparse MoE at modest tokens per GPU.</strong> That's where sharded bytes are largest relative to activated compute.</li>
+</ol>
+<p>I wrote about the FSDP capacity tax on MoE in my <a href="/olmo-core-3.html">Olmo-core 3 note</a>. This paper is the runtime side: even when the wire is fast, the GPU is paying for layout copies, displaced GEMM waves and the wrong HBM direction. Until code lands I can't verify the numbers, but the measurement method alone is worth stealing.</p>
+<h2>Sources</h2>
+<ul>
+<li>Wang et al., "The Endgame of FSDP Communication: Layout-Aware Collectives on Copy Engines, RDMA, and NVSwitch," <a href="https://arxiv.org/abs/2610.38228" target="_blank" rel="noopener noreferrer">arXiv 2610.38228</a> (<a href="https://arxiv.org/html/2610.38228v1" target="_blank" rel="noopener noreferrer">HTML</a>)</li>
+<li>NVIDIA NCCL, <a href="https://github.com/NVIDIA/nccl/tree/master/contrib/pace" target="_blank" rel="noopener noreferrer">PACE: Parallelism-Aware Collective Engine (contrib)</a></li>
+<li>PyTorch, <a href="https://github.com/pytorch/pytorch/issues/186601" target="_blank" rel="noopener noreferrer">RFC: SDMA AllGather and Zero-Copy Output for FSDP2 (#186601)</a></li>
+<li>My earlier note: <a href="/olmo-core-3.html">Olmo-core 3: open MoE training stack</a></li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
