@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>A Ten-Minute Surge, an Hour of Bad Service: Metastable Prefix-Cache Failure in Agent Serving — Anpoo Sivanadi</title>
+  <meta name="description" content="Coding agents are a friendly workload for a prefix cache." />
+  <link rel="canonical" href="https://asivanadi0.github.io/agent-serving-metastable-cache-trap.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="A Ten-Minute Surge, an Hour of Bad Service: Metastable Prefix-Cache Failure in Agent Serving — Anpoo Sivanadi" />
+  <meta property="og:description" content="Coding agents are a friendly workload for a prefix cache." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/agent-serving-metastable-cache-trap.html" />
+  <meta property="article:published_time" content="2026-11-03T06:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>A Ten-Minute Surge, an Hour of Bad Service: Metastable Prefix-Cache Failure in Agent Serving</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-03T06:00:00-08:00">3 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>Coding agents are a friendly workload for a prefix cache. Each call resends the conversation plus a little new text, so a prefill-decode (PD) disaggregated engine with a warm cache only prefills the new suffix. A new paper shows that this dependence is also the weak spot.</p>
+<p>"<a href="https://arxiv.org/abs/2611.02543" target="_blank" rel="noopener noreferrer">When Cache Pressure Becomes a Trap: Metastability in Agent Serving</a>" (Chengzhi Lu, Boxi Zhou, Yanying Lin and Dmitrii Ustiugov, Nanyang Technological University and Harvard, arXiv 2611.02543, Nov 2) shows that a short traffic surge can push an SGLang PD deployment into a degraded state it does not leave on its own, even after arrivals drop back to a rate it handled fine before. In their first experiment, a ten-minute surge cut goodput by about 88% over the following hour.</p>
+<p>Your dashboards will not warn you about this one. Here are the numbers, the mechanism and what I'd check.</p>
+<h2>1. The setup</h2>
+<p>The real-system experiments replay 216 Terminal-Bench trajectories with 7,108 model calls. The median prompt is 25.6K tokens, the 90th percentile is 77K, and 98.2% of prompt tokens repeat the previous call. Median output is 160 tokens and the median tool gap is 0.42 s.</p>
+<p>The model is Qwen3.6-35B-A3B in FP8, a hybrid MoE with 30 linear-attention layers out of 40, served by SGLang in PD mode with NIXL for KV transfer. The first deployment is one prefill and one decode instance (1P1D), each on an H100 NVL. The prefill side holds a 1.09M-token prefix cache and the decode side 1.66M tokens of KV. Sessions arrive as a Poisson process at 3.3 sessions per minute.</p>
+<h2>2. What the failure looks like</h2>
+<p>Without a surge, the engine uses about a twelfth of its saturated prefill throughput, median time to first token (TTFT) is about 0.2 s, and utilization, queue length and KV usage all show plenty of headroom.</p>
+<p>Add a ten-minute surge and then return to 3.3 sessions per minute. Median TTFT climbs to about 60 s, and the prefix hit rate falls from 0.95 to 0.27. Sessions arriving in the hour after the surge reach a goodput of 17 sessions per hour against 138 in the run with no surge. Over the whole run, goodput drops from 123 to 43 sessions per hour.</p>
+<p>The causal test is the part I found most convincing. The authors inject a burst of short sessions at four times the base rate during minutes 15 to 25. By minute 25 there are about 110 active sessions, 65 of them from the burst. In one run they kill every burst session at minute 25, and service recovers within two minutes. In the other they let those sessions finish. The burst sessions linger for up to 25 more minutes, and active base sessions keep growing to 1.7 times the no-burst count by minute 50 and 2.4 times by minute 90. Same base arrivals, opposite outcomes. That history dependence is what makes it a metastable failure, as defined in "<a href="https://www.usenix.org/conference/osdi22/presentation/huang-lexiang" target="_blank" rel="noopener noreferrer">Metastable Failures in the Wild</a>" (OSDI 22).</p>
+<h2>3. The feedback loop</h2>
+<p>The paper calls the sustaining effect population-cache feedback, and it runs like this:</p>
+<ol>
+<li>A session stays active until its last turn, including while its tools run, so its full context is part of the working set the whole time.</li>
+<li>A surge adds sessions, the working set grows, and LRU starts evicting prefixes before their sessions come back.</li>
+<li>Evicted prefixes have to be recomputed, so calls get slower, so sessions live longer, so the working set stays large while new sessions keep arriving.</li>
+</ol>
+<p>The hit rate does not degrade gracefully. Across two-minute windows, it slides from 0.95 to 0.80 and then drops to about 0.3 once the working set reaches roughly twice the cache capacity. The authors call this the cache cliff. Past it, uncached prefill work goes from 2.5K tokens/s to 28K to 35K tokens/s, against a saturated prefill throughput of 31K tokens/s.</p>
+<p>A second amplifier is specific to SGLang, which reserves decode KV for a request before its prefill starts. After the surge, requests that are still waiting for prefill hold two thirds of decode KV. Decode memory reads 97% full while only half as many requests are actually decoding as in the healthy run, and new requests wait 25 s just for a reservation.</p>
+<p>Recovery is also harder than the descent. In simulation, after a collapse the hit rate stays at 0.26 to 0.37 at working sets of 1.6 to 1.7 times cache capacity, while runs that never collapsed hold 0.81 to 0.93 at the same working set. Every evicted prefix has to be rebuilt before it helps again.</p>
+<h2>4. How much headroom you think you have</h2>
+<p>Using a simulator calibrated against the real runs, the authors map where surges trap the engine:</p>
+<ul>
+<li>Across GPU-only and <a href="https://www.lmsys.org/blog/2025-09-10-sglang-hicache/" target="_blank" rel="noopener noreferrer">HiCache</a> host-tier setups, the first load a surge can trap sits at 0.46 to 0.70 of the steady-state overload rate.</li>
+<li>Moving from H100 to H200 profiles (about twice the memory, 1.6 to 1.75 times the prefill rate) raises the first trapping load on 1P3D from 3.5 to 5.5 sessions per minute. Bigger GPUs move the boundary; they do not remove it.</li>
+<li>A host tier 40 times the GPU cache raises the highest recoverable load on 1P3D from 9 to 19.5 sessions per minute.</li>
+</ul>
+<p>The surge sizes involved are not exotic. After scaling two Alibaba Bailian traces down to a single deployment's rate, the busiest ten-minute windows exceed the hourly mean by 16 to 49%.</p>
+<p>A fluid model of the session population flags all 17 cache-first deployments out of 36 simulated ones, but also 8 of the 19 decode-first ones, so treat it as a conservative screen.</p>
+<h2>5. Basin, and how it compares</h2>
+<p>The proposed system, Basin, is a session gateway in front of SGLang's PD router plus engine changes. It does four things:</p>
+<ul>
+<li><strong>Fixed session priority</strong> from arrival time and a predicted peak context, used for admission and for both engine queues.</li>
+<li><strong>Admission against a working-set budget</strong>, reserving each session's predicted peak context. The predictor is a ridge regression on the task text and first prompt length (rank correlation 0.64 on Terminal-Bench, 0.56 on SWE-bench Pro).</li>
+<li><strong>Lending idle decode memory as a cache tier</strong>, with running decode requests reclaiming it on demand.</li>
+<li><strong>Shedding</strong> when long-run arrivals exceed what the engine can drain.</li>
+</ul>
+<p>On one four-H200 node in 1P3D, the hardware prototype (arrival-time ordering and current-context admission, not the full predictor) gets 1.20 to 1.70 times the goodput of <a href="https://arxiv.org/abs/2511.02230" target="_blank" rel="noopener noreferrer">Continuum</a> and 2.35 to 3.59 times that of HiCache alone across four surge scenarios. HiCache stays trapped in all four, completing only 0.28 to 0.54 of sessions. On SWE-bench Pro, where median peak context is 107K tokens, Basin completes 126.7 sessions per hour against 106.0 for Continuum and 86.0 for CONCUR, with a median first-call wait of 68 s.</p>
+<p>Goodput counts completed sessions per hour with slowdown of at most 4 and at least 95% of decode steps under a 50 ms inter-token target; shed sessions count as failures.</p>
+<p>One result I'd underline for anyone hoping a smarter eviction policy fixes this: a next-call oracle eviction policy gets only 1.08 to 1.18 times LRU's goodput, and 0.28 to 0.41 of Basin's. The problem is how many sessions you let in, not which pages you throw out.</p>
+<h2>6. Limits</h2>
+<ul>
+<li>Every hardware run uses one model, Qwen3.6-35B-A3B, on SGLang. The vulnerability maps, the 36-deployment comparison, the 2P6D results and most sweeps are simulation.</li>
+<li>The H200 simulator's goodput is off by 8.8% on average and up to 32% on its calibration runs.</li>
+<li>Sessions are independent; parent-child agent workflows are left open.</li>
+<li>On a decode-limited H100 1P1D deployment, the prototype performs about the same as Continuum. If decode saturates first, protecting the cache buys little.</li>
+<li>I did not find a public code release linked from the paper.</li>
+</ul>
+<h2>7. What I'd check on my own agent deployment</h2>
+<ol>
+<li><strong>Log working set, not just KV usage.</strong> Sum the context of every active session, including those in tool calls, and plot it against prefix-cache capacity. Find where your cliff is.</li>
+<li><strong>Alert on prefix hit rate.</strong> A drop from the mid-0.9s to the 0.3s is the signature here, and it shows up while utilization still looks fine.</li>
+<li><strong>Replay a surge in staging.</strong> Take a recorded agent trace, add a ten-minute burst, then go back to base load and watch whether TTFT returns. If it doesn't, you have this failure.</li>
+<li><strong>Know your escape hatch.</strong> In the paper, cutting the burst sessions restored service within minutes. Session-level admission and shedding at the gateway is a much smaller change than re-architecting the cache.</li>
+</ol>
+<p>My read is that the paper's most useful contribution is not Basin itself but the reframing: for agent traffic, the capacity number that matters is the session working set relative to cache size, and you can be well under your throughput limit while being past that one.</p>
+<h2>Sources</h2>
+<ul>
+<li>Lu, Zhou, Lin, Ustiugov, "When Cache Pressure Becomes a Trap: Metastability in Agent Serving," arXiv 2611.02543, Nov 2, 2026: <a href="https://arxiv.org/abs/2611.02543" target="_blank" rel="noopener noreferrer">abstract</a>, <a href="https://arxiv.org/html/2611.02543v1" target="_blank" rel="noopener noreferrer">full text</a></li>
+<li>Li et al., "Continuum: Efficient and Robust Multi-Turn LLM Agent Scheduling with KV Cache Time-to-Live," <a href="https://arxiv.org/abs/2511.02230" target="_blank" rel="noopener noreferrer">arXiv 2511.02230</a></li>
+<li>LMSYS, "<a href="https://www.lmsys.org/blog/2025-09-10-sglang-hicache/" target="_blank" rel="noopener noreferrer">SGLang HiCache: Fast Hierarchical KV Caching</a>"</li>
+<li>Huang et al., "<a href="https://www.usenix.org/conference/osdi22/presentation/huang-lexiang" target="_blank" rel="noopener noreferrer">Metastable Failures in the Wild</a>," OSDI 22</li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
