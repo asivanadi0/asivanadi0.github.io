@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Giving MoE Dispatch Its Own SMs: What GC-MoE Gets From Green Contexts on H20 and B300 — Anpoo Sivanadi</title>
+  <meta name="description" content="The fastest MoE decode kernels today fuse everything into one persistent kernel: token dispatch, both expert GEMMs and the combine all run inside the same launch, on every SM." />
+  <link rel="canonical" href="https://asivanadi0.github.io/gc-moe-green-contexts-moe-decode.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Giving MoE Dispatch Its Own SMs: What GC-MoE Gets From Green Contexts on H20 and B300 — Anpoo Sivanadi" />
+  <meta property="og:description" content="The fastest MoE decode kernels today fuse everything into one persistent kernel: token dispatch, both expert GEMMs and the combine all run inside the same launch, on every SM." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/gc-moe-green-contexts-moe-decode.html" />
+  <meta property="article:published_time" content="2026-11-04T06:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Giving MoE Dispatch Its Own SMs: What GC-MoE Gets From Green Contexts on H20 and B300</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-04T06:00:00-08:00">4 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>The fastest MoE decode kernels today fuse everything into one persistent kernel: token dispatch, both expert GEMMs and the combine all run inside the same launch, on every SM. A new paper argues that at decode batch sizes this is the wrong shape. Its fix is to carve the GPU in two at the driver level and give dispatch its own small set of SMs.</p>
+<p>"<a href="https://arxiv.org/abs/2611.04222" target="_blank" rel="noopener noreferrer">GC-MoE: Overlapping Expert-Parallel Token Dispatch with FP8/FP4 Grouped GEMM via CUDA Green Contexts</a>" (Yong Li, Kan Liu and Tao Lan, with Alibaba addresses; arXiv 2611.04222, posted Nov 3) measures this against DeepGEMM's Mega MoE on eight H20s and eight B300s. GC-MoE is faster at all 54 measured points: 1.188 times on average on H20 and 1.106 to 1.123 times on B300. The <a href="https://github.com/Bruce-Lee-LY/gc-moe" target="_blank" rel="noopener noreferrer">code is on GitHub</a>.</p>
+<p>Here is the mechanism, the numbers, and what I'd check before trusting it in a serving stack.</p>
+<h2>1. Why the fused kernel leaves time on the table</h2>
+<p>Under expert parallelism, every MoE layer does four things: an all-to-all that sends each token to the ranks that own its experts, a grouped GEMM with SwiGLU, a second grouped GEMM for the down projection, and a combine back to the source ranks.</p>
+<p>At decode each rank holds 1 to 256 tokens. The paper's example is GLM-5.2 with 256 experts, top-8 routing on eight ranks: at one token per rank, each expert sees 0.25 tokens on average, so the padded GEMM tile is almost all padding. The GEMM cost is streaming FP4 expert weights out of HBM, not arithmetic. Dispatch is latency-bound and needs only a few SMs to saturate NVLink.</p>
+<p>Mega MoE already overlaps dispatch with compute, but it does so by sharing every SM. On B300, each CTA carries four dispatch warps next to two TMA-load warps, an MMA-issue warp, a scheduler warp and eight epilogue warps. The authors name three costs:</p>
+<ul>
+<li><strong>The GEMM never owns a whole SM.</strong> The dispatch warps and their staging buffers come out of each SM's register file and shared memory.</li>
+<li><strong>The sync domain is the whole device.</strong> Prologue and tail grid syncs span all 148 SMs on B300, so every phase waits for the slowest CTA.</li>
+<li><strong>Every replay ends with a cross-rank barrier.</strong> After the workspace clean, all ranks pass a second barrier before the next replay can reuse the workspace. That is an NVLink round trip per layer, per step.</li>
+</ul>
+<h2>2. The design</h2>
+<p>Green contexts arrived in CUDA 12.4. They let a process split the device's SMs with <code>cuDevSmResourceSplitByCount</code> and create a lightweight context over each part with <code>cuGreenCtxCreate</code>. Kernels launched into one context's stream only run on its SMs. No MPS daemon is involved.</p>
+<p>GC-MoE creates two contexts once per CUDA context:</p>
+<ul>
+<li><strong>Communication partition:</strong> 20 of 148 SMs on B300. The default request is 16 SMs and the driver aligns it up to 20. On H20 the default request is 4.</li>
+<li><strong>Compute partition:</strong> the remaining 128 SMs on B300.</li>
+</ul>
+<p>Each MoE layer is a child CUDA Graph with three kernel nodes. The dispatch kernel runs on the communication partition and the grouped GEMM kernel runs on the compute partition. Neither depends on the other, so the driver launches them at the same time on disjoint SMs. A finalize kernel depends on both and does the combine.</p>
+<p>Three details make it work:</p>
+<ul>
+<li><strong>A token ring with block-level handshakes.</strong> Dispatch pulls tokens into a reused ring and marks each block full with a generation-tagged counter. The GEMM starts on the first full block instead of waiting for dispatch to finish.</li>
+<li><strong>No trailing barrier.</strong> Per-expert receive counters are double-buffered by parity. The finalize kernel flips the parity after it consumes the counts, so the next replay writes to the other buffer and no cross-rank rendezvous is needed between replays.</li>
+<li><strong>Balanced workqueues.</strong> Each green context gets its own hardware workqueue (<code>CU_WORKQUEUE_SCOPE_GREEN_CTX_BALANCED</code>, concurrency limit 1). The paper notes that without this, two contexts can land on one queue, which silently serializes the very kernels you meant to overlap. I think that is the most useful single line in the paper for anyone trying green contexts themselves.</li>
+</ul>
+<p>The GEMMs are per architecture. On B300 the kernel uses the 2-CTA block-scaled <code>tcgen05</code> MMA with operands swapped so the token count sets the N dimension, rounded up to 16 instead of the full block size. FP4 routed weights and FP8 shared-expert weights go through the same instruction sequence. The main addition over the baseline is prepacking FP4 weights into K128-contiguous tiles, so one TMA load is a single 8 KB burst instead of 128 strided segments. On H20, which has no native FP4 MMA, MXFP4 weights are decoded to E4M3 in registers and fed to register-A WGMMA, with block scales applied as fused multiply-adds outside the MMA.</p>
+<h2>3. The numbers</h2>
+<p>The setup is CUDA 13.2, PyTorch 2.11, DeepGEMM 2.8.2 as the baseline and GC-MoE 0.3.1. Each point is the slowest rank's median latency over 30 windows of 100 graph replays, with L2 flushed between windows. The sweep covers 1 to 256 tokens per rank.</p>
+<p><strong>H20, DeepSeek-V4.1-Flash, routed experts:</strong></p>
+<ul>
+<li>Faster at all nine points, 1.188 times on average.</li>
+<li>1.04 times at 1 token per rank, a plateau of 1.26 to 1.30 times from 4 to 32 tokens per rank, and down to 1.03 times at 256.</li>
+<li>At 16 tokens per rank, 341.7 µs against 442.7 µs.</li>
+</ul>
+<p><strong>B300, routed experts:</strong></p>
+<ul>
+<li>GLM-5.2 averages 1.102 times and DeepSeek-V4.1-Flash 1.109 times. Every point falls between 1.085 and 1.189 times.</li>
+<li>DeepSeek-V4.1-Flash at 1 token per rank: 59.4 µs against 70.6 µs. The eight rank medians are tightly clustered, so this is not one slow rank.</li>
+<li>The win comes with fewer GEMM SMs: 128 against the baseline's 148.</li>
+</ul>
+<p><strong>Fused shared experts:</strong></p>
+<ul>
+<li>On B300 against Mega MoE's own fused shared-expert mode, the average is 1.123 times, with a peak of 1.209 times at 1 token per rank.</li>
+<li>On H20 the average is 1.188 times, with a peak of 1.353 times. Here the baseline runs the shared expert as a separate kernel (more on that below).</li>
+</ul>
+<p>The effective throughput tables tell the same story. On B300 with GLM-5.2 at 256 tokens per rank, aggregate matmul throughput goes from 7,525 to 8,491 TFLOPS. NVLink bytes are identical by construction; they just move in less wall time.</p>
+<p>Accuracy holds. On H20 the minimum cosine against Mega MoE is 0.9999998, and the two kernels have the same maximum absolute error (0.109375). All 94 B300 cases pass.</p>
+<h2>4. What I'd discount</h2>
+<ul>
+<li><strong>The H20 baseline is the authors' own port.</strong> DeepGEMM ships Mega MoE only for SM100. For H20 the authors built an SM90 reference port themselves, and it has no fused shared-expert path. The H20 numbers, including the 1.35 times peak, are against code that the people proposing the alternative wrote. I'd lean on the B300 numbers, where the baseline is the public kernel.</li>
+<li><strong>No partition-size ablation.</strong> The paper says plainly that it has no sweep over dispatch SM counts and no overlap-on versus overlap-off comparison. So we know 20/128 beats the fused kernel, but not whether 12 or 28 dispatch SMs would be better, or how much of the gain is the split versus the removed barrier versus the K128 weight prepack.</li>
+<li><strong>Operator latency, not serving latency.</strong> These are isolated layer replays at fixed token counts. There is no end-to-end tokens per second or inter-token latency in a serving engine yet, and integration is listed as future work.</li>
+<li><strong>Decode only, with hard shape limits.</strong> At 256 tokens per rank the gain shrinks to 1.01 to 1.13 times. The 64-bit completion bitmap caps the intermediate size, there is a 2,048-expert limit, and the workspace is single-instance, so calls that share it must be serialized.</li>
+<li><strong>Single node, NVLink only.</strong> Nothing here covers dispatch across an RDMA fabric.</li>
+</ul>
+<h2>5. What I'd take from it</h2>
+<ol>
+<li><strong>Treat SMs as a budget you can split.</strong> When a decode layer's GEMM is bound by weight streaming, the last 20 SMs buy little arithmetic. Spending them on a dedicated communication kernel was worth 9 to 19 percent on B300.</li>
+<li><strong>Look for per-replay barriers.</strong> A cross-rank round trip at the end of every layer is easy to miss in a profile, because it looks like part of the kernel. Double-buffering the counters is a cheap way to remove it.</li>
+<li><strong>Set the workqueue scope if you use green contexts.</strong> Otherwise two "concurrent" kernels may share one hardware queue and run back to back.</li>
+<li><strong>Benchmark at your real tokens per rank.</strong> The H20 curve goes from 1.04 to 1.30 and back to 1.03 times across the sweep. An average speedup hides where your traffic actually sits.</li>
+</ol>
+<p>My own opinion is that this is a better direction than ever-deeper fusion for decode. Splitting the device lets each kernel be tuned on its own, and the paper shows that costs less than giving up 13.5 percent of the SMs would suggest. I'd want the partition sweep and a vLLM or SGLang integration before I put it in production, but it is worth a weekend on any B300 node serving DeepSeek-class MoE.</p>
+<h2>Sources</h2>
+<ul>
+<li>Yong Li, Kan Liu, Tao Lan, "GC-MoE: Overlapping Expert-Parallel Token Dispatch with FP8/FP4 Grouped GEMM via CUDA Green Contexts," arXiv 2611.04222, Nov 3, 2026: <a href="https://arxiv.org/abs/2611.04222" target="_blank" rel="noopener noreferrer">abstract</a>, <a href="https://arxiv.org/html/2611.04222v1" target="_blank" rel="noopener noreferrer">full text</a></li>
+<li><a href="https://github.com/Bruce-Lee-LY/gc-moe" target="_blank" rel="noopener noreferrer">Bruce-Lee-LY/gc-moe</a> on GitHub (operator source, version 0.3.1, per-GPU accuracy and performance reports)</li>
+<li><a href="https://github.com/deepseek-ai/DeepGEMM" target="_blank" rel="noopener noreferrer">DeepGEMM</a> on GitHub (Mega MoE baseline)</li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
