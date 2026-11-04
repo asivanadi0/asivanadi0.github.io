@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>32 Cheap Chips or 8 GPUs? Tokens per Dollar on a Tenstorrent Galaxy, and Why the Links Decide It — Anpoo Sivanadi</title>
+  <meta name="description" content="Most serving capacity plans start from the device: pick the fastest GPU the budget allows, then use as few of them per replica as the model permits." />
+  <link rel="canonical" href="https://asivanadi0.github.io/tenstorrent-galaxy-cluster-efficiency.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="32 Cheap Chips or 8 GPUs? Tokens per Dollar on a Tenstorrent Galaxy, and Why the Links Decide It — Anpoo Sivanadi" />
+  <meta property="og:description" content="Most serving capacity plans start from the device: pick the fastest GPU the budget allows, then use as few of them per replica as the model permits." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/tenstorrent-galaxy-cluster-efficiency.html" />
+  <meta property="article:published_time" content="2026-11-03T18:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>32 Cheap Chips or 8 GPUs? Tokens per Dollar on a Tenstorrent Galaxy, and Why the Links Decide It</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-03T18:00:00-08:00">3 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>Most serving capacity plans start from the device: pick the fastest GPU the budget allows, then use as few of them per replica as the model permits. A new paper argues that for long-context serving this is the wrong unit, and backs it with a measured comparison and an ablation that I think is the most useful part.</p>
+<p>"<a href="https://arxiv.org/abs/2611.02975" target="_blank" rel="noopener noreferrer">Introducing Cluster Efficiency to LLM Serving: Pooling Economical Accelerators over Fast Interconnects</a>" (Youhe Jiang, Pavle Glušac, Binhang Yuan and Eiko Yoneki; University of Cambridge, Tenstorrent and HKUST; arXiv 2611.02975, Nov 2) puts a 32-chip <a href="https://tenstorrent.com/hardware/galaxy" target="_blank" rel="noopener noreferrer">Tenstorrent Galaxy</a> against an eight-GPU RTX PRO 6000 Blackwell server, with vLLM on both. The Galaxy wins on tokens per dollar in all 36 configurations, by 1.07 to 2.24 times. Then the authors slow down only the links between the same chips, and every one of those wins disappears.</p>
+<p>Here is what they measured and where I'd discount it.</p>
+<h2>1. The two machines</h2>
+<p>The Galaxy is 32 Blackhole chips. Each has 32 GB of GDDR6 at 512 GB/s, 210 MB of SRAM and 664 peak Block FP8 TFLOPS, plus Ethernet cores that drive its own 400 GbE ports. Tenstorrent's product page lists the system at $160,000 with 1 TB of GDDR6 at 16 TB/s, 10 links of 400 GbE per chip and 8 to 10 kW average power. The paper allocates that list price at $5,000 per chip.</p>
+<p>The four trays of eight chips are wired as a mesh within each tray, with two links between neighbours,, and the trays form a ring. A replica ("pool") is any rectangle of that grid: four chips, one tray of eight, two trays, or all 32. There is no switch and no host on the data path.</p>
+<p>The baseline is one server with eight RTX PRO 6000 Blackwell Server Edition cards, 96 GB each, connected over PCIe 5.0 x16 inside one chassis. The cost model prices it at $28,137 per GPU from a market server price.</p>
+<p>Both sides get a three-year life at $0.15 per kWh. Electricity is under a tenth of the denominator, so tokens per dollar here is mostly throughput per dollar of hardware.</p>
+<h2>2. The headline numbers</h2>
+<p>The models are Llama-3.3-70B-Instruct, Qwen3-32B and Llama-3.1-8B-Instruct, in BF16 and 8-bit (Galaxy BFP8, GPU FP8), at contexts from 8K to 256K tokens.</p>
+<ul>
+<li><strong>Tokens per dollar:</strong> Galaxy ahead in all 36 configurations, 1.07 to 2.24 times.</li>
+<li><strong>Largest gap:</strong> Llama-3.3-70B in BF16, 1.75 to 2.24 times. At 16K context the Galaxy keeps 92 sequences active against 32 on the GPU server, 429K tokens per dollar against 192K.</li>
+<li><strong>Context helps the Galaxy:</strong> for 70B in 8-bit the gain grows from 1.08 times at 8K to 1.37 times at 256K; for 32B in BF16 from 1.24 to 1.54 times.</li>
+<li><strong>Tokens per joule:</strong> 1.00 to 2.27 times, with one configuration at parity (70B 8-bit at 8K, 1.270 against 1.269).</li>
+</ul>
+<p>The mechanism is capacity. One chip loses to one card everywhere: for Llama-3.1-8B it holds 0.21 to 0.25 times the sequences and reaches 0.73 to 0.94 times the card's tokens per dollar. Pooling spreads the weights. On one chip the 8B BF16 weights take 16 of 32 GB, and the chip holds 135K tokens of KV. Eight chips hold 1.93M tokens, 14.3 times one chip, while eight cards hold 9.7 times one card. Per dollar, the chips hold 1.3 to 1.9 times more context than the cards, and the gap widens with pool size.</p>
+<p>The workload motivation is coding agents: on the TraceLab trace, the median step adds 875 fresh tokens to a cached prefix of 118,656. That is a memory-capacity problem first.</p>
+<h2>3. The ablation: same chips, slower links</h2>
+<p>This is the result I'd show anyone pricing an alternative accelerator.</p>
+<p>The authors keep the chips, the batches and the price fixed, and raise every collective to the bandwidth and latency of NCCL over TCP sockets, emulated on the native fabric.</p>
+<ul>
+<li>Throughput falls 23.5% to 67.4% across the 36 configurations, 47.3% on average.</li>
+<li>The 70B and 32B models lose 50.4% to 67.4%; 8B loses 23.5% to 32.6%. The bigger models issue 257 to 484 collectives per decode step against 130 to 131 for 8B, so they pay the extra latency more often.</li>
+<li>Tokens per dollar drops below the GPU server in all 36 configurations (0.36 to 0.98 times), and tokens per joule in 31 of 36. 70B BF16 at 16K goes from 429K to 184K tokens per dollar; 70B 8-bit at 8K from 1.90M to 0.62M.</li>
+</ul>
+<p>The smaller scaling test shows why. For Llama-3.1-8B 8-bit at 32K on eight chips, native links give a 5.80 times prefill speedup over one chip, and collectives take 6.5% of a decode step. Over TCP-class links the speedup is 2.20 times, gains stall past four chips, and collectives fill 62.6% of the step.</p>
+<p>The point is latency more than bandwidth. A decode collective moves kilobytes, so its cost is mostly startup. A 64 KiB all-gather takes 15.0 µs on a ring of four Galaxy chips and 21.0 µs on eight, against 119 and 257 µs over NCCL TCP sockets on the GPU server. At hundreds of collectives per token, that difference is the whole result.</p>
+<h2>4. How the Galaxy keeps collectives cheap</h2>
+<p>Three things in the stack do the work:</p>
+<ol>
+<li><strong>Host out of the data path.</strong> A worker core writes over the on-chip network to a fabric router running on an Ethernet core, which sends it over the link; hardware handles headers and Go-Back-N retransmit. A 64 MiB all-gather reaches 85 to 86 GB/s of bus bandwidth on four and eight chip rings, against 5.5 and 4.3 GB/s over TCP sockets.</li>
+<li><strong>All-gather fused with the matmul.</strong> The attention-head all-gather runs on one set of Tensix cores while another set runs the output projection on each shard as it lands, which takes one of the two collectives per layer off the critical path.</li>
+<li><strong>Captured decode.</strong> One decode step is recorded at startup with Metal Trace and replayed from the device command queue, so collectives run back-to-back without waiting for Python dispatch.</li>
+</ol>
+<p>The software runs on TT inference server 0.25.0 with vLLM on top. The authors also note that 86 GB/s per chip is about a fifth of what the cabled ports could carry, so there is headroom left in firmware and kernels.</p>
+<h2>5. What I'd discount</h2>
+<ul>
+<li><strong>The baseline is a PCIe box.</strong> The RTX PRO 6000 server has no NVLink, and its collectives take half of a decode step at eight GPUs. No HGX B200 or H200 system was measured; the high-end comparisons are per-dollar spec ratios, not runs. My read is that the paper shows cheap chips with fast links beat GPUs with slow links, which is a narrower claim than "beat high-end GPUs."</li>
+<li><strong>Power is measured at different boundaries.</strong> Galaxy power comes from core-rail telemetry and GPU power from NVML board telemetry. The paper itself says the boundary must be stated with every value. I'd treat the tokens per joule ratios as soft and lean on tokens per dollar.</li>
+<li><strong>Prices are list and reseller prices.</strong> $5,000 per chip and $28,137 per GPU are not what a large buyer pays, and the ranking is sensitive to both.</li>
+<li><strong>Throughput, not latency.</strong> The comparison is tokens at maximum batch. I did not see TTFT or inter-token latency targets applied, and a 32-chip pool at its memory limit may not meet the same interactive SLO as the GPU server.</li>
+<li><strong>Dense models only, and a vendor co-author.</strong> No MoE runs, and one author is at Tenstorrent. The TCP-class case is emulated on the same chips rather than run on a real cluster.</li>
+</ul>
+<h2>6. What I'd take from it</h2>
+<ol>
+<li><strong>Price replicas, not devices.</strong> Compare tokens per dollar for a whole tensor-parallel pool at the context lengths you actually serve. In the paper the ranking flips from 0.52 times at one device to 1.54 times at eight.</li>
+<li><strong>Measure collective latency at decode sizes.</strong> Benchmark a 64 KiB all-gather, not a large one. If it costs a few hundred microseconds, a cheap-accelerator pool will spend most of its decode step waiting.</li>
+<li><strong>Count collectives per step.</strong> 130 per step for an 8B model and up to 484 for a 70B one is the multiplier on whatever your link latency is.</li>
+<li><strong>Size for KV, not weights.</strong> For agent traffic with 100K-token prefixes, what limits batch size is how much memory is left after the weights, and that improves faster than linearly as you pool.</li>
+</ol>
+<p>My own opinion is that the device spec sheet is getting less useful for inference purchasing than a single number: decode-size collective latency across the pool you plan to buy. This paper is the clearest measurement I've seen of how much that one number is worth.</p>
+<h2>Sources</h2>
+<ul>
+<li>Jiang, Glušac, Yuan, Yoneki, "Introducing Cluster Efficiency to LLM Serving: Pooling Economical Accelerators over Fast Interconnects," arXiv 2611.02975, Nov 2, 2026: <a href="https://arxiv.org/abs/2611.02975" target="_blank" rel="noopener noreferrer">abstract</a>, <a href="https://arxiv.org/html/2611.02975v1" target="_blank" rel="noopener noreferrer">full text</a></li>
+<li>Tenstorrent, "<a href="https://tenstorrent.com/hardware/galaxy" target="_blank" rel="noopener noreferrer">Tenstorrent Galaxy Blackhole</a>" product page (specifications and $160,000 list price)</li>
+<li>Tenstorrent, <a href="https://tenstorrent.com/hardware/cards" target="_blank" rel="noopener noreferrer">Blackhole cards</a> product page</li>
+<li>Tenstorrent, <a href="https://github.com/tenstorrent/tt-inference-server" target="_blank" rel="noopener noreferrer">tt-inference-server</a> on GitHub</li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
