@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kimi K3.1 Pro Weights Are Out: What a 2.8T MXFP4 Model Asks of Your Cluster — Anpoo Sivanadi</title>
+  <meta name="description" content="Moonshot AI launched Kimi K3.1 Pro on its API in late October and promised the weights by November 4." />
+  <link rel="canonical" href="https://asivanadi0.github.io/kimi-k3-1-pro-open-weights.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Kimi K3.1 Pro Weights Are Out: What a 2.8T MXFP4 Model Asks of Your Cluster — Anpoo Sivanadi" />
+  <meta property="og:description" content="Moonshot AI launched Kimi K3.1 Pro on its API in late October and promised the weights by November 4." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/kimi-k3-1-pro-open-weights.html" />
+  <meta property="article:published_time" content="2026-11-04T18:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Kimi K3.1 Pro Weights Are Out: What a 2.8T MXFP4 Model Asks of Your Cluster</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-04T18:00:00-08:00">4 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>Moonshot AI launched Kimi K3.1 Pro on its API in late October and promised the weights by November 4. They are now on Hugging Face as <a href="https://huggingface.co/moonshotai/Kimi-K3.1-Pro" target="_blank" rel="noopener noreferrer">moonshotai/Kimi-K3.1-Pro</a>: 2.8 trillion total parameters, 104 billion active per token, a 1,048,576-token context window, and routed experts that ship in MXFP4 from quantization-aware training rather than as a post-hoc quant.</p>
+<p>I care more about what it takes to serve than about the benchmark table. Here is the architecture, the deployment numbers from the day-zero <a href="https://recipes.vllm.ai/moonshotai/Kimi-K3.1-Pro" target="_blank" rel="noopener noreferrer">vLLM recipe</a>, the benchmarks with their footnotes, and the license clause that matters if you sell inference.</p>
+<h2>1. The architecture, from the model card and config</h2>
+<p>The <a href="https://huggingface.co/moonshotai/Kimi-K3.1-Pro" target="_blank" rel="noopener noreferrer">model card</a> and <code>config.json</code> give the full layout:</p>
+<ul>
+<li><strong>93 layers</strong>, one dense and the rest MoE.</li>
+<li><strong>896 routed experts, 16 selected per token, plus 2 shared experts.</strong> Expert hidden size is 3,072, and routing goes through a latent MoE projection of 3,584 against a model width of 7,168.</li>
+<li><strong>69 Kimi Delta Attention (KDA) layers and 24 Gated DSA layers.</strong> KDA is Moonshot's linear attention with a fixed-size recurrent state and a short convolution (kernel size 4). The 24 softmax layers sit at every fourth position from layer 4 to 92, plus layer 93.</li>
+<li><strong>Gated DeepSeek Sparse Attention replaces K3's full-attention MLA.</strong> The card says this is the main change from Kimi K3. An indexer with 32 heads of dimension 128 picks the top 2,048 tokens for each query, and attention runs over those. The MLA compression stays: a KV latent rank of 512 plus a 64-dimension RoPE part.</li>
+<li><strong>MXFP4 weights and MXFP8 activations, trained in.</strong> The quantization config applies MXFP4 to the routed expert linears. Attention, shared experts, the dense layer's MLP, the router, the LM head and the vision tower stay in BF16. The safetensors metadata counts 57.4 billion BF16 parameters.</li>
+<li><strong>Vision:</strong> a 401M-parameter MoonViT-V2 encoder. Inputs are text and images.</li>
+</ul>
+<p>The checkpoint is 96 safetensors shards. Summing file sizes from the Hugging Face API gives about 1.56 TB.</p>
+<p>What this means in practice: only 24 of 93 layers keep a per-token KV cache, and in those 24 the attention cost per decoded token is bounded by the 2,048 selected tokens rather than the full context. The other 69 layers carry state that does not grow with sequence length. That is how a 1M-token window becomes something you can actually serve, and it is why the long-context numbers below look the way they do.</p>
+<h2>2. What it takes to serve</h2>
+<p>The vLLM recipe (vLLM 0.34.0 or newer) is the most concrete deployment document so far. The baseline on NVIDIA is one tensor-parallel group of eight GPUs: <strong>either two GB300 NVL4 trays or a single B300 node.</strong> The recipe says throughput was not tuned for that baseline.</p>
+<p>My own arithmetic on why eight GPUs is the floor: 1.56 TB of weights against 8 × 268 GB = 2.14 TB of HBM on a B300 node leaves roughly 580 GB for KV cache, activations and CUDA graphs before any overhead. An 8× H200 node has 1.13 TB, which cannot hold the weights at all, so Hopper means going multi-node.</p>
+<p>Other hardware in the recipe:</p>
+<ul>
+<li><strong>AMD MI355X:</strong> one node at TP8 in a day-zero ROCm image. So far only one tuned configuration has run there (concurrency 48 with decode context parallelism, a K3.1 draft model for speculative decoding, and host KV offload).</li>
+<li><strong>NVIDIA VR200:</strong> listed as a preview on two trays in a CUDA 13.4 image. The recipe says it has not been tuned or verified on Rubin.</li>
+<li><strong>Zhenwu PPUs:</strong> two 16-PPU 810E nodes at TP32/EP32, or four 8-PPU M890 nodes at TP8/DP4/EP32, without speculative decoding.</li>
+</ul>
+<p>The tuning results, all on 8× B300 or 8× GB300 as stated by the recipe:</p>
+<ul>
+<li><strong>Tensor plus expert parallelism</strong> (attention at TP8, routed experts on the MegaMoE kernel) prefills a single 340K-token prompt in about 10 seconds, against about 15 seconds at plain TP8. That was measured on a pre-release checkpoint, one request at a time.</li>
+<li><strong>Decode context parallelism (DCP8)</strong> shards the MLA latent and indexer-key caches across the eight GPUs instead of replicating them. It holds about 18.5 million tokens of FP8 KV cache versus 2.6 million at TP8, roughly 7 times more. Decode steps are 7 to 25 percent slower at the same batch, so the recipe recommends it only when KV capacity is the limit.</li>
+<li><strong>Low-latency decode</strong> switches decode to a fused CuTe DSL path. It cuts the decode step by 1.6 to 1.7 times at batch 1 and 1.2 to 1.3 times at batch 32 to 64, and brings DCP8 decode to within 6 percent of TP8. It needs TP8 and no expert parallelism.</li>
+<li><strong>NVFP4 KV cache</strong> stores the MLA latent at 352 bytes per token per layer instead of 576, for about 1.5 times more cached tokens than FP8. The indexer keys stay in FP8, so token selection is unchanged. GSM8K matched FP8 (96.1 versus 96.2 percent), but the recipe says long-context accuracy has not been measured yet.</li>
+<li><strong>Prefill/decode disaggregation</strong> runs a TP8 prefill pool with expert parallelism and a DEP16 decode pool, with KV moving over NIXL. Every worker must set <code>VLLM_SSM_CONV_STATE_LAYOUT=DS</code>, because the KDA convolution state is transferred alongside the KV cache and the NIXL connector refuses to start without that layout.</li>
+</ul>
+<p>That last item is easy to miss: a hybrid model has two kinds of per-request state, and your transfer path has to move both.</p>
+<p>My own back-of-envelope on the cache: at 576 bytes per token per layer across 24 MLA layers, the FP8 latent alone is about 13.8 KB per token, before indexer keys. That is small for a model this size and explains how eight GPUs can hold millions of tokens.</p>
+<h2>3. The benchmarks, read with the footnotes</h2>
+<p>All numbers below come from Moonshot's own table, at reasoning effort <code>max</code>. Competitor numbers are mostly cited from their reports or leaderboards, and many of Moonshot's runs use the Claude Code harness.</p>
+<p>Where it leads or ties the closed models in the table:</p>
+<ul>
+<li><strong>Terminal-Bench 4.0:</strong> 65.7, against 66.4 for Claude Opus 5.5 and 58.2 for GPT-6 Astra. The best other open model listed, DeepSeek-V4.1-Flash-1017, is at 42.3.</li>
+<li><strong>SWE Marathon v1.1:</strong> 51.7, the top score in the table (Opus 5.5 at 46.3).</li>
+<li><strong>HLE-Full with tools:</strong> 70.0, also the top score in the table.</li>
+<li><strong>Kimi Hallu Bench Hard with tools</strong> (internal, lower is better): 8.3, against 5.5 for GPT-6 Astra and 15.0 for Opus 5.5.</li>
+</ul>
+<p>Where it clearly trails:</p>
+<ul>
+<li><strong>ProgramBench:</strong> 31.5, against 65.0 for Opus 5.5 and 50.0 for GPT-6 Astra.</li>
+<li><strong>HLE-Full without tools:</strong> 51.1, against 59.8 for Opus 5.5.</li>
+<li><strong>ExploitBench:</strong> 74.7, against 100 for GPT-6 Astra. This one is deliberate. Moonshot's <a href="https://www.kimi.ai/blog/kimi-k3-1-pro" target="_blank" rel="noopener noreferrer">launch post</a> says it removed cyber-related data from both mid-training and RL for the open release, and that a version without that removal scored 90.5 on its internal xdev-bench-hard, against 81.0 for K3.1 Pro.</li>
+</ul>
+<p>Two footnotes worth reading before you quote any of this. PostTrainBench was run on H20s instead of the leaderboard's H100s, with DeepSeek-V4.1-Flash-1017 as the judge. Several rows are internal benchmarks with no outside reproduction. Treat the table as Moonshot's claim until third-party runs land.</p>
+<h2>4. The license clause for anyone selling inference</h2>
+<p>The <a href="https://huggingface.co/moonshotai/Kimi-K3.1-Pro/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">license</a> is not plain MIT. Two clauses matter:</p>
+<ul>
+<li>If you run a <strong>Model as a Service business</strong> and your company's revenue exceeds 20 million US dollars over any 12 months, you need a separate agreement with Moonshot before commercial use.</li>
+<li>Products with more than 100 million monthly active users or more than 20 million dollars in monthly revenue must display "Kimi K3.1-Pro" prominently in the UI.</li>
+</ul>
+<p>Both are waived for internal use. For a platform team serving it to its own engineers, that is the case that applies. For an inference provider, it is a contract conversation.</p>
+<h2>5. What I'd take from it</h2>
+<ol>
+<li><strong>Plan for one B300 node or two GB300 trays as the unit.</strong> Anything with less than about 2 TB of HBM per TP group means multi-node from the start.</li>
+<li><strong>Decide between capacity and speed per workload.</strong> DCP8 gives about 7 times more cached tokens for 7 to 25 percent slower decode. Long-lived agent sessions want the first, short chat wants the second. Running two pools is reasonable.</li>
+<li><strong>Hold off on NVFP4 KV for long-context traffic</strong> until someone publishes long-context accuracy. The GSM8K check does not cover the case it is meant for.</li>
+<li><strong>Check your disaggregation stack for recurrent state.</strong> KDA state has to move with the KV cache, and that is new work if your connector only knows attention caches.</li>
+<li><strong>Run your own evals on your own harness.</strong> Many of the headline numbers depend on Claude Code or Kimi Code as the agent loop.</li>
+</ol>
+<p>My own opinion is that the shipping format is the real story. Quantization-aware MXFP4 for the experts, sparse attention in a quarter of the layers and linear attention everywhere else together turn a 2.8T model into a single-node deployment on current Blackwell hardware. It is also a strong argument for buying HBM capacity per node over more nodes.</p>
+<h2>Sources</h2>
+<ul>
+<li><a href="https://huggingface.co/moonshotai/Kimi-K3.1-Pro" target="_blank" rel="noopener noreferrer">moonshotai/Kimi-K3.1-Pro</a> on Hugging Face (model card, <code>config.json</code>, safetensors metadata, <a href="https://huggingface.co/moonshotai/Kimi-K3.1-Pro/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">license</a>)</li>
+<li>Moonshot AI, <a href="https://www.kimi.ai/blog/kimi-k3-1-pro" target="_blank" rel="noopener noreferrer">Kimi K3.1 Pro launch post</a></li>
+<li>vLLM Recipes, <a href="https://recipes.vllm.ai/moonshotai/Kimi-K3.1-Pro" target="_blank" rel="noopener noreferrer">moonshotai/Kimi-K3.1-Pro</a></li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
