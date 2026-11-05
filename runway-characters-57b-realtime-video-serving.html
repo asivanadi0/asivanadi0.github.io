@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Serving a 57B Video Model at 24 fps on Four H100s: Notes on the Runway Characters Paper — Anpoo Sivanadi</title>
+  <meta name="description" content="Most inference writing is about LLM throughput: batch more, amortize the weights." />
+  <link rel="canonical" href="https://asivanadi0.github.io/runway-characters-57b-realtime-video-serving.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Serving a 57B Video Model at 24 fps on Four H100s: Notes on the Runway Characters Paper — Anpoo Sivanadi" />
+  <meta property="og:description" content="Most inference writing is about LLM throughput: batch more, amortize the weights." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/runway-characters-57b-realtime-video-serving.html" />
+  <meta property="article:published_time" content="2026-11-05T06:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Serving a 57B Video Model at 24 fps on Four H100s: Notes on the Runway Characters Paper</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-05T06:00:00-08:00">5 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>Most inference writing is about LLM throughput: batch more, amortize the weights. Runway's new paper, <a href="https://arxiv.org/abs/2611.05642" target="_blank" rel="noopener noreferrer">Runway Characters: Serving a 57B Video Diffusion Transformer for Real-Time Conversation</a>, is about the opposite problem. One user, batch size one, and a hard deadline that repeats every 166.7 ms for as long as the conversation lasts.</p>
+<p>It is also one of the more honest production papers I have read this year, rolled-back kernel and compiler-only bugs included.</p>
+<h2>1. The workload</h2>
+<p>The user speaks, a voice agent answers, and an autoregressive video diffusion transformer animates a face to that answer while it plays. From the paper:</p>
+<ul>
+<li><strong>57B parameters in the block linears</strong>, run in FP8 with per-token activation scales and per-channel weight scales.</li>
+<li><strong>60 blocks, 4 denoising passes per step.</strong> One step produces one latent frame, which a separate VAE decoder turns into 4 video frames at 704×1088.</li>
+<li><strong>The deadline:</strong> at 24 fps, 4 frames is 166.7 ms. Fall behind by more than a few buffered chunks and both picture and voice stall.</li>
+<li><strong>240 attention calls per step</strong> (4 passes × 60 blocks). Each call writes 757 new tokens into its own 5,788-slot KV cache and reads all of it: 1,246 global slots written once per session plus a window of 6 latent frames.</li>
+<li><strong>Compute:</strong> 343 TFLOP of GEMMs and 30 TFLOP of attention per step. Sustained at 24 fps, that is 2.24 PFLOP/s, more than one H100's 1.98 PFLOP/s dense FP8 peak.</li>
+</ul>
+<p>Batch size one is deliberate: at 757 tokens the GEMMs already hit about two-thirds of FP8 peak, so a second session would nearly double the step.</p>
+<h2>2. Where the time went</h2>
+<p>The launch software ran on eight H100s per session. Replayed on four (TP-3 for the transformer plus one GPU for the decoder), it took 239.2 ms of GPU time per step against the 166.7 ms budget. The breakdown is the most useful table in the paper:</p>
+<ul>
+<li>FP8 GEMMs: 84.4 ms</li>
+<li><strong>KV-cache upkeep: 69.7 ms (29% of the step)</strong></li>
+<li>TP all-reduce (NCCL): 28.6 ms</li>
+<li>Activation quantization: 19.7 ms</li>
+<li>Attention kernel: 13.7 ms</li>
+<li>AdaLN modulation: 11.8 ms</li>
+</ul>
+<p>Attention itself was 6% of the step. The real cost was work repeated on every read of a mostly unchanged cache: RoPE re-applied to every cached key, the whole cache re-quantized to FP8 in each of the 240 calls, and the window advanced by copying.</p>
+<h2>3. Move the work from read time to write time</h2>
+<p>The fix is one idea applied four ways: do once per write what was done once per read.</p>
+<ul>
+<li><strong>Ring cache with a device-side write position.</strong> All layers share one allocation and each new frame goes into a circular slot with <code>index_copy_</code>. The write position is a device tensor, so the CUDA graph captures a pointer instead of a Python integer and replays every step.</li>
+<li><strong>RoPE at write, plus a delta rotation at reset.</strong> Queries and keys are rotated once before the cache write, removing about 0.5 GB of memory traffic per block forward. Positions reset every 42 steps, and since the temporal angle is affine in the frame index, the reset is one rotation of each cached window key (dequantize, rotate in fp32, requantize). That costs one slow step in 42 (263 ms), which the playout buffer absorbs.</li>
+<li><strong>FP8 at write.</strong> K and V are stored in <code>float8_e4m3</code> with per-(layer, head) scales, the descale granularity FlashAttention-3's FP8 kernels already take, so no rescaling kernel is needed. Scales are calibrated once per session from the first six steps' amax times a 1.5 margin.</li>
+<li><strong>Fused pre-attention and constant folding.</strong> Three CuTe DSL kernels fuse the chain from QK norm to ring write, and because the schedule is fixed, AdaLN modulations are computed once and cached (11.8 ms to 0.8 ms).</li>
+</ul>
+<p>The three cache changes save 66.7 of the 76.7 ms the production configuration saves, and cache upkeep drops from about 68 ms to 6 ms. The diffusion step goes from 240.9 ms to 159.3 ms, and the session needs four GPUs instead of eight.</p>
+<h2>4. Fusing the all-reduce into the GEMM</h2>
+<p>With the cache work gone, the next cost was the all-reduce after each down-projection: 208 µs at TP-3, 240 times a step. Two observations here are worth keeping.</p>
+<p>First, <strong>swapping the collective did not help.</strong> An NVLink SHARP multimem all-reduce, which does the reduction in the NVSwitch, saved only 0.4 ms per step. The FP8 GEMM could not write into the symmetric buffer, which forced a copy, and the reduction still waited for the whole GEMM.</p>
+<p>Second, <strong>fusion did help.</strong> They extended ParallelKittens' fused GEMM + all-reduce. A persistent kernel fills all 132 SMs. Compute SMs write output tiles into symmetric memory and bump a counter at the tile's owner rank, and the owner reduces the tile in the switch with <code>multimem.ld_reduce</code> and broadcasts it with <code>multimem.st</code> while later tiles are still computing. Their changes: an FP8 GEMM that reduces in bf16 (Hopper's <code>ld_reduce</code> has no FP8 form), 16-byte vectorized reductions, a shared tail queue, and odd world sizes like TP-3.</p>
+<p>At the production shape the fused call takes 153.8 µs against 208.2 µs for <code>_scaled_mm</code> plus NCCL, hiding 54 to 68% of the all-reduce. The win depends on shape: 1.35× at 757 tokens but 1.01× at 11,136. The diffusion step goes from 159.3 ms to 147.4 ms, which is 43% of FP8 peak.</p>
+<h2>5. The production story</h2>
+<p>This is the part I would hand to anyone who runs inference.</p>
+<p>The fused kernel served production in August 2026 until, after a PyTorch and NCCL upgrade, workers ran out of memory binding NVLS multicast buffers. The kernel kept buffers per token count, and first forwards have prompt-dependent lengths, which fixed-prompt benchmarks never exercise. Reverting was a config change because every optimization sits behind a switch that keeps the plain path. Now only the steady-state shape is fused. After a 15-hour canary the kernel was re-enabled on October 8, and in the 15 days after, 0.7% of sessions averaged 24 fps or less, compared with 7 to 23% in each of the five weeks before.</p>
+<p>Two bugs passed every eager test and failed only when compiled. Inductor legally reordered a read past the next call's write on a shared symmetric buffer (96% of elements wrong with 60 calls in a graph), and CUDA graph trees copied unmarked symmetric buffers into their own pool, so peers never saw the partials.</p>
+<p>A few other numbers stood out to me:</p>
+<ul>
+<li><strong>One <code>.item()</code> per step</strong>, used to check a rolling FP8 amax, took the step from 168.5 ms to 278 ms by stopping the CPU from running ahead of the GPU.</li>
+<li><strong>Worker start-up is a median 6.5 minutes</strong>, 4.2 of them compiling, so capacity has to be held warm.</li>
+<li><strong>Seven weeks of telemetry:</strong> 0.55% of sessions that streamed at least a second averaged 23.5 fps or less.</li>
+<li><strong>Latency:</strong> the median conversational turn is 2.13 s, and the voice agent takes 1.42 s of it. Runway's pipeline takes 493 ms. The fused kernel does not shorten the turn; in the paper's words, it buys capacity, not latency.</li>
+</ul>
+<h2>6. Blackwell is not a drop-in speedup</h2>
+<p>Three B200s run production precision in real time at 154.3 ms per step. But two H100 wins behave differently:</p>
+<ul>
+<li><strong>The FP8 cache saves 17.0 ms on H100 and costs 2.4 to 6.7 ms on B200</strong>, because their build has no Blackwell FP8 attention that accepts per-head scales, so the cache gets dequantized before every call.</li>
+<li><strong>Sharing a GPU between decode and diffusion misses real time.</strong> Two B200s take 195.0 ms, because the shared GPU sits at its 1000 W power cap, slowing its kernels by 18 to 26% and stalling the other rank at every all-reduce.</li>
+</ul>
+<p>NVFP4 matmuls get two B200s to 141.4 ms, but the output sits 3 dB below the run-to-run PSNR floor, so they treat it as a speed bound rather than a configuration.</p>
+<h2>7. Caveats</h2>
+<p>The comparison with StreamDiffusionV2 and Live Avatar (both 14B) is a feasibility check, not a like-for-like benchmark, and output quality was not compared. The SyncNet lip-sync intervals bound the changes but, as the authors say, do not prove equivalence. The model and code are not released.</p>
+<h2>8. What I'd take from it</h2>
+<ol>
+<li><strong>Profile per-read versus per-write work in any cache-heavy loop.</strong> The attention kernel may not be your bottleneck.</li>
+<li><strong>Fuse communication into the producer before you swap collectives.</strong> A faster all-reduce that still waits for the whole GEMM saves little.</li>
+<li><strong>Run every custom kernel test under <code>torch.compile</code> and CUDA graphs</strong>, chained, not one call at a time.</li>
+<li><strong>Benchmark with production input variety, and keep a switch to the plain path for every optimization.</strong></li>
+<li><strong>Re-check each optimization per GPU generation.</strong> An FP8 cache was a 17 ms win on Hopper and a loss on Blackwell with their stack.</li>
+</ol>
+<p>My own opinion is that batch-size-one, deadline-bound serving is going to matter more as voice and video agents spread, and the LLM serving playbook of batching harder does not apply to it. This paper is a good map of what does apply.</p>
+<h2>Sources</h2>
+<ul>
+<li>Runway, <a href="https://arxiv.org/abs/2611.05642" target="_blank" rel="noopener noreferrer">Runway Characters: Serving a 57B Video Diffusion Transformer for Real-Time Conversation</a>, arXiv:2611.05642 (<a href="https://arxiv.org/html/2611.05642" target="_blank" rel="noopener noreferrer">HTML version</a>)</li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
