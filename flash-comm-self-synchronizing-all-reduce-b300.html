@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Removing the Barriers From All-Reduce: Notes on flash-comm for Decode on Eight B300s — Anpoo Sivanadi</title>
+  <meta name="description" content="Tensor-parallel decode runs the same small all-reduce at every layer of every token." />
+  <link rel="canonical" href="https://asivanadi0.github.io/flash-comm-self-synchronizing-all-reduce-b300.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Removing the Barriers From All-Reduce: Notes on flash-comm for Decode on Eight B300s — Anpoo Sivanadi" />
+  <meta property="og:description" content="Tensor-parallel decode runs the same small all-reduce at every layer of every token." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/flash-comm-self-synchronizing-all-reduce-b300.html" />
+  <meta property="article:published_time" content="2026-11-05T18:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Removing the Barriers From All-Reduce: Notes on flash-comm for Decode on Eight B300s</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-05T18:00:00-08:00">5 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>Tensor-parallel decode runs the same small all-reduce at every layer of every token. At that size, the question is less how fast the link is and more how many times the GPUs have to agree that it is safe to touch a buffer. A new paper from ScitiX.AI, <a href="https://arxiv.org/abs/2611.06634" target="_blank" rel="noopener noreferrer">flash-comm: Self-Synchronizing Collective Communication for LLM Decoding</a>, goes after that agreement cost directly, and the numbers are specific enough to be worth going through.</p>
+<h2>1. The problem: the barrier costs as much as the data</h2>
+<p>A collective needs three guarantees. Data must be published before it is consumed, one phase must finish before the next starts, and a buffer can only be reused once every reader is done. The usual way to get all three is a group-wide barrier at entry and another at exit.</p>
+<p>The authors measured that cost under CUDA Graph execution, subtracting the empty-kernel floor to isolate the inter-GPU part:</p>
+<ul>
+<li><strong>H100:</strong> 2.66 μs net barrier, against 2.54 μs for a complete 1 KB all-reduce.</li>
+<li><strong>H200:</strong> 1.87 μs against 2.46 μs.</li>
+<li><strong>B300:</strong> 4.33 μs against 3.33 μs.</li>
+</ul>
+<p>On B300, one barrier takes longer than the entire small all-reduce. Both of the strongest baselines pay two of them per call: NCCL's symmetric-window path and SGLang's custom all-reduce v2 each have two entry and two exit synchronization steps, per the paper's Table 3.</p>
+<p>In their profiled decode workload, all-reduce is 1.68 ms of a 14.73 ms iteration, or 11.4%. That number matters later, because it caps what any all-reduce improvement can do for time per output token.</p>
+<h2>2. The idea: readiness travels with the data</h2>
+<p>A receiver does not need to know that every GPU has arrived. It needs to know that the specific block it is about to read has arrived. flash-comm makes each block carry that evidence, so the consumer polls the block directly and the group barrier goes away. There are two encodings:</p>
+<ul>
+<li><strong>Sentinel readiness.</strong> Receive storage is pre-filled with a reserved bit pattern. A producer overwrites it with data, so seeing anything other than the sentinel proves arrival with no extra bytes on the wire. After capturing the value, the consumer restores the sentinel.</li>
+<li><strong>Sequence-number readiness.</strong> Each 16-byte transfer unit holds 8 bytes of payload plus two copies of the current call's sequence number. No sentinel check or re-arming is needed, but half the traffic is overhead.</li>
+</ul>
+<p>Both run over rotating buffer slots, chosen by a device-side call counter. That detail is what makes it safe under CUDA Graph replay, where a host-side argument would be frozen at capture time.</p>
+<h2>3. Details that usually go wrong</h2>
+<p>Sentinels have an obvious hole: every fp32 and bf16 bit pattern is a legal input, so real data can equal the sentinel and look permanently unready. The paper replaces that exact pattern with a canonical quiet NaN before publishing, and does the same for partial sums, since a reduction can produce the pattern from inputs that never contained it.</p>
+<p>The second hole is non-finite results. In a switch-side reduction, a NaN or infinity could mean "an input is still the sentinel" or "the true answer is non-finite." After a bounded polling interval, the kernel switches to verifying each source explicitly and completes once all sources have published, so legitimate NaN and infinity inputs still finish.</p>
+<p>The third is determinism. Floating-point addition is not associative, so replicas that accumulate in arrival order can produce different bits from identical inputs. A tolerance check against a reference will pass both, and then an argmax or an expert-routing decision can diverge across GPUs. flash-comm's rule is that an output block is either computed once by a single owner GPU and distributed, or every replica folds contributions in the same rank order, 0 through N-1. Transport stays asynchronous; the expression being evaluated does not.</p>
+<h2>4. Choosing the protocol with a two-term cost model</h2>
+<p>No single protocol wins across message sizes, so the library models latency per protocol as <code>T = a + b*S</code>, with an intercept for launch, readiness handling and round trips, and a slope for per-byte cost. The intercept and slope are calibrated per GPU architecture and group size. The analytical crossing point only locates a search region; the final boundary is placed on a measured neighboring size, and runtime dispatch is a constant-time table lookup.</p>
+<p>The byte accounting explains the shape of the policy. A one-hop exchange moves about (N-1)S per GPU, while reduce-scatter plus all-gather moves 2(N-1)S/N:</p>
+<ul>
+<li>At N=8: 7S against 1.75S.</li>
+<li>At N=4: 3S against 1.5S.</li>
+<li>At N=2: S for both, so the second phase saves nothing and the two-GPU policy stays one-hop.</li>
+</ul>
+<p>In the shipping policy, sequence-number readiness is used only on Blackwell with two GPUs up to 128 KB. Everything else uses sentinels.</p>
+<h2>5. Results on eight B300 GPUs</h2>
+<p>The all-reduce baseline is SGLang custom AR v2, the strongest decode-oriented option over this range. The sweep covers 188 message sizes from 1 KB to 16 MB. Median latency drops 28.8%, with a best case of 43.7%. Selected points from the paper's Table 4, in microseconds:</p>
+<ul>
+<li>1 KB: 3.49 to 3.33 (4.6%)</li>
+<li>128 KB: 4.92 to 4.74 (3.7%)</li>
+<li>512 KB: 9.45 to 6.58 (30.4%)</li>
+<li>1 MB: 12.36 to 7.08 (42.7%)</li>
+<li>4 MB: 20.70 to 14.78 (28.6%)</li>
+<li>16 MB: 53.43 to 42.48 (20.5%)</li>
+</ul>
+<p>The gain is not a uniform shift. It comes from the region where the sharded two-hop path kicks in, since that path both drops two barriers and reduces transferred bytes. At small sizes the field is flat, and the authors note a small 4 to 16 KB region where flash-comm loses, within roughly 1% at the weakest eight-GPU points.</p>
+<p>All-gather uses the same transfer layer without the reduction. Against the fastest of three baselines at each size, it improves all 45 measured size and GPU-count combinations, with an eight-GPU median of 23.8% and a best case of 58.9% (at 512 KB: 8.44 to 3.47 μs).</p>
+<h2>6. How it varies by GPU generation</h2>
+<p>Median all-reduce improvement over AR v2 across the 188 sizes:</p>
+<ul>
+<li><strong>H100 (NVLink 4):</strong> 8.6% at 2 GPUs, 11.8% at 4, 24.3% at 8.</li>
+<li><strong>H200 (NVLink 4):</strong> 4.9%, 9.5%, 22.3%.</li>
+<li><strong>B300 (NVLink 5):</strong> 4.2%, 9.8%, 28.8%.</li>
+</ul>
+<p>The benefit grows with group width everywhere, which is what you would expect if barrier cost scales with participants. The tables also show that H100 and H200, on the same NVLink generation, differ. On the Hopper parts, multicast throughput is about a third of unicast, while on B300 the two are comparable. So the point where two protocols cross moves, and policy tables cannot be copied between systems. If you port this idea to your own stack, plan on a calibration run per platform.</p>
+<h2>7. End-to-end decode</h2>
+<p>The end-to-end test runs DeepSeek-V4-Flash-0731 with tensor-parallel decode on all eight B300s, against custom AR v2, at concurrency 16 to 512. flash-comm has the lowest TPOT at all ten reported points, with reductions of 1.7% to 6.8%:</p>
+<ul>
+<li>Concurrency 32: 4.38 to 4.08 ms, the largest relative gain at 6.8%.</li>
+<li>Concurrency 192: 13.60 to 12.89 ms, the largest absolute gain at 0.71 ms per token.</li>
+<li>Concurrency 256 to 512: 2.2% to 2.9%.</li>
+</ul>
+<p>Two observations of my own. First, a 28.8% median all-reduce gain applied to an 11.4% share of the iteration would be around 3.3% of TPOT, and the paper's own caveat says the share bounds the possible gain. Per-concurrency collective sizes differ, so I would not read the arithmetic as an error, but the headline 6.8% likely depends on which sizes that concurrency exercises. Second, the baseline TPOT in the table is not monotonic: 13.60 ms at concurrency 192 and 9.92 ms at 256. The paper does not explain it, and I would want to know why before comparing absolute numbers with my own setup.</p>
+<h2>8. Limits</h2>
+<ul>
+<li><strong>Single NVLink domain only.</strong> Communicators of 2, 4 and 8 GPUs within one node. Multi-node needs a different transport, routing and failure story.</li>
+<li><strong>Hopper or Blackwell only.</strong> It relies on symmetric peer-accessible memory, <code>multimem.*</code> operations and Programmatic Dependent Launch. Inputs must be bf16 or fp32 with 16-byte alignment. Other cases fall back to the runtime's existing backend.</li>
+<li><strong>Message range:</strong> policy tables cover 16 bytes through 16 MB.</li>
+<li><strong>Lockstep calls.</strong> All ranks must issue the same sequence of collective calls, including empty tensors, or the device-side counters drift apart. Each algorithm family also uses one fixed launch grid.</li>
+<li><strong>Co-residency.</strong> Polling loops spin until data arrives, so publishing and polling blocks must be resident together. The adapter caps launch grids at a measured co-residency bound.</li>
+<li><strong>One serving stack and one model</strong> for the end-to-end result. The evaluation is on the authors' integration with SGLang.</li>
+</ul>
+<h2>9. What I'd take from it</h2>
+<ol>
+<li><strong>Measure your barrier against your smallest collective.</strong> If they are close, synchronization is your cost, not bandwidth.</li>
+<li><strong>Treat readiness as per-block, not per-group,</strong> wherever your data dependencies allow it.</li>
+<li><strong>Do not assume determinism for free.</strong> If replicas reduce independently, fix the fold order, or have one owner compute and broadcast.</li>
+<li><strong>Calibrate per platform.</strong> Hopper and Blackwell differ in multicast-to-unicast ratio, so thresholds do not transfer.</li>
+<li><strong>Check the all-reduce share of your own iteration first.</strong> Here it is 11.4%, and that bounds what any collective work can return.</li>
+</ol>
+<p>My own opinion is that this sort of fixed-cost trimming is where decode on one NVLink domain will keep getting its remaining gains, since the data movement is already close to the hardware. The code and policy tables are not something I could verify from the paper, so the numbers above are the authors' measurements on their eight-GPU machines.</p>
+<h2>Sources</h2>
+<ul>
+<li>Carrie Wang, Jack Li, Jason Zhao (ScitiX.AI), <a href="https://arxiv.org/abs/2611.06634" target="_blank" rel="noopener noreferrer">flash-comm: Self-Synchronizing Collective Communication for LLM Decoding</a>, arXiv:2611.06634 (<a href="https://arxiv.org/html/2611.06634" target="_blank" rel="noopener noreferrer">HTML version</a>)</li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
