@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Which Die Is Your Data On? Notes on CUDA 13.4 Locality Domains for B300 — Anpoo Sivanadi</title>
+  <meta name="description" content="A Blackwell GPU is two compute dies in one package, and until CUDA 13.4 you could mostly pretend it was one device." />
+  <link rel="canonical" href="https://asivanadi0.github.io/cuda-locality-domains-blackwell-b300.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Which Die Is Your Data On? Notes on CUDA 13.4 Locality Domains for B300 — Anpoo Sivanadi" />
+  <meta property="og:description" content="A Blackwell GPU is two compute dies in one package, and until CUDA 13.4 you could mostly pretend it was one device." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/cuda-locality-domains-blackwell-b300.html" />
+  <meta property="article:published_time" content="2026-11-06T06:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Which Die Is Your Data On? Notes on CUDA 13.4 Locality Domains for B300</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-06T06:00:00-08:00">6 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>A Blackwell GPU is two compute dies in one package, and until CUDA 13.4 you could mostly pretend it was one device. A new report from Scitix AI, <a href="https://arxiv.org/abs/2611.07535" target="_blank" rel="noopener noreferrer">Characterizing CUDA Locality Domains on Blackwell GPUs</a>, measures what happens when you stop pretending. It runs on eight B300 SXM6 GPUs with driver 615.71.09, CUDA 13.4, NCCL 2.32.3 and nccl-tests 2.20.0.</p>
+<p>The headline is not "locality is faster". It is that the right control depends on who issues the access, and the wrong one costs you up to 25% on a kernel you may already run.</p>
+<h2>1. What a locality domain is</h2>
+<p>Each B300 exposes two locality domains (LDs). Per the paper, each has 70 of the 148 SMs and about 63.2 MiB of the 126 MiB L2. That is 140 SMs, so the remaining 8 are not part of either domain's SM group, which is why the paper describes the structure as 2×70+8. There are two independent controls:</p>
+<ul>
+<li><strong>Memory placement.</strong> Pass an LD to <code>cuMemCreate</code> (location type <code>CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN</code>) or use an LD-tagged memory pool. <code>cudaMalloc</code> has no way to pick a die and, per the authors' measurements, stripes across both.</li>
+<li><strong>Compute placement.</strong> Split SM resources with <code>cuDevSmResourceSplit</code> and create a green context on one group. SM indices do not map to dies in a contiguous range (the domain-0 set starts <code>{0-3, 6-9, 16-19, ...}</code>), so you verify with <code>%smid</code> rather than guess.</li>
+</ul>
+<p>The authors compare four states at every step: stock, memory-only, compute-only, and both. They add a mismatch state (data on die X, compute on die Y) as a negative control.</p>
+<h2>2. The cost model, and the raw numbers behind it</h2>
+<p>They split the saving from localizing into two terms: the per-access latency you no longer pay, and the change in effective bandwidth. If localizing lowers bandwidth, the second term can eat the first.</p>
+<p>Measured on B300:</p>
+<ul>
+<li>A cross-die dependent HBM access costs 193.4 ns more than a same-die one.</li>
+<li>Cross-die reads that hit in L2 add almost nothing. An 8 MiB cross-die read took 146.9 µs against 144.5 µs same-die, because the line is cached in the accessing die's L2.</li>
+<li>Cross-die writes keep generating fabric traffic. An 8 MiB write went from 292 to 441 µs, and the fabric write-sector count was 33.55M.</li>
+<li>Cross-die read bandwidth is 73% of same-die bandwidth (section 6.5). The abstract separately says cross-die streaming reaches only about 27% of baseline; I could not reconcile those two figures from the text, so treat the 27% as the authors' worst-case streaming number.</li>
+</ul>
+<p>DRAM traffic was the same (1.073 GB) in all eight read configurations, so the differences are L2 and fabric effects.</p>
+<h2>3. Memory placement: a clear win for remote readers, a loss for big streams</h2>
+<p>For a peer GPU or copy engine reading your buffer, putting the source on the right die helps. In nvbandwidth, a 1 MiB remote copy-engine read went from 75.7 GB/s to 157.2 GB/s (2.08×) with memory placement alone. Compute binding alone gave 1.15×. The one-sided test shows where the gain lives: localizing only the source gave 157.7 GB/s, while localizing only the destination gave 75.3 GB/s, the same as stock.</p>
+<p>For large local streams the sign flips. A local 256 MiB device-to-device copy dropped to 0.53× with memory placement, since you are now reading from one die's memory controllers instead of both. The abstract states the same thing from another angle: a 256 MiB streaming buffer pinned to one die is 47% worse.</p>
+<h2>4. Compute placement: where collectives gain</h2>
+<p>For SM-issued collectives, binding to one die did the work and memory placement did nothing. NCCL 2-rank all-gather with symmetric-memory registration, in µs:</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Size</th>
+<th>Stock</th>
+<th>Compute-only</th>
+<th>Speedup</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1 MB</td>
+<td>15.52</td>
+<td>10.78</td>
+<td>1.44×</td>
+</tr>
+<tr>
+<td>4 MB</td>
+<td>19.57</td>
+<td>14.80</td>
+<td>1.32×</td>
+</tr>
+<tr>
+<td>16 MB</td>
+<td>30.63</td>
+<td>25.78</td>
+<td>1.19×</td>
+</tr>
+<tr>
+<td>64 MB</td>
+<td>75.46</td>
+<td>70.30</td>
+<td>1.07×</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The absolute saving stays near 4.5 µs from 512 KB to 16 MB (4.52 µs average, 0.24 µs standard deviation) while the ratio shrinks. That is what a fixed per-operation latency benefit looks like when transfer time grows, and it fits the model.</p>
+<p>The authors checked whether this was just fewer SMs. MPS at 50% and 25% gave 0.999× and 0.997× at 1 MB, against 1.495× for one die's 70 SMs. The launch grid was the same 512 blocks in both states, and runtime fell from 20.26 to 13.52 µs. So it is die placement, not SM count. They could not get usable Nsight Compute counters on the NCCL path, so the mechanism (L2 behavior, scheduling, or fabric traffic) is not pinned down.</p>
+<p>Memory placement can also hurt collectives: an 8-rank all-reduce at 16 MB fell to 0.86× (85.47 to 99.86 µs) with data on one die.</p>
+<h2>5. GEMM needs both controls at once</h2>
+<p>DeepGEMM grouped FP8 GEMM, eight groups split 4+4 across the dies, hot cache, M=8:</p>
+<ul>
+<li>Stock: 29.62 µs</li>
+<li>Memory-only: 39.46 µs (0.75×)</li>
+<li>Compute-only: 28.39 µs (1.04×)</li>
+<li>Both: 21.64 µs (1.37×)</li>
+</ul>
+<p>Memory placement alone is a 25% regression, because all 148 SMs still run while the weights sit on one die. Compute binding alone leaves half the weights remote. Together they are 1.37×, well above the 0.78× you would get by multiplying the two individual results, so the controls interact.</p>
+<p>Two caveats from the paper itself. With L2 flushed before each kernel the gain falls to 1.01-1.05× for FP8, so this is a reuse effect. FP4 gets only 1.06-1.08× hot. A mismatched placement made the same kernel 1.74× slower (21.39 to 37.22 µs), and pinning the whole job to a single die gave only 0.53-0.67× of stock.</p>
+<h2>6. Decode attention: the result that did not survive</h2>
+<p>This is the part I like most. In a bandwidth-bound decode-attention kernel, a row split across the two dies initially showed 1.27× at the default tile size. When each configuration picked its own best tile, none of the eight shapes with a default-tile gain above 1.20× survived: the best-vs-best ratio was 0.867-0.958. The decision rule was fixed before the run. Gains that come from a tile-size accident are easy to publish and easy to ship, so a paper that reports its own gain disappearing is useful.</p>
+<h2>7. The allocation cost nobody mentions</h2>
+<p>Localized allocations are cheap below 32 MiB (about 22 µs extra per create-to-free cycle) and expensive above it. On the B300, full VMM cycles:</p>
+<div class="table-wrap" role="region" aria-label="Table 2" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Size</th>
+<th>Baseline</th>
+<th>LD</th>
+<th>Ratio</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>32 MiB</td>
+<td>135.9 µs</td>
+<td>158.3 µs</td>
+<td>1.16×</td>
+</tr>
+<tr>
+<td>34 MiB</td>
+<td>134.9 µs</td>
+<td>492.0 µs</td>
+<td>3.65×</td>
+</tr>
+<tr>
+<td>64 MiB</td>
+<td>147.9 µs</td>
+<td>814.0 µs</td>
+<td>5.50×</td>
+</tr>
+<tr>
+<td>1 GiB</td>
+<td>877.7 µs</td>
+<td>11,543.4 µs</td>
+<td>13.15×</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The cliff matches <code>PMA_LOCALIZED_MEMORY_ALLOC_STRIDE</code>, 32 MiB. The authors trace it to the open-source kernel module's <code>_kbusUpdateStaticBar1VAMapping_TU102</code>. Localized memdescs are not marked physically contiguous, so the loop steps 2 MiB at a time: 512 iterations for 1 GiB, each with its own full-chip barrier and TLB invalidation. Of each call, 77-87% is barrier and invalidation; page-table writes are only 13-22%.</p>
+<p>Their patch coalesces physically contiguous runs (512 calls down to 32 for 1 GiB) and defers the invalidation to one at the end. They submitted it as <a href="https://github.com/NVIDIA/open-gpu-kernel-modules/pull/1500" target="_blank" rel="noopener noreferrer">NVIDIA/open-gpu-kernel-modules PR 1500</a>, tracked in <a href="https://github.com/NVIDIA/open-gpu-kernel-modules/issues/1499" target="_blank" rel="noopener noreferrer">issue 1499</a>. I have not looked at the diff, and it is not merged as far as I know. Their <code>cuMemCreate</code> numbers, measured on a B200 with the same driver and CUDA version, go from 5745.3 to 818.1 µs at 1 GiB (7.02×), still 5.6× the non-localized 145.6 µs because PMA caps contiguous runs at 32 MiB.</p>
+<p>They also caught their own mistake. An earlier version used <code>PTE_UPGRADE</code> for deferred invalidation, which skips the system memory barrier and looked faster at every size, including below 32 MiB. Switching to <code>PTE_DOWNGRADE</code> removed the fake gain.</p>
+<p>The practical consequence is in the pool numbers: a warmed pool with release threshold set to infinity shows an LD-versus-ordinary difference of -0.06 to -0.01 µs across 2 MiB to 1 GiB. A pool that returns memory on every free is still 14-18% slower.</p>
+<h2>8. What the paper does not cover</h2>
+<ul>
+<li><strong>One platform.</strong> Eight B300s, CUDA 13.4, one driver version. The 193 ns figure and the bandwidth ratio need re-measuring elsewhere.</li>
+<li><strong>MIG was not measured.</strong> It could not be enabled in their container; the MIG discussion relies on NVIDIA documentation (two instances with 70 SMs and 89 GB each) and a substitute experiment.</li>
+<li><strong>No fabric counters on the collective path,</strong> as noted above.</li>
+</ul>
+<h2>9. What I would take from it</h2>
+<ol>
+<li><strong>Ask who issues the access.</strong> Copy engine or peer reader: place memory. SM-issued collective: bind compute. Resident GEMM weights: both, with the work split by die.</li>
+<li><strong>Do not enable LD for large streaming reads or writes.</strong> The 0.53× on 256 MiB copies is the cost.</li>
+<li><strong>Allocate localized memory once.</strong> Build a pool at startup and never trim it; per-request allocation above 32 MiB costs milliseconds per GiB.</li>
+<li><strong>Compare at tuned tile sizes</strong> before believing any die-split kernel gain.</li>
+<li><strong>Verify placement.</strong> Read back <code>LOCALITY_DOMAIN_ORDINAL</code> and check <code>%smid</code>; do not trust an allocation API to put data where you expect.</li>
+</ol>
+<p>My own opinion is that the NCCL result is the one most likely to matter for people running B300 nodes, because small and mid-size collectives are the latency-bound part of decode, and a die-pinned communication stream is a cheap experiment. I would not assume the 1.44× carries over to the full serving path, since the report measures nccl-tests and not an end-to-end engine.</p>
+<h2>Sources</h2>
+<ul>
+<li>Rocky Wang, Joyce Zhou, Keith Jiang, Jason Zhao (Scitix AI), <a href="https://arxiv.org/abs/2611.07535" target="_blank" rel="noopener noreferrer">Characterizing CUDA Locality Domains on Blackwell GPUs</a>, arXiv:2611.07535 (<a href="https://arxiv.org/html/2611.07535" target="_blank" rel="noopener noreferrer">HTML version</a>)</li>
+<li><a href="https://github.com/NVIDIA/open-gpu-kernel-modules/issues/1499" target="_blank" rel="noopener noreferrer">NVIDIA/open-gpu-kernel-modules issue 1499</a> and <a href="https://github.com/NVIDIA/open-gpu-kernel-modules/pull/1500" target="_blank" rel="noopener noreferrer">PR 1500</a>, the authors' proposed driver fix</li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
