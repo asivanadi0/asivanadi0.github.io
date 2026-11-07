@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Why FP8 Attention Barely Beats BF16 on MI355X, and How ZYFA Fixes It — Anpoo Sivanadi</title>
+  <meta name="description" content="FP8 matrix instructions run at twice the BF16 rate on AMD&#x27;s Instinct MI355X: 5.0 PFLOP/s dense FP8 against 2.5 PFLOP/s BF16 at the 2.4 GHz datasheet clock." />
+  <link rel="canonical" href="https://asivanadi0.github.io/zyfa-fp8-flashattention-mi355x-cdna4.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Why FP8 Attention Barely Beats BF16 on MI355X, and How ZYFA Fixes It — Anpoo Sivanadi" />
+  <meta property="og:description" content="FP8 matrix instructions run at twice the BF16 rate on AMD&#x27;s Instinct MI355X: 5.0 PFLOP/s dense FP8 against 2.5 PFLOP/s BF16 at the 2.4 GHz datasheet clock." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/zyfa-fp8-flashattention-mi355x-cdna4.html" />
+  <meta property="article:published_time" content="2026-11-07T06:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Why FP8 Attention Barely Beats BF16 on MI355X, and How ZYFA Fixes It</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-07T06:00:00-08:00">7 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>FP8 matrix instructions run at twice the BF16 rate on AMD's Instinct MI355X: 5.0 PFLOP/s dense FP8 against 2.5 PFLOP/s BF16 at the 2.4 GHz datasheet clock. So FP8 attention should take roughly half the time of BF16 attention at long context. It doesn't. A new paper from Zyphra, <a href="https://arxiv.org/abs/2611.07496" target="_blank" rel="noopener noreferrer">ZYFA: Speed and Accuracy of FP8 FlashAttention on AMD CDNA4</a>, measures AMD's own AITER FP8 attention kernel at 39% of the FP8 peak at 32K tokens, against 49% of peak for its BF16 kernel. The code is at <a href="https://github.com/Zyphra/zyfa" target="_blank" rel="noopener noreferrer">Zyphra/zyfa</a>.</p>
+<p>What I like about the paper is that it doesn't stop at "we wrote a faster kernel". It explains where the cycles go, why the GPU clock depends on your data, and why the usual mixed-precision escape hatch for attention doesn't work.</p>
+<h2>1. The softmax eats the FP8 win</h2>
+<p>FP8 speeds up the two matrix products in attention. It does nothing for the softmax between them, which runs on the vector pipe at the same speed in either precision. The paper counts pipe cycles for one wave (64 threads) computing 32 queries against a 128-key block at head dimension 128:</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Work per block</th>
+<th>Cycles</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>Q</mi><msup><mi>K</mi><mo>&#x022A4;</mo></msup></mrow></math> and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>P</mi><mi>V</mi></mrow></math>, BF16 (matrix pipe)</td>
+<td>2048</td>
+</tr>
+<tr>
+<td><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>Q</mi><msup><mi>K</mi><mo>&#x022A4;</mo></msup></mrow></math> and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>P</mi><mi>V</mi></mrow></math>, FP8 (matrix pipe)</td>
+<td>1024</td>
+</tr>
+<tr>
+<td>Exact softmax, BF16 (vector pipe)</td>
+<td>768</td>
+</tr>
+<tr>
+<td>Exact softmax, FP8 (vector pipe)</td>
+<td>896</td>
+</tr>
+<tr>
+<td>ZYFA "lean P" (vector pipe)</td>
+<td>384</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>In BF16 the softmax fits inside the matrix work with lots of slack. In FP8 it needs 896 vector cycles against 1024 matrix cycles, so you need near-perfect overlap to keep the matrix units fed. The FP8 softmax is actually more expensive than the BF16 one, because the packed FP8 conversion <code>v_cvt_pk_fp8_f32</code> occupies the vector pipe for 8 cycles versus 4 for the BF16 conversion. The exponential <code>v_exp_f32</code> also costs 8 cycles, and there's no packed exponential.</p>
+<p>Thread traces of AITER's FP8 kernel show the matrix pipe idle for 31.7% of cycles while a wave computes probabilities and the other waits at a barrier.</p>
+<h2>2. No hardware help with overlap</h2>
+<p>This is where CDNA4 differs from Hopper and Blackwell. FlashAttention-3 hides the softmax behind asynchronous matrix instructions whose completion the hardware tracks. The MI355X has no tensor memory accelerator, no hardware producer/consumer barrier, and no hardware tracking of MFMA instructions in flight. An FP8 MFMA writes its 16 destination registers without an interlock, so the last ones are only valid 20 wait states after issue. The order you issue instructions in decides everything.</p>
+<p>The paper also documents two things the ISA manual doesn't: packed FP32 instructions stall while an MFMA runs on the same SIMD (a packed-FP32 wave took 3.8 to 4.0× as long next to a matrix-bound wave), and the packed FP8 conversion costs 8 cycles. ZYFA's softmax therefore uses non-packed FP32, and its FP8 kernels are CDNA4 assembly emitted by a Python generator rather than HIP.</p>
+<h2>3. The three techniques</h2>
+<p><strong>Lean P.</strong> Read as an integer, an e4m3 bit pattern grows by 8 each time the value doubles, so it's close to a scaled base-2 log. That's the same trick as Schraudolph's fast exponential. ZYFA computes the FP8 code of each probability directly with one FMA and one integer conversion:</p>
+<div class="math-display" style="overflow-x:auto;margin:1em 0"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>y</mi><mo>&#x0003D;</mo><mn>8</mn><mspace width="0.167em" /><mo stretchy="false">&#x00028;</mo><mi>x</mi><mo>&#x0002B;</mo><mi>&#x003C3;</mi><mo>&#x0002B;</mo><mn>7</mn><mo stretchy="false">&#x00029;</mo><mo>&#x02212;</mo><mi>&#x003B2;</mi></mrow></math></div>
+<p>where <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>x</mi></mrow></math> is the score minus the row max in base-2 units, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>&#x003C3;</mi><mo>&#x0003D;</mo><mn>6</mn></mrow></math> and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>&#x003B2;</mi><mo>&#x0003D;</mo><mn>0.35</mn></mrow></math>. That replaces both the exponential and the FP8 conversion and drops vector cycles per block from 896 to 384. It raises the single-call output error to 1.22 to 1.36× that of an exact exponential, but the kernel's error stays at 0.26× AITER's in geometric mean. It's on by default at head dimension 128. The MLA shape (query-key 192, value 128, as in DeepSeek-V2) keeps exact P because lean P fell just under the correctness threshold in 1 of 24 configurations.</p>
+<p><strong>Ping-pong schedule.</strong> Two waves share each SIMD. One runs its softmax while the other issues matrix instructions. With lean P the softmax wave finishes first, so the loop becomes matrix-bound, which is what you want.</p>
+<p><strong>Per-block scaling and honest normalization.</strong> Most probabilities in a long row sit far below the max, where e4m3 goes subnormal below <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mn>2</mn><mrow><mo>&#x02212;</mo><mn>6</mn></mrow></msup></mrow></math> and rounds to zero below <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mn>2</mn><mrow><mo>&#x02212;</mo><mn>10</mn></mrow></msup></mrow></math>. ZYFA scales each block of 64 probabilities by a power of two so the largest is near 1, and CDNA4's scaled FP8 MFMA undoes the factor for free. It also divides by the sum of the <em>rounded</em> probabilities, computed with one extra MFMA against a vector of ones (about 6% more matrix work). AITER divides by the unrounded sum, so underflowed probabilities still count in the denominator and every output row shrinks a bit. The paper attributes much of AITER's larger error to that.</p>
+<h2>4. The results, and why Gaussian benchmarks lie</h2>
+<p>On random Gaussian inputs at batch 1, kernel-only timing, ZYFA vs AITER's default kernel:</p>
+<div class="table-wrap" role="region" aria-label="Table 2" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Kernel</th>
+<th>2K</th>
+<th>16K</th>
+<th>32K</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>FP8, d=128, MHA</td>
+<td>1.44×</td>
+<td>1.34×</td>
+<td>1.37×</td>
+</tr>
+<tr>
+<td>FP8, d=128, GQA</td>
+<td>1.42×</td>
+<td>1.28×</td>
+<td>1.26×</td>
+</tr>
+<tr>
+<td>FP8, MLA shape, MHA</td>
+<td>2.02×</td>
+<td>1.89×</td>
+<td>1.99×</td>
+</tr>
+<tr>
+<td>BF16, d=128, MHA</td>
+<td>1.05×</td>
+<td>1.03×</td>
+<td>1.02×</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>At 32K the FP8 d=128 kernel hits 53% of the FP8 datasheet peak. The 1.99× at the MLA shape is partly because AITER falls back to Composable Kernel there, which issues FP8 MFMAs that run at the BF16 rate.</p>
+<p>The more interesting part is the clock. On the MI355X, sustained shader clock depends on how many operand bits flip per instruction. An FP8 MFMA loop runs at 2.34 GHz with constant operands, 2.07 GHz when operands change every instruction, and 1.91 to 1.97 GHz with random bit patterns. Board power stayed under the 1400 W cap in all their runs. The throttle counters in <code>amd-smi</code> point at a fast-acting current limit the telemetry doesn't name.</p>
+<p>So on real Q, K and V captured from models at 16K and timed at sustained clocks, the lead shrinks:</p>
+<div class="table-wrap" role="region" aria-label="Table 3" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Model layer</th>
+<th>FP8 speedup (captured)</th>
+<th>FP8 speedup (Gaussian)</th>
+<th>ZYFA / AITER SCLK, captured (MHz)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Mistral-7B L20</td>
+<td>1.16×</td>
+<td>1.30×</td>
+<td>1628 / 2108</td>
+</tr>
+<tr>
+<td>Qwen3-8B L18</td>
+<td>1.17×</td>
+<td>1.29×</td>
+<td>1629 / 2048</td>
+</tr>
+<tr>
+<td>DeepSeek-V2-Lite L13</td>
+<td>1.76×</td>
+<td>1.84×</td>
+<td>1742 / 2219</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>ZYFA uses fewer cycles than AITER, but runs about 400 to 500 MHz slower on real activations. Part of the reason is that AITER lets more probabilities underflow to zero, and zeros flip fewer bits. Worse numerics buy a higher clock. If you benchmark attention kernels on synthetic Gaussian inputs with a 0.1 standard deviation, you get nearly uniform attention and a clock that doesn't match production.</p>
+<h2>5. Mixed precision by head doesn't help; rotation does</h2>
+<p>The obvious fix for FP8 attention error is to keep the most sensitive heads in BF16. The paper tests it carefully and it doesn't pay off. Most of the error comes from quantizing Q, K and V, not from the probabilities, and it's spread across most heads. On Mistral-7B and Qwen3-8B, even 90% of heads in BF16 stays above the BF16 noise band, and by then attention costs about 2.0× the all-FP8 time, more than just running all-BF16 (1.98×). Mixed layers also need a second launch that leaves most of the 256 CUs idle: 5% of Mistral heads in BF16 costs 1.204× instead of the 1.049× you'd expect from the work share.</p>
+<p>A Hadamard rotation of Q and K before quantization is the better trade. On Mistral-7B it roughly halves the input error and cuts per-token KL divergence from the BF16 model from 6.05e-3 to 2.90e-3, at 1.001× the all-FP8 time when fused into the quantization pass. Subtracting the mean key first (K smoothing) helps further on all three models.</p>
+<h2>6. Limits worth knowing</h2>
+<p>The kernels are causal forward only, equal-length batches, sequence length a multiple of 256, no KV-cache prefix and no decode. This is a prefill kernel for long context, and it's MI355X-specific assembly.</p>
+<h2>Closing</h2>
+<p>My own opinion is that the clock result matters beyond AMD. If your attention kernel's speed depends on the distribution of the values it reads, then microbenchmarks on random tensors are a weak proxy for serving throughput, and a kernel can look faster partly by being less accurate. I'd want any FP8 attention comparison I rely on to report captured-activation timings at sustained clocks and an end-to-end KL number next to the speedup.</p>
+<h2>Sources</h2>
+<ol>
+<li>Quentin Anthony, Ganesh Bikshandi, Praneeth Medepalli, Stephen Ebert. <em>ZYFA: Speed and Accuracy of FP8 FlashAttention on AMD CDNA4.</em> arXiv:2611.07496, 2026. https://arxiv.org/abs/2611.07496</li>
+<li>ZYFA source: https://github.com/Zyphra/zyfa</li>
+<li>AITER (AMD inference kernels): https://github.com/ROCm/aiter</li>
+</ol>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
