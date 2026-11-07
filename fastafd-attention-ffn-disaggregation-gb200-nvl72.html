@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>When Does AFD Beat Wide EP on GB200 NVL72? Notes on FastAFD — Anpoo Sivanadi</title>
+  <meta name="description" content="Attention–FFN disaggregation (AFD) splits MoE decode so attention GPUs hold the KV cache and a separate FFN pool runs the experts." />
+  <link rel="canonical" href="https://asivanadi0.github.io/fastafd-attention-ffn-disaggregation-gb200-nvl72.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="When Does AFD Beat Wide EP on GB200 NVL72? Notes on FastAFD — Anpoo Sivanadi" />
+  <meta property="og:description" content="Attention–FFN disaggregation (AFD) splits MoE decode so attention GPUs hold the KV cache and a separate FFN pool runs the experts." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/fastafd-attention-ffn-disaggregation-gb200-nvl72.html" />
+  <meta property="article:published_time" content="2026-11-06T18:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>When Does AFD Beat Wide EP on GB200 NVL72? Notes on FastAFD</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-06T18:00:00-08:00">6 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>Attention–FFN disaggregation (AFD) splits MoE decode so attention GPUs hold the KV cache and a separate FFN pool runs the experts. Wide expert parallelism (wide EP) keeps both on every GPU and shards the experts across the rack. A new paper, <a href="https://arxiv.org/abs/2611.07149" target="_blank" rel="noopener noreferrer">FastAFD: When Does Attention-FFN Disaggregation Pay on Rack-Scale NVLink?</a>, measures both on one GB200 NVL72 rack against a carefully tuned <a href="https://github.com/vllm-project/vllm" target="_blank" rel="noopener noreferrer">vLLM</a> wide-EP baseline. The code is at <a href="https://github.com/hao-ai-lab/FastAFD" target="_blank" rel="noopener noreferrer">hao-ai-lab/FastAFD</a>.</p>
+<p>The useful claim is not "AFD is always faster". It is that, once you tune wide EP per workload, AFD's all-GPU win shrinks to about 1.00–1.17×, and you can predict which side of that range you are on from colocated profiles alone.</p>
+<h2>1. The rack and the models</h2>
+<p>One GB200 NVL72: 18 four-GPU nodes, 72 GPUs in a single NVLink domain. Decode only (prefill is assumed to come from a separate P/D pool). Three production FP8 MoE models:</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>Attention</th>
+<th>Total / active</th>
+<th>Layers</th>
+<th>Experts</th>
+<th>Top-K</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MiniMax-M2.5</td>
+<td>Full (GQA)</td>
+<td>229B / 10B</td>
+<td>62</td>
+<td>256</td>
+<td>8</td>
+</tr>
+<tr>
+<td>Qwen3-235B-A22B</td>
+<td>Full (GQA)</td>
+<td>235B / 22B</td>
+<td>94</td>
+<td>128</td>
+<td>8</td>
+</tr>
+<tr>
+<td>Qwen3.5-397B-A17B</td>
+<td>15 full + 45 linear</td>
+<td>397B / 17B</td>
+<td>60</td>
+<td>512</td>
+<td>10</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Contexts are 4K, 8K, and 16K. Prefill once, then measure steady-state decode. Experts stay in DeepSeek-style block FP8. FastAFD attention uses TensorRT-LLM FMHA; the FFN pool runs a MegaMoE path over NVLink. Each attention GPU's batch is split into two ping-pong microbatches so layer ℓ's remote experts for one microbatch run behind the other's attention.</p>
+<h2>2. The comparison that actually matters</h2>
+<p>Against single-node EP4, FastAFD looks dramatic: 1.30–2.36× all-GPU throughput. That is the wrong baseline for NVL72. Scaling colocated vLLM across the rack lifts the baseline by 22–114%, and the peak sits at interior widths EP16–EP32, not EP64. Once each engine runs at its measured best configuration, FastAFD's all-GPU speedup <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>S</mi><mrow><mi>a</mi><mi>l</mi><mi>l</mi></mrow></msub></mrow></math> is:</p>
+<div class="table-wrap" role="region" aria-label="Table 2" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>Ctx</th>
+<th>Best wide EP</th>
+<th>Best A:F</th>
+<th><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>S</mi><mrow><mi>E</mi><mi>P</mi><mn>4</mn></mrow></msub></mrow></math></th>
+<th><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>S</mi><mrow><mi>a</mi><mi>l</mi><mi>l</mi></mrow></msub></mrow></math></th>
+<th><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>S</mi><mrow><mi>a</mi><mi>t</mi><mi>t</mi></mrow></msub></mrow></math></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MiniMax-M2.5</td>
+<td>4K</td>
+<td>EP32</td>
+<td>9:1</td>
+<td>1.40</td>
+<td>1.00</td>
+<td>1.12</td>
+</tr>
+<tr>
+<td>MiniMax-M2.5</td>
+<td>8K</td>
+<td>EP32</td>
+<td>15:1</td>
+<td>1.52</td>
+<td>1.02</td>
+<td>1.09</td>
+</tr>
+<tr>
+<td>MiniMax-M2.5</td>
+<td>16K</td>
+<td>EP32</td>
+<td>17:1†</td>
+<td>1.56</td>
+<td>1.02</td>
+<td>1.08</td>
+</tr>
+<tr>
+<td>Qwen3</td>
+<td>4K</td>
+<td>EP16</td>
+<td>5:1</td>
+<td>1.30</td>
+<td>1.06</td>
+<td>1.28</td>
+</tr>
+<tr>
+<td>Qwen3</td>
+<td>8K</td>
+<td>EP16</td>
+<td>7:1</td>
+<td>1.41</td>
+<td>1.10</td>
+<td>1.26</td>
+</tr>
+<tr>
+<td>Qwen3</td>
+<td>16K</td>
+<td>EP32</td>
+<td>11:1</td>
+<td>1.42</td>
+<td>1.17</td>
+<td>1.28</td>
+</tr>
+<tr>
+<td>Qwen3.5</td>
+<td>4K</td>
+<td>EP32</td>
+<td>5:1</td>
+<td>2.25</td>
+<td>1.16</td>
+<td>1.39</td>
+</tr>
+<tr>
+<td>Qwen3.5</td>
+<td>8K</td>
+<td>EP32</td>
+<td>5:1</td>
+<td>2.36</td>
+<td>1.10</td>
+<td>1.33</td>
+</tr>
+<tr>
+<td>Qwen3.5</td>
+<td>16K</td>
+<td>EP32</td>
+<td>5:1</td>
+<td>2.11</td>
+<td>0.99</td>
+<td>1.19</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>† still rising at the 18-node rack limit. <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>S</mi><mrow><mi>a</mi><mi>l</mi><mi>l</mi></mrow></msub></mrow></math> counts every allocated GPU, including FFN nodes that serve no requests. <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>S</mi><mrow><mi>a</mi><mi>t</mi><mi>t</mi></mrow></msub></mrow></math> counts attention GPUs only.</p>
+<p>Absolute numbers from Appendix Table A2 (tokens/s/GPU, all GPUs counted) make the same point concrete. At 16K, Qwen3 FastAFD at 11:1 hits 1452 tok/s/GPU against vLLM EP32 at 1240 (1.17×). MiniMax at 17:1 is 1234 against EP32 at 1208 (1.02×). Qwen3.5 at 5:1 is 3955 against EP32 at 3982 (0.99×).</p>
+<h2>3. Two gains and one cost</h2>
+<p>The paper factors the all-GPU result as:</p>
+<div class="math-display" style="overflow-x:auto;margin:1em 0"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>S</mi><mrow><mi>a</mi><mi>l</mi><mi>l</mi></mrow></msub><mo>&#x0003D;</mo><munder><munder><mrow><mfrac><mrow><msub><mi>b</mi><mi>A</mi></msub></mrow><mrow><msub><mi>b</mi><mi>V</mi></msub></mrow></mfrac></mrow><mo>&#x23DF;</mo></munder><mrow><mtext>batch&#x000A0;gain</mtext></mrow></munder><mo>&#x000D7;</mo><munder><munder><mrow><mfrac><mrow><msub><mi>T</mi><mi>V</mi></msub></mrow><mrow><msub><mi>T</mi><mi>A</mi></msub></mrow></mfrac></mrow><mo>&#x23DF;</mo></munder><mrow><mtext>overlap&#x000A0;gain</mtext></mrow></munder><mo>&#x000D7;</mo><munder><munder><mrow><mfrac><mrow><mi>r</mi></mrow><mrow><mi>r</mi><mo>&#x0002B;</mo><mn>1</mn></mrow></mfrac></mrow><mo>&#x23DF;</mo></munder><mrow><mtext>disaggregation&#x000A0;cost</mtext></mrow></munder></mrow></math></div>
+<p>where <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>r</mi><mo>&#x0003D;</mo><msub><mi>N</mi><mi>A</mi></msub><mo>&#x0002F;</mo><msub><mi>N</mi><mi>F</mi></msub></mrow></math> is the attention:FFN node ratio, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>b</mi><mi>A</mi></msub></mrow></math> and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>b</mi><mi>V</mi></msub></mrow></math> are per-GPU decode batches, and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>T</mi><mi>A</mi></msub></mrow></math>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>T</mi><mi>V</mi></msub></mrow></math> are decode step times.</p>
+<ul>
+<li><strong>Batch gain.</strong> Attention GPUs hold no expert weights, so more HBM goes to KV. Against tuned wide EP the leftover batch advantage is only about 1.06–1.16× on most workloads; wide EP has already reclaimed most of the memory gap by shrinking each GPU's expert shard. Qwen3.5 is the exception at 1.4–1.6×.</li>
+<li><strong>Overlap gain.</strong> Two-microbatch ping-pong hides remote MoE behind the other microbatch's attention. Heavy-expert Qwen3 (experts in all 94 layers) gains the most. Light-expert MiniMax barely moves the step. Qwen3.5 can even run a slower step than wide EP, because attention-side projections run twice per step and its short linear-attention layers leave less cover for remote FFN.</li>
+<li><strong>Disaggregation cost.</strong> Exactly <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>r</mi><mo>&#x0002F;</mo><mo stretchy="false">&#x00028;</mo><mi>r</mi><mo>&#x0002B;</mo><mn>1</mn><mo stretchy="false">&#x00029;</mo></mrow></math>: FFN nodes hold no KV and emit no tokens. At 5:1 that is 5/6 ≈ 0.83; at 11:1 it is 11/12 ≈ 0.92. Attention-GPU speedup <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>S</mi><mrow><mi>a</mi><mi>t</mi><mi>t</mi></mrow></msub></mrow></math> reaches 1.08–1.39×; the rack-level number is that figure times the cost.</li>
+</ul>
+<p>AFD wins on all-GPU throughput only when the two gains outweigh the cost. That is why MiniMax sits at parity, Qwen3 keeps 1.06–1.17×, and Qwen3.5 falls from 1.16× at 4K to parity at 16K.</p>
+<h2>4. Speculative decoding changes the provisioning, not just the speedup</h2>
+<p>With draft depth <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>d</mi><mo>&#x0003D;</mo><mn>3</mn></mrow></math> (four verified tokens per step) and acceptance held near <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mover><mrow><mi>a</mi></mrow><mo stretchy="true">&#x000AF;</mo></mover><mo>&#x02248;</mo><mn>1.8</mn></mrow></math> for both engines, verifying multiplies MoE work. Under AFD that work lands on the FFN pool; under wide EP it lands on every GPU's critical path. Optimal A:F ratios contract by more than half (MiniMax from 9:1–17:1 down to 4:1–8:1; Qwen3 from 5:1–11:1 down to 2:1–5:1). Despite giving FFN a larger share, FastAFD lifts MiniMax <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>S</mi><mrow><mi>a</mi><mi>l</mi><mi>l</mi></mrow></msub></mrow></math> from parity up to 1.08× and holds Qwen3 at 1.10–1.13×, while <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>S</mi><mrow><mi>a</mi><mi>t</mi><mi>t</mi></mrow></msub></mrow></math> rises to 1.22–1.70× across workloads. The abstract's "further 8%" is this lift of MiniMax's all-GPU advantage over wide EP.</p>
+<h2>5. Decide before you deploy</h2>
+<p>The operational piece I care about most: a per-layer analytical model, calibrated only from colocated vLLM profiles (no AFD runs), predicts FastAFD throughput with 2.9% mean relative error across 65 deployments up to each workload's optimal ratio (Figure 6). Median error in standard decoding at or below the peak is 2.69%. Past the peak the model is less trustworthy (mean error about 10%), which is fine if you use it to pick a ratio rather than to extrapolate beyond it.</p>
+<p>That turns AFD from a rewrite into a go/no-go check. Profile wide EP on the target rack, plug the numbers in, and see whether the predicted <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>S</mi><mrow><mi>a</mi><mi>l</mi><mi>l</mi></mrow></msub></mrow></math> clears the bar before you carve attention and FFN pools.</p>
+<h2>6. What still bounds homogeneous AFD</h2>
+<p>Two microbatches are enough for NVL72's NVLink round trip on these models, but they also force attention-side projections twice per step. Homogeneous GPU AFD cannot erase the disaggregation cost. The authors' ceiling with near-zero remote FFN latency (for example experts on SRAM-backed accelerators next to a Vera Rubin NVL72) raises the ideal speculative speedup as high as 2.48×. That is a different rack design, not a knob on today's homogeneous deployment.</p>
+<h2>Closing</h2>
+<p>My own opinion is that for MoE decode on a homogeneous GB200 NVL72, wide EP with a tuned EP width is the default, and AFD is a conditional upgrade for heavy-expert full-attention models at long context, especially once speculative decoding is on. The paper's value is the measurement against that default, plus a model that lets you skip the rewrite when the answer is no.</p>
+<h2>Sources</h2>
+<ol>
+<li>Yichao Fu, Yuxuan Zhang, Minshen Zhang, Ruitian Wang, Junda Chen, Hao Zhang. <em>FastAFD: When Does Attention-FFN Disaggregation Pay on Rack-Scale NVLink?</em> arXiv:2611.07149, 2026. https://arxiv.org/abs/2611.07149</li>
+<li>FastAFD source: https://github.com/hao-ai-lab/FastAFD</li>
+<li>vLLM: https://github.com/vllm-project/vllm</li>
+</ol>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
