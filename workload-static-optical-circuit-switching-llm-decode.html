@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Configure Once, Decode Forever: Workload-Static Optical Circuits for LLM Inference — Anpoo Sivanadi</title>
+  <meta name="description" content="The usual argument against optical circuit switches in an inference fabric is speed." />
+  <link rel="canonical" href="https://asivanadi0.github.io/workload-static-optical-circuit-switching-llm-decode.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Configure Once, Decode Forever: Workload-Static Optical Circuits for LLM Inference — Anpoo Sivanadi" />
+  <meta property="og:description" content="The usual argument against optical circuit switches in an inference fabric is speed." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/workload-static-optical-circuit-switching-llm-decode.html" />
+  <meta property="article:published_time" content="2026-11-08T06:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Configure Once, Decode Forever: Workload-Static Optical Circuits for LLM Inference</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-08T06:00:00-08:00">8 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>The usual argument against optical circuit switches in an inference fabric is speed. A circuit switch takes far longer to reconfigure than a decode step takes to run, so it can't follow the traffic. That's true, but <a href="https://arxiv.org/abs/2611.05104" target="_blank" rel="noopener noreferrer">Workload-Static Optical Circuit Switching for Scalable LLM Inference Decode</a>, posted Nov 3 by authors from Salience Labs, NVIDIA and Heidelberg University, sidesteps it with a simple observation: for decode, the traffic doesn't move.</p>
+<p>Once you've picked a model, a context limit, an accelerator allocation and a parallelization, the set of ranks that talk to each other in every decode step is fixed. Batch size changes how many bytes go over each edge. It doesn't change which edges exist. So the paper's proposal is to set the optical circuits once, at deployment, shaped around that fixed pattern, and never touch them during serving.</p>
+<p>Before the numbers, the caveat. Every result here is modeled. The accelerators are projected "Rubin-like" parts, compute time comes from a roofline model, and the network results come from an analytical model plus a flit-level simulator. Latencies are grounded in measurements on current hardware, and the limits at the end decide how much of the headline you should keep.</p>
+<h2>1. Why decode traffic is static</h2>
+<p>The paper uses Helix-style decode parallelism, where attention is split across KV-parallel (KVP) and tensor-parallel (TPA) axes, and the MoE/FFN region is split across expert-parallel (EP) and tensor-parallel (TPE) axes over the same accelerators. For a 5T-parameter MoE ("Megatron 5T", 128 layers) on 512 accelerators in FP4, with (KVP, TPA, EP, TPE) = (4, 128, 64, 8), Table 1 lists the per-step demand:</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Region</th>
+<th>Axis</th>
+<th>Collective</th>
+<th>Groups x ranks</th>
+<th>Calls</th>
+<th>Payload at B=1</th>
+<th>B=16</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Attention</td>
+<td>world</td>
+<td>all-reduce</td>
+<td>1 x 512</td>
+<td>128</td>
+<td>4 KiB</td>
+<td>64 KiB</td>
+</tr>
+<tr>
+<td>Attention</td>
+<td>KVP</td>
+<td>all-to-all</td>
+<td>128 x 4</td>
+<td>128</td>
+<td>66 B</td>
+<td>1056 B</td>
+</tr>
+<tr>
+<td>FFN</td>
+<td>EP</td>
+<td>all-gather</td>
+<td>8 x 64</td>
+<td>128</td>
+<td>256 KiB</td>
+<td>768 KiB</td>
+</tr>
+<tr>
+<td>FFN</td>
+<td>TPE</td>
+<td>all-reduce</td>
+<td>64 x 8</td>
+<td>128</td>
+<td>4 KiB</td>
+<td>12 KiB</td>
+</tr>
+<tr>
+<td>LM head</td>
+<td>world</td>
+<td>all-gather</td>
+<td>1 x 512</td>
+<td>1</td>
+<td>25 KiB</td>
+<td>400 KiB</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Those payloads are tiny; a 66-byte all-to-all is pure round-trip latency. The claim that makes MoE fit this model is that token routing only changes volume, not connectivity: production all-to-all kernels already talk to every peer in a fixed expert-parallel group, with statically allocated per-peer buffers and batches padded to pre-captured graph sizes. The paper's EP axis pads buffers to the busiest rank, which is what real kernels do anyway.</p>
+<h2>2. Spending ports: shortcuts or width</h2>
+<p>The interesting design knob is the accelerator's port budget. Every circuit uses one port at each end. With a fixed number of ports <code>L</code> per accelerator, you can spend each extra port one of two ways:</p>
+<ul>
+<li><strong>Latency shaping.</strong> Add a "fold", a shortcut edge in a Cayley-style graph over rank bit-labels, so a collective finishes in fewer serialized phases.</li>
+<li><strong>Bandwidth shaping.</strong> Add a parallel circuit on an edge you already have, so each phase moves bytes faster.</li>
+</ul>
+<p>They time a schedule with a Hockney-style model: phases times per-phase latency, plus bottleneck volume over link bandwidth times circuit multiplicity. A fold that saves <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>&#x00394;</mi><mi>h</mi></mrow></math> phases saves roughly <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>&#x00394;</mi><mi>h</mi><mi>&#x003BB;</mi></mrow></math>. Going from <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>p</mi></mrow></math> to <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>p</mi><mo>&#x0002B;</mo><mn>1</mn></mrow></math> parallel circuits saves <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>v</mi><mo>&#x0002F;</mo><mo stretchy="false">[</mo><mi>R</mi><mi>p</mi><mo stretchy="false">&#x00028;</mo><mi>p</mi><mo>&#x0002B;</mo><mn>1</mn><mo stretchy="false">&#x00029;</mo><mo stretchy="false">]</mo></mrow></math>. Below a crossover in tokens per forward pass, shortcuts win. Above it, width wins. High-interactivity decode sits mostly on the shortcut side.</p>
+<p>The same physical circuits serve different logical meshes in different regions. In the paper's 16-rank example, one region sees the fabric as 2 x 8 and another as 4 x 4, just by partitioning the rank-label bits differently. A planner, which in practice would live in vLLM or SGLang since they already know the deployment, searches partitions, folds, multiplicities and matching collective schedules, then emits a fixed OCS configuration and routing tables.</p>
+<h2>3. Where the microseconds go</h2>
+<p>The simulator, Simlette, follows the UALink transaction and credit model: 64-byte transaction-layer flits packed into 640-byte data-link flits, separate request and response credits. The key parameter difference is the switch hop: about 300 ns unloaded pin-to-pin for an electronic packet switch (EPS), taken from the UALink spec, versus about 10 ns of optical pass-through for OCS.</p>
+<p>For calibration they measured an NVIDIA Blackwell B300: about 14 ns for shared memory, 17 ns for L1, 140 ns for L2, and 1.61 µs for an accelerator-to-accelerator remote-access round trip. Endpoint latency is a big share of every hop whatever the switch.</p>
+<p>On a single-level fabric with 36 ports per accelerator at 400 Gb/s, a 512-accelerator all-reduce on 1 to 64 KiB buffers finishes in 3.18 to 3.26 µs on OCS versus 5.21 to 5.26 µs on EPS. At 1 MiB serialization starts to dominate, and the gap narrows to 5.10 versus 6.41 µs.</p>
+<h2>4. The headline results</h2>
+<p>The setup is a 576-accelerator scale-up domain, eight racks of 72, with 512 serving and 64 kept as cold spares. They compare three two-level fabrics: all-EPS, hybrid EPS leaf with an OCS spine, and all-OCS. The EPS designs are 4:1 oversubscribed to the spine, which looks unfair until you see the check: removing oversubscription needs 288 spine switches instead of 72 and cuts collective time by only 3.2% (13.61 to 13.18 µs). Quadrupling per-port bandwidth moves the all-OCS advantage from 64.8% to 62.8%. The win is latency, not bandwidth.</p>
+<p>At 5M tokens of context and batch 1:</p>
+<ul>
+<li><strong>Megatron 5T:</strong> 458 tokens/s/user on all-EPS versus 698 on all-OCS. The best parallelization differs per fabric: (KVP4, TPA128, EP16, TPE32) on EPS, (KVP4, TPA128, EP8, TPE64) on OCS, because a 64-way TP group on EPS has to cross three switching devices.</li>
+<li><strong>GPT-OSS-5.3-like:</strong> 775 versus 1277 tokens/s/user, 1.65x.</li>
+</ul>
+<p>Batch size changes the story, and the reason is KV bytes. Megatron keeps 1 MiB of KV cache per context token; the GPT-OSS-like model keeps 48 KiB, because its sliding-window attention reads full context in only half its layers, with 16 KV heads instead of 128. At 5M context, Megatron's attention time grows from 0.53 ms at batch 1 to 8.3 ms at batch 16, while the OCS saving stays at 0.71 to 0.74 ms per step. That saving drops from 34% to 7% of the step. Batch 16 is also as far as Megatron goes before KV has to spill out of HBM.</p>
+<p>Scaling at 64K context is the result I'd show a cluster architect. At batch 1 and 4, interactivity rises with world size and then falls once collectives cross the second level. All-EPS peaks at 64 accelerators. All-OCS peaks at 128, at 26% and 41% above the best EPS result.</p>
+<p>On energy, using a TDP-based power model with co-packaged optics at the accelerator for the all-OCS case, the gains show up even where interactivity barely moves: +35% tokens/s per MW for a 235B model on 8 accelerators and +37% for a 1T model on 16, with only 1 to 3% better interactivity. For Megatron 5T at batch 1 and 5M context it's +102% energy efficiency with +52% interactivity, and the GPT-OSS family ranges from 32% to 119%.</p>
+<h2>5. What's really doing the work</h2>
+<p>One appendix result deserves more attention than it gets. For large all-to-all buffers, the authors ran their own parallel Bruck schedule on the oversubscribed EPS fabric. At 250 MiB that alone cut completion time from 1.21 ms to 0.85 ms, against 0.66 ms on OCS. Changing the schedule closed about two thirds of the gap. The optics took the remaining third.</p>
+<p>So part of this paper is an argument for topology-aware collectives that you could deploy on packet switches today. Serving stacks already pick collectives from offline tables (TensorRT-LLM chooses between one-shot, two-shot and NCCL all-reduce by group size, hidden size and token count). Making that choice aware of placement and topology looks like the cheap first step.</p>
+<h2>6. The limits</h2>
+<p>The authors list them plainly:</p>
+<ul>
+<li>The main evaluation has no compute-communication overlap. They checked HOP-B microbatching separately and found no net gain in these configurations.</li>
+<li>Expert routing is balanced in expectation. Skew isn't modeled.</li>
+<li>Simlette is deterministic. Jitter and tail latency aren't modeled, which cuts both ways, since EPS congestion tails are also left out.</li>
+<li>The power model is thermal-design maximums, not load-aware, and several figures (a 1.7 kW switch tray, a 220 kW Vera Rubin NVL72 rack estimate) are assumptions with cross-checks, not published specs.</li>
+<li>The analytical model underestimates contended EPS schedules by up to 2x, which is why the selected configs are re-run flit by flit.</li>
+</ul>
+<h2>My take</h2>
+<p>I like this paper because it changes the question. It doesn't ask whether OCS can keep up with decode. It asks whether decode traffic changes at all during serving, and mostly it doesn't. The 1.65x interactivity number will get quoted, but I'd quote the other two: the all-OCS peak moves from 64 to 128 accelerators, and two thirds of the large all-to-all gap closes from the schedule alone. If you run wide-EP decode on packet-switched scale-up today, the second point is something you can try without new hardware. The first is a reason to look at optical spines when your models stop fitting in one rack. I'd want to see it measured on real circuits with real routing skew before I believed the energy figures.</p>
+<h2>Sources</h2>
+<ul>
+<li><a href="https://arxiv.org/abs/2611.05104" target="_blank" rel="noopener noreferrer">Workload-Static Optical Circuit Switching for Scalable LLM Inference Decode (arXiv 2611.05104)</a></li>
+<li><a href="https://ualinkconsortium.org/" target="_blank" rel="noopener noreferrer">UALink Consortium</a></li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
