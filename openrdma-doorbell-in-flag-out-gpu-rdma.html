@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OpenRDMA: What If a GPU Kernel Only Wrote 8 Bytes to Send Over RDMA? — Anpoo Sivanadi</title>
+  <meta name="description" content="GPU-initiated networking got rid of the CPU proxy, but it didn&#x27;t get rid of the queue." />
+  <link rel="canonical" href="https://asivanadi0.github.io/openrdma-doorbell-in-flag-out-gpu-rdma.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="OpenRDMA: What If a GPU Kernel Only Wrote 8 Bytes to Send Over RDMA? — Anpoo Sivanadi" />
+  <meta property="og:description" content="GPU-initiated networking got rid of the CPU proxy, but it didn&#x27;t get rid of the queue." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/openrdma-doorbell-in-flag-out-gpu-rdma.html" />
+  <meta property="article:published_time" content="2026-11-07T18:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>OpenRDMA: What If a GPU Kernel Only Wrote 8 Bytes to Send Over RDMA?</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-07T18:00:00-08:00">7 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>GPU-initiated networking got rid of the CPU proxy, but it didn't get rid of the queue. With IBGDA (InfiniBand GPUDirect Async), a GPU thread still builds a full work queue entry (WQE) in GPU memory, advances the send queue, updates the doorbell record, rings the doorbell, and later parses completion queue entries to find out what finished. The NIC then fetches that WQE over PCIe before it can fetch the payload. That's a CPU protocol running on SMs.</p>
+<p><a href="https://arxiv.org/abs/2611.07559" target="_blank" rel="noopener noreferrer">OpenRDMA: A GPU-Native Multi-Path Reliable RDMA Transport Architecture</a>, posted Nov 5 by authors from the University of Hong Kong, Xi'an Jiaotong University, BUPT and Pazhou Laboratory, asks a blunt question: what does the GPU actually need to say? Their answer is "do this pre-arranged transfer now" and "tell me when the data is safe to read". Everything else, they argue, already lives in the NIC. The RTL and docs are open source at <a href="https://github.com/open-rdma/open-rdma" target="_blank" rel="noopener noreferrer">open-rdma/open-rdma</a> under Apache 2.0.</p>
+<p>One caveat up front, because it matters for how you read every number below: this is an FPGA NIC design evaluated in RTL simulation (Bluespec compiled through Verilator) wired to an ns-3 network model. The paper says plainly that physical GPU/PCIe measurement, SRv6 encapsulation on real switches, congestion fairness and FPGA place-and-route are still to come. I still think it's worth reading, because the interface idea is clean and the evaluation is unusually honest about its own boundaries.</p>
+<h2>1. Doorbell in, flag out</h2>
+<p>The CPU/runtime does the slow work ahead of time: connection setup, memory registration, keys, peers, routes and permissions all go into a protected Slot Table on the NIC. During the communication phase, a GPU kernel does three things: makes its payload writes visible, atomically reserves an ordered credit and a doorbell credit, and performs one aligned 8-byte store.</p>
+<p>The queue pair number isn't even in the doorbell. It comes from the address, <code>gpu_doorbell_base + (qpn &lt;&lt; 3)</code>, so the 64 bits carry only per-call parameters:</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Bits</th>
+<th>Field</th>
+<th>Width</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>63:60</td>
+<td><code>seq</code> (debug only)</td>
+<td>4</td>
+</tr>
+<tr>
+<td>59:58</td>
+<td><code>op</code></td>
+<td>2</td>
+</tr>
+<tr>
+<td>57:40</td>
+<td><code>slot_id</code></td>
+<td>18</td>
+</tr>
+<tr>
+<td>39:8</td>
+<td><code>len_or_imm32</code></td>
+<td>32</td>
+</tr>
+<tr>
+<td>7:0</td>
+<td><code>flags</code></td>
+<td>8</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The NIC checks alignment and BAR range, decodes the value, looks up the slot, validates kind, capability, key, length and owner, and only then builds the internal request. A bad doorbell is rejected before any WQE exists.</p>
+<p>On the completion side, the GPU doesn't parse CQEs. It polls a flag in GPU memory, and the NIC only writes that flag after the payload has been placed, the ordering dependencies are met, and the platform's write ordering makes it visible. That's the "flag out" half.</p>
+<h2>2. What that buys you, and what it doesn't prove yet</h2>
+<p>The paper counts the NIC-side path from a decoded submission to the first DMA read request at 19 cycles: 12 for the slot, memory region, QP and page-table lookups plus burst split, 3 for adapter sync, 3 for scheduling and reorder setup, and 1 for the handshake. For a 1 KiB first chunk, the first payload beat lands at <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>R</mi><mo>&#x0002B;</mo><mn>30</mn></mrow></math> cycles, where <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>R</mi></mrow></math> is the external DMA latency. At the modeled 400 MHz, the fixed part is 75 ns.</p>
+<p>For context, they cite published p50 numbers from <a href="https://arxiv.org/abs/2610.01380" target="_blank" rel="noopener noreferrer">GPU-Initiated Communication: Dissecting Down to the Bone</a> for an 8-byte inline RDMA write on H200 with ConnectX-7 at 200 Gb/s:</p>
+<div class="table-wrap" role="region" aria-label="Table 2" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Path</th>
+<th>Issue (µs)</th>
+<th>Put + completion (µs)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>mini-gda, inline</td>
+<td>0.70</td>
+<td>4.03</td>
+</tr>
+<tr>
+<td>GDAKI, inline</td>
+<td>1.60</td>
+<td>6.02</td>
+</tr>
+<tr>
+<td>NVSHMEM, internal</td>
+<td>4.26</td>
+<td>9.18</td>
+</tr>
+<tr>
+<td>NVSHMEM, public</td>
+<td>5.31</td>
+<td>11.10</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The authors are careful not to subtract their 75 ns from these and declare a win, and I'd be careful too. Their supported claim is narrow: OpenRDMA removes GPU-side WQE construction and one dependent WQE fetch over PCIe, and replaces them with a 12-cycle on-NIC lookup. Whether that turns into microseconds saved needs both designs measured on the same GPU, NIC, PCIe link and fence scope. Still, if you've profiled device-initiated sends, you know the GPU-side issue cost is the part that eats into your compute-communication overlap, and this design attacks exactly that part.</p>
+<h2>3. Spraying packets is the normal case now</h2>
+<p>The second half of the paper is a reliable transport built for per-packet multipath. It builds on the Multipath Reliable Connection (MRC) spec that AMD, Broadcom, Intel, Microsoft, NVIDIA and OpenAI contributed to the Open Compute Project in March, and like the <a href="https://arxiv.org/abs/2605.04333" target="_blank" rel="noopener noreferrer">MRC and SRv6 networking paper</a> from May, it uses SRv6 for path selection. The control plane preconfigures SRv6 path templates and an entropy-value table. Each packet picks an entropy value, which fixes its outer SRv6 address, local port and TX channel.</p>
+<p>Once you spray, reordering stops being an anomaly. So the receiver keeps a per-QP bitmap of arrived packet sequence numbers, returns plain cumulative ACKs when things are in order and SACKs with a bitmap when they aren't, and sends NAKs only for clearly identified faults. The sender keeps a scoreboard and marks holes for retransmission only after a post-hole threshold (three later packets in the tests), so a slow path isn't mistaken for loss.</p>
+<p>The design choice I found most interesting is where retransmission lives. The fast path (bitmaps, scoreboard, SACK parsing, ordered queue) is in hardware with bounded state. Timeouts, per-QP deadlines and recovery policy go to CPU software. That keeps NIC state small enough for a board-level FPGA, at the cost of a slower path for the rare cases that need a timer.</p>
+<h2>4. The simulated numbers</h2>
+<p>The setup is four QPs and four 100 Gb/s modeled links with 200 ns delay each, at a 400 MHz model clock (1024 bits, or 128 B, per cycle across four channels).</p>
+<ul>
+<li><strong>Aggregate goodput:</strong> 380.9 Gb/s of payload for 1,024 messages of 4,068 B, which is 95.2% of the 400 Gb/s line rate. Smaller 1 KiB payloads reach 326.0 Gb/s. Reversing DMA completion order keeps 94.5% (359.9 Gb/s).</li>
+<li><strong>Single-QP multipath:</strong> for one QP and 16 KiB messages, spraying lifts goodput from 92.2 to 323.5 Gb/s, which is 3.51×, and cuts mean completion from 1.534 to 0.642 µs.</li>
+<li><strong>Where spraying loses:</strong> 4 KiB messages did better on fixed paths, 211.8 versus 164.2 Gb/s, because each message splits into a 4,068 B packet and a 28 B tail. Balancing packets isn't the same as balancing bytes.</li>
+<li><strong>Loss recovery:</strong> single-packet drops recover in 508 to 598 ns from drop to completion, two and three drops in 620 and 682 ns. Each lost packet adds 298 B on the wire, so only the missing packets get resent.</li>
+</ul>
+<p>That last number deserves a footnote the paper itself provides: the recovery harness has zero propagation delay, no PCIe, no interrupts and no real timeout service, and the largest slice of recovery time (236 to 306 ns) is the CPU polling a snapshot report on a fixed interval. First-packet and tail losses, which need the timeout path, weren't tested.</p>
+<h2>5. The two limits they found</h2>
+<p>Two results are about the costs of the design, and I'd want to see them before deploying anything like it.</p>
+<p>First, the receive window is finite. With a 16-packet window per QP and 1 KiB messages, eight-message bursts pass on equal-delay paths and nine hit the window boundary. With extra delay on one path, nine pass and ten fail with out-of-window errors. With one QP and two messages, mean completion went from 0.354 µs on equal paths to 1.280 µs with 2 µs of skew. Path skew becomes buffer pressure fast.</p>
+<p>Second, ordered completion uses one shared retirement sequence. When four QPs completed in order 3, 2, 1, 0, retirement still went 0, 1, 2, 3, which is correct, but a 1,000 ns delay at the head stretched QP 3's wait from 34 to 1,034 ns. That's cross-QP head-of-line blocking, and the paper lists per-QP retirement as future work.</p>
+<h2>My take</h2>
+<p>The useful idea here isn't the FPGA. It's the interface: the GPU states intent with one store and reads a ready flag, and the NIC owns everything between. Vendors moving queue operations onto the GPU have been making the GPU act like a CPU. This paper argues the opposite direction, and its measured RTL behavior backs the architecture, not yet the end-to-end latency. If someone puts this on real F-Tile hardware next to a ConnectX-7 running IBGDA, on the same host, that's the comparison I'd want to read. Until then, I'd treat it as a strong design sketch for MRC-era NICs and a good reference for anyone writing device-initiated collectives.</p>
+<h2>Sources</h2>
+<ul>
+<li><a href="https://arxiv.org/abs/2611.07559" target="_blank" rel="noopener noreferrer">OpenRDMA: A GPU-Native Multi-Path Reliable RDMA Transport Architecture (arXiv 2611.07559)</a></li>
+<li><a href="https://github.com/open-rdma/open-rdma" target="_blank" rel="noopener noreferrer">open-rdma/open-rdma on GitHub</a></li>
+<li><a href="https://arxiv.org/abs/2610.01380" target="_blank" rel="noopener noreferrer">GPU-Initiated Communication: Dissecting Down to the Bone (arXiv 2610.01380)</a></li>
+<li><a href="https://arxiv.org/abs/2605.04333" target="_blank" rel="noopener noreferrer">Resilient AI Supercomputer Networking using MRC and SRv6 (arXiv 2605.04333)</a></li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
