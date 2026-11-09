@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FP4 KV Cache Without the Accuracy Cliff: What BitDecoding-FP4 Fixes on Blackwell — Anpoo Sivanadi</title>
+  <meta name="description" content="Blackwell&#x27;s fifth-generation Tensor Cores multiply block-scaled NVFP4 and MXFP4 operands directly, at two to three times the throughput of FP8." />
+  <link rel="canonical" href="https://asivanadi0.github.io/bitdecoding-fp4-native-fp4-kv-cache-b300.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="FP4 KV Cache Without the Accuracy Cliff: What BitDecoding-FP4 Fixes on Blackwell — Anpoo Sivanadi" />
+  <meta property="og:description" content="Blackwell&#x27;s fifth-generation Tensor Cores multiply block-scaled NVFP4 and MXFP4 operands directly, at two to three times the throughput of FP8." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/bitdecoding-fp4-native-fp4-kv-cache-b300.html" />
+  <meta property="article:published_time" content="2026-11-09T06:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>FP4 KV Cache Without the Accuracy Cliff: What BitDecoding-FP4 Fixes on Blackwell</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-09T06:00:00-08:00">9 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>Blackwell's fifth-generation Tensor Cores multiply block-scaled NVFP4 and MXFP4 operands directly, at two to three times the throughput of FP8. That makes a 4-bit KV cache look like free money for long-context serving: a quarter of the BF16 bytes per token, and attention that never has to dequantize. In practice the native NVFP4 KV path loses accuracy exactly where long context matters, on retrieval.</p>
+<p><a href="https://arxiv.org/abs/2611.09825" target="_blank" rel="noopener noreferrer">BitDecoding-FP4: Native FP4 KV Cache Decoding via Algorithm-System Co-Design</a>, posted Nov 6 by a University of Edinburgh and Tencent Hunyuan group, takes that apart. It finds three separate sources of error, fixes each one in a way the kernel can absorb, and then deals with the fact that once the matrix multiplies get cheap, softmax becomes the bottleneck. It's measured on a B300 and an RTX PRO 5000, in vLLM, with <a href="https://github.com/OpenBitSys/BitDecoding-FP4" target="_blank" rel="noopener noreferrer">open code</a>.</p>
+<h2>1. The baseline problem</h2>
+<p>The paper's reference point is TRT-LLM-NVFP4, the native NVFP4 KV cache in vLLM served by FlashInfer's TensorRT-LLM kernels. On Qwen3-4B-Thinking it averages 59.19 across seven long-context, math, code and knowledge benchmarks, against 67.69 for a BF16 KV cache. That's 8.5 points. The damage concentrates on retrieval: RULER drops from 96.28 to 80.04 and MRCR from 38.82 to 28.84.</p>
+<p>The other common route doesn't help either. Kernels that store the cache in NVFP4 but dequantize to BF16 before the matrix multiply leave the FP4 Tensor Cores unused, and the paper measures dequantization at 7 to 21% of FlashInfer-XQA's decode kernel time at 128K context. Vector-codebook schemes like TurboQuant hold accuracy better, but their lookup cost is brutal: TPOT at 256K was 94.46 ms against 7.74 ms for BF16 on Qwen3-4B.</p>
+<p>Native FP4 attention needs all four operands, Q, K, P and V, in 4-bit microscaling blocks. That's what exposes the errors.</p>
+<h2>2. Three error sources and their fixes</h2>
+<p><strong>The query.</strong> Most KV quantization work worries about key outliers. The authors split logit error into a key term and a query term and found that with NVFP4 keys, quantizing the query contributes 60% of the logit error, more than the keys themselves. During decode that query noise gets broadcast across every cached token.</p>
+<p>The fix is Dual-Residual Query Quantization. The query becomes the sum of two FP4 tensors: the normal quantized query, plus a second FP4 tensor that quantizes whatever the first one left behind, with its own block scales. That brings the query's share of logit error from 60% down to 1%. Smoothing the query, the trick SageAttention3 uses, still left 20%. An MXFP8 query against MXFP4 keys, which current Tensor Cores accept natively, left 5%.</p>
+<p><strong>The probabilities.</strong> NVFP4 blocks are 16 elements with an 8-bit E4M3 scale. In online softmax, almost every block along a long sequence has a tiny maximum probability, and when the scale <code>max/6</code> drops below <code>2^-10</code> it falls off the bottom of the E4M3 range and rounds to zero. On long reasoning traces the paper finds nearly 90% of blocks get a zero scale. Those tokens are invisible to attention, which is exactly what you'd expect to break needle-style retrieval.</p>
+<p>Underflow-Aware Probability Scaling does two things. It multiplies probabilities by a constant <code>c = 8</code>, but folds that into the exponent of online softmax so it costs nothing and cancels in normalization. And for small blocks it scales to a maximum of 2 instead of 6, tripling the scale and lifting it further from the floor, with an offline-calibrated threshold choosing between the two. The underflow floor moves to <code>max(p) &lt; 2^-12</code>, 24x lower. MXFP4 doesn't need this, because its E8M0 power-of-two scales don't underflow.</p>
+<p><strong>The keys.</strong> FP4 Tensor Cores compute each logit as a dot product over one token's channels and apply one scale per 16 (NVFP4) or 32 (MXFP4) channels. So keys must be scaled token-wise, and a single outlier channel inflates the block scale and crushes everything else in that block. Outlier-Aware Key Quantization subtracts a static per-head key mean calibrated offline from eight prompts, applies a Walsh-Hadamard rotation to both query and key to spread the remaining spikes, and picks each block scale from two candidates to minimize reconstruction error.</p>
+<p>On Qwen3-4B, the ablation shows dual-residual queries recovering most of the NVFP4 gap, probability scaling restoring RULER, and key handling closing the rest.</p>
+<h2>3. When the multiply gets cheap, softmax is the bottleneck</h2>
+<p>This is the part I found most useful as a systems person. In a FlashAttention-style decode kernel, threads own rows of the score tile, one row per query head. With grouped-query attention, the number of query heads sharing a KV head is small compared to the MMA tile height, so most threads sit on padded rows doing nothing while a few scan their keys serially: find the max, compute exp and sum, then scan again to find block maxima for quantizing P. As KV precision drops and arithmetic intensity rises, the paper's B300 roofline shows that this serial softmax, not the Tensor Cores, caps performance.</p>
+<p>The fix is to transpose the tile. Compute <code>S^T = K Q^T</code>, so keys fill the rows and every thread holds real scores. Reductions become warp-level butterfly shuffles. The P quantization block scales fall out of the same butterfly for free, because each FP4 block covers consecutive keys and the row max already gives the block max.</p>
+<p>The second query term would normally mean a second MMA per key tile, mostly on zero padding. Instead the kernel copies the residual query into the padding rows of the first query tile once, before the KV loop, so one FP4 MMA produces both products in adjacent columns, and softmax adds them in FP32.</p>
+<p>At batch 64 and 128K context on B300, transposing softmax cut pure kernel latency by 1.91x. With stacking, the whole accuracy recipe costs within 4% over the bare kernel. The full kernel still beats TRT-LLM-NVFP4 at every batch size the paper tested.</p>
+<p>Serving integration matters too. The first 16 tokens stay as a BF16 attention sink and the not-yet-full 128-token tail page stays BF16, handled in an extra CTA so it doesn't straggle one of the FP4 splits. A device-side control kernel tracks which BF16 slot belongs to which request without host synchronization, so CUDA graphs still work. Decode metadata overhead at batch 1 was 95 µs, against 1.5 ms for Kitty, another method that keeps BF16 sinks.</p>
+<h2>4. What it measured</h2>
+<p>Accuracy at 256K-context TPOT, single B300, vLLM:</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>KV format</th>
+<th>Avg. accuracy</th>
+<th>TPOT (ms)</th>
+<th>Speedup vs BF16</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Qwen3-4B</td>
+<td>BF16</td>
+<td>67.69</td>
+<td>7.74</td>
+<td>1.00x</td>
+</tr>
+<tr>
+<td>Qwen3-4B</td>
+<td>FP8</td>
+<td>66.21</td>
+<td>5.43</td>
+<td>1.43x</td>
+</tr>
+<tr>
+<td>Qwen3-4B</td>
+<td>TRT-LLM-NVFP4</td>
+<td>59.19</td>
+<td>4.63</td>
+<td>1.67x</td>
+</tr>
+<tr>
+<td>Qwen3-4B</td>
+<td>BitDecoding-NVFP4</td>
+<td>67.27</td>
+<td>4.28</td>
+<td>1.81x</td>
+</tr>
+<tr>
+<td>Qwen3-30B-A3B</td>
+<td>BF16</td>
+<td>73.15</td>
+<td>6.66</td>
+<td>1.00x</td>
+</tr>
+<tr>
+<td>Qwen3-30B-A3B</td>
+<td>FP8</td>
+<td>71.84</td>
+<td>5.15</td>
+<td>1.29x</td>
+</tr>
+<tr>
+<td>Qwen3-30B-A3B</td>
+<td>TRT-LLM-NVFP4</td>
+<td>67.25</td>
+<td>4.60</td>
+<td>1.45x</td>
+</tr>
+<tr>
+<td>Qwen3-30B-A3B</td>
+<td>BitDecoding-NVFP4</td>
+<td>72.74</td>
+<td>4.34</td>
+<td>1.53x</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Both 4-bit BitDecoding variants beat the FP8 KV cache on average accuracy. That's the line I'd remember.</p>
+<p>Other numbers worth knowing:</p>
+<ul>
+<li><strong>Kernel speedup over BF16 at 128K:</strong> up to 2.99x (Qwen3-4B) and 2.72x (Qwen3-30B-A3B) on B300, and up to 4.01x and 3.96x on RTX PRO 5000.</li>
+<li><strong>Serving throughput:</strong> across 1 to 64 concurrent requests at 64K (TP=1) and 128K (TP=2), BF16 and FP8 run out of KV capacity and preempt, while BitDecoding-NVFP4 fits all 64. Peak per-GPU throughput is 2.4x to 3.0x BF16, matching or exceeding TRT-LLM-NVFP4.</li>
+<li><strong>Bigger models:</strong> on GLM-4.7 (355B, FP8 weights, GQA) at 200K, the KV cache shrinks from 71.88 to 20.27 GiB while staying within 0.4 average points of BF16. On Tencent's Hy4-preview (770B, sparse MLA) at 1M tokens, it goes from 90.46 to 34.41 GiB within 0.12 points.</li>
+<li><strong>RL rollouts:</strong> in DAPO-style training with quantized rollout KV, BitDecoding-NVFP4 tracks BF16 validation accuracy while TRT-LLM-NVFP4 degrades on long reasoning traces.</li>
+</ul>
+<p>That last one connects to <a href="https://asivanadi0.github.io/deepseek-v4-1-flash-nvfp4-checkpoint.html" target="_blank" rel="noopener noreferrer">my earlier post on the DeepSeek-V4.1-Flash NVFP4 checkpoint</a>. The paper points out that <a href="https://arxiv.org/abs/2609.19969" target="_blank" rel="noopener noreferrer">DeepSeek-V4.1-Flash</a> uses a vanilla NVFP4 KV cache in post-training and keeps FP8 for local sliding-window attention. The error sources here are a plausible reason a lab would hedge like that.</p>
+<h2>5. What I'd keep in mind</h2>
+<ul>
+<li><strong>Small models carry the latency story.</strong> TPOT, kernel and serving numbers are on Qwen3-4B and Qwen3-30B-A3B. The 355B and 770B results are accuracy and memory only. For Hy4-preview the paper skips latency because its sparse MLA reads a fixed 2,048-token window per step, so the win there is capacity, not speed.</li>
+<li><strong>One B300, rented.</strong> System results use a single B300 (TP=2 for 128K serving). Nothing here covers NVL72-scale deployments, disaggregated prefill, or KV transfer over the network.</li>
+<li><strong>Calibration is offline.</strong> The key mean and the probability-scaling threshold are calibrated on small datasets. I'd check behavior on traffic that doesn't look like the calibration set before trusting it in production.</li>
+<li><strong>Baselines differ by engine.</strong> SAW-INT4 runs on SGLang, so its latency isn't compared.</li>
+<li><strong>It's a vLLM backend, not upstream.</strong> It's a custom PagedAttention backend built on FlashAttention-4 in CuTe-DSL, and it targets SM103 and SM120.</li>
+</ul>
+<p>The useful lesson for anyone sizing long-context serving on Blackwell: "FP4 KV" isn't one thing. The format is fine. The plain quantizer applied to it isn't, and the losses hide in retrieval benchmarks a quick perplexity check won't show. If you're turning on an NVFP4 KV cache today, run RULER or MRCR at your target context against BF16 before you take the throughput.</p>
+<h2>Sources</h2>
+<ul>
+<li>Du, Ng, Sheng, Lau, Cheng, Mai. <a href="https://arxiv.org/abs/2611.09825" target="_blank" rel="noopener noreferrer">BitDecoding-FP4: Native FP4 KV Cache Decoding via Algorithm-System Co-Design</a>, arXiv 2611.09825, Nov 2026.</li>
+<li><a href="https://github.com/OpenBitSys/BitDecoding-FP4" target="_blank" rel="noopener noreferrer">OpenBitSys/BitDecoding-FP4</a>, GitHub.</li>
+<li>DeepSeek-AI. <a href="https://arxiv.org/abs/2609.19969" target="_blank" rel="noopener noreferrer">DeepSeek-V4.1-Flash: Pushing the Limits of KV Cache Compression</a>, arXiv 2609.19969, 2026.</li>
+<li>Tencent Hy Team. <a href="https://huggingface.co/tencent/Hy4-preview" target="_blank" rel="noopener noreferrer">Hy4-preview</a>, Hugging Face, 2026.</li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
