@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>The Indexer Is the New KV Cache: LeanSparse and Million-Token Sparse Attention Serving — Anpoo Sivanadi</title>
+  <meta name="description" content="Sparse attention was supposed to make long context cheap." />
+  <link rel="canonical" href="https://asivanadi0.github.io/leansparse-indexer-keys-sparse-attention-serving.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="The Indexer Is the New KV Cache: LeanSparse and Million-Token Sparse Attention Serving — Anpoo Sivanadi" />
+  <meta property="og:description" content="Sparse attention was supposed to make long context cheap." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/leansparse-indexer-keys-sparse-attention-serving.html" />
+  <meta property="article:published_time" content="2026-11-08T18:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>The Indexer Is the New KV Cache: LeanSparse and Million-Token Sparse Attention Serving</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-08T18:00:00-08:00">8 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>Sparse attention was supposed to make long context cheap. Each query reads a few hundred historical positions instead of the whole history, so compute stops growing with context. Memory doesn't follow. A token one query skips can be the token the next query needs, so the full history still has to live somewhere.</p>
+<p><a href="https://arxiv.org/abs/2611.04671" target="_blank" rel="noopener noreferrer">LeanSparse: Memory-Efficient Serving for Native Sparse-Attention LLMs</a>, posted Nov 3 by a group at UC San Diego, points at what's left once you do that. The indexer, the small learned scorer that picks which positions attention reads, keeps its own keys for every historical position, and those stay on the GPU. At long context they become the biggest per-request allocation. LeanSparse fixes that and a second problem in prefill, and it's measured on real hardware: four H100s, tensor parallel, SGLang, serving DeepSeek-V4-Flash.</p>
+<h2>1. Where the memory actually goes</h2>
+<p>DeepSeek-V4-Flash alternates two attention layer types. Compressed sparse attention (CSA) layers compress history at a stride of four and use DeepSeek Sparse Attention: an indexer scores every eligible compressed position and selects up to <code>k = 512</code> for attention. Heavily compressed attention (HCA) layers compress at a stride of 128 and attend to everything left. CSA dominates historical storage, so that's where both HiSparse and LeanSparse focus.</p>
+<p>Each CSA layer keeps two separate things per position: an indexer key, used only for scoring, and the compressed KV that attention actually reads. HiSparse offloads the KV and keeps a 4K-entry hot KV buffer per layer on the GPU. It keeps all indexer keys resident, because the indexer has to score the whole history every decode step. Moving them to host would mean copying the full history across the host link for every generated token.</p>
+<p>The paper's Figure 1 makes the cost concrete. At 512K tokens of context, the FP8 indexer keys for one CSA layer take 7.2x the space of that layer's 4K-entry hot KV buffer. Shrinking attention KV just made the indexer the larger allocation, and it still grows linearly with context.</p>
+<p>The second problem is prefill. Decode benefits from the hot buffer because consecutive steps keep selecting many of the same positions. A prefill chunk processes many queries at once, and together they can select from a much wider slice of history, and a newly admitted request has no warm buffer anyway. HiSparse keeps the full KV history in HBM during prefill. When prefill and decode share a GPU, a new request may fit fine once it's decoding but not while it's prefilling. You either make it wait until decode requests finish, which hurts time to first token, or reserve HBM for prefill, which sits idle when nothing is prefilling. Disaggregating prefill and decode avoids that but duplicates weights, which hurts most when HBM is already tight.</p>
+<h2>2. Coarse-to-fine indexing for decode</h2>
+<p>LeanSparse moves all indexer keys and compressed KV to host memory and keeps a compact searchable copy of the indexer keys on the GPU. The compact copy is product quantization. Each 128-dimensional indexer key is split into 32 four-dimensional subvectors, and each subvector is stored as a one-byte index into a per-layer codebook of 256 centroids, trained offline. That's 32 bytes per position instead of 132 bytes for the FP8 key plus its scale.</p>
+<p>Each decode step then runs in three passes:</p>
+<ul>
+<li><strong>Coarse search.</strong> Score the whole history using the PQ codes, applying the indexer's weighted per-head ReLU aggregation with centroids standing in for the real subvectors. Keep <code>C = 2048</code> candidates, four times the 512 attention needs.</li>
+<li><strong>Exact rescoring.</strong> Fetch the original indexer keys for those candidates from a per-request GPU cache, or from host on a miss, and compute real indexer scores. Pick the final top 512.</li>
+<li><strong>KV retrieval.</strong> Pull the selected compressed KV from a separate KV cache, or from host on a miss, and run attention.</li>
+</ul>
+<p>Two details matter. First, the indexer key cache and KV cache are separate, because they serve different sets. Positions that keep showing up as candidates but don't make the final 512 still need their indexer keys cached, even though attention never reads their KV. Per request, LeanSparse holds 4K indexer keys and 2K KV entries per CSA layer. Second, before fetching, it drops low-scoring misses: a candidate that isn't cached and whose approximate score is below the 512th-largest score minus one sample standard deviation never crosses the bus.</p>
+<p>The over-fetch is what keeps accuracy. In an offline analysis on Open-SWE traces, picking the top 512 straight from PQ32 scores recovers 77.41% of the exact indexer's selections on average. Keeping 2,048 candidates and rescoring with the real keys recovers 99.49%. The PQ pass only has to avoid throwing away good candidates; the exact keys make the final call.</p>
+<h2>3. Layer-wise streaming for prefill</h2>
+<p>For prefill, the observation is that a chunk extending an existing prefix consumes that prefix one layer at a time, and the prefix's indexer keys and compressed KV were already computed. So LeanSparse keeps two GPU buffers and alternates them. While CSA layer N computes out of buffer A, a copy stream loads layer N+1's prefix state into buffer B. It loads full compressed KV along with the indexer keys, so the transfer can start without waiting on selection, at the cost of moving some KV attention won't read. The prefill allocation drops from one buffer per CSA layer to two.</p>
+<p>Whether the copy hides behind compute is a bandwidth question, and the paper models it. For a 512K-token prefix on H100 SXM with TP4, a 4K-token chunk gives a 5.2 ms overlap window (the current CSA block's remaining work plus the next HCA block, including both MoE FFNs, which contribute 0.36 ms). Loading the next layer plus writeback takes 2.9 ms at 32 GB/s of effective host bandwidth per GPU, leaving about 2.4 ms of slack. That assumes full compute efficiency and no startup delay, so treat it as a sizing guide.</p>
+<h2>4. What it measured</h2>
+<p>All runs use DeepSeek-V4-Flash on four H100s with tensor parallelism in SGLang.</p>
+<p><strong>Long-context decode against HiSparse.</strong> Contexts of 200K, 512K and 950K tokens, built from LongSWE-Bench, no prefix reuse, steady decode measured over 2K new tokens per stream at each system's maximum concurrency.</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Context</th>
+<th>HiSparse max requests</th>
+<th>LeanSparse max requests</th>
+<th>HiSparse tok/s</th>
+<th>LeanSparse tok/s</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>200K</td>
+<td>76</td>
+<td>156</td>
+<td>2,371</td>
+<td>3,216</td>
+</tr>
+<tr>
+<td>512K</td>
+<td>36</td>
+<td>96</td>
+<td>1,274</td>
+<td>2,022</td>
+</tr>
+<tr>
+<td>950K</td>
+<td>19</td>
+<td>56</td>
+<td>687</td>
+<td>1,474</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>That's 2.05x to 2.95x the concurrency and 1.36x to 2.14x the decode throughput. Throughput rises less than concurrency because more streams make each step longer.</p>
+<p>The equal-concurrency step time is the honest part. At 200K, LeanSparse is 3.8% slower per step (33.3 ms vs 32.1 ms): the PQ pass costs more than it saves when the history is short. At 950K it's 19.6% faster (22.2 ms vs 27.6 ms), because HiSparse's exact scoring grows with context while LeanSparse caps exact scoring at 2,048 candidates.</p>
+<p><strong>Multi-turn agent traces against ECHO.</strong> 128 long-context sessions from NVIDIA's Open-SWE-Traces, arriving at 120 per minute, with tool waits reconstructed, 4K prefill chunks, prefix caching and mixed prefill/decode batches, up to 128 active requests. HiSparse only supports disaggregated serving, so it's not in this test. The ECHO baseline is the authors' own implementation, since ECHO's release doesn't support DeepSeek-V4.</p>
+<ul>
+<li>Median time to first token fell from 21.58 s to 0.60 s; p95 from 28.19 s to 1.74 s.</li>
+<li>Median time per output token rose from 66.4 ms to 81.7 ms, from bigger decode batches and earlier prefill admission.</li>
+<li>Median session completion fell 17.7% (1,418.9 s to 1,168.0 s), and aggregate throughput rose 10.2%.</li>
+</ul>
+<p>That's the trade: many more streams and much faster starts, with each stream a bit slower.</p>
+<p><strong>Accuracy.</strong> At a 256K context limit with greedy decoding, LeanSparse stays within half a point of stock SGLang: GSM8K 95.83 vs 95.38, multi-key needle-in-a-haystack 100.00 vs 100.00, LongBench v2 50.62 vs 50.87, two-needle MRCR 90.62 vs 90.19. HiSparse scored 96.00 on the needle test in the same table. McNemar tests found no significant difference on GSM8K or LongBench v2.</p>
+<h2>5. What I'd keep in mind</h2>
+<ul>
+<li><strong>One node, one model.</strong> Everything is four H100s with TP4 and DeepSeek-V4-Flash. Hosts with more PCIe or C2C bandwidth per GPU change the prefill overlap math, and GPUs with more HBM move the point where indexer keys start to hurt.</li>
+<li><strong>The coarse pass still scales with context.</strong> PQ codes are about a quarter the size of FP8 keys, but they still grow with history, and the scan touches all of them every step.</li>
+<li><strong>Short context isn't the target.</strong> At 200K the per-step cost is slightly worse. The payoff starts where indexer keys dominate memory.</li>
+<li><strong>Recall isn't 100%.</strong> Rescoring can't bring back a position the coarse pass or miss filter dropped. I'd want to see recall on workloads that don't look like coding agents.</li>
+<li><strong>The prefill overlap numbers are modeled</strong>, and the multi-turn baseline is a reimplementation.</li>
+</ul>
+<p>The broader lesson is about where memory goes as models adopt trained sparse attention. Once KV is offloaded, the selection metadata becomes the resident cost, and the selection doesn't need full-precision keys to be good enough to shortlist. If you're sizing nodes for DeepSeek-V4-class models at hundreds of thousands of tokens of context, count indexer keys per layer separately from KV. They're a separate budget now.</p>
+<h2>Sources</h2>
+<ul>
+<li>Pan, Wu, Qiang, Hu, Yu, Ding. <a href="https://arxiv.org/abs/2611.04671" target="_blank" rel="noopener noreferrer">LeanSparse: Memory-Efficient Serving for Native Sparse-Attention LLMs</a>, arXiv 2611.04671, Nov 2026.</li>
+<li>Xie et al. <a href="https://arxiv.org/abs/2608.07009" target="_blank" rel="noopener noreferrer">HiSparse: Scaling sparse-attention decoding with hierarchical KV cache management</a>, arXiv 2608.07009, 2026.</li>
+<li>DeepSeek-AI. <a href="https://arxiv.org/abs/2606.19348" target="_blank" rel="noopener noreferrer">DeepSeek-V4: Towards highly efficient million-token context intelligence</a>, arXiv 2606.19348, 2026.</li>
+<li>NVIDIA. <a href="https://huggingface.co/datasets/nvidia/Open-SWE-Traces" target="_blank" rel="noopener noreferrer">Open-SWE-Traces</a>, Hugging Face dataset, 2026.</li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
