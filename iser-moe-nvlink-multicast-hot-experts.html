@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Copying Hot Experts Through the NVLink Switch: What ISER-MoE Gets on GB300 — Anpoo Sivanadi</title>
+  <meta name="description" content="An expert-parallel MoE layer runs at the speed of its most loaded GPU." />
+  <link rel="canonical" href="https://asivanadi0.github.io/iser-moe-nvlink-multicast-hot-experts.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Copying Hot Experts Through the NVLink Switch: What ISER-MoE Gets on GB300 — Anpoo Sivanadi" />
+  <meta property="og:description" content="An expert-parallel MoE layer runs at the speed of its most loaded GPU." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/iser-moe-nvlink-multicast-hot-experts.html" />
+  <meta property="article:published_time" content="2026-11-09T18:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Copying Hot Experts Through the NVLink Switch: What ISER-MoE Gets on GB300</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-09T18:00:00-08:00">9 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>An expert-parallel MoE layer runs at the speed of its most loaded GPU. Fused kernels like MegaMoE do dispatch, both expert GEMMs and combine in one persistent kernel that synchronizes every rank, so if one rank got 45% more routed tokens than average, every rank waits for it. Replicating hot experts onto cold ranks fixes that in principle. In practice the copy has to land inside the same layer, and the GPU that owns the hot expert becomes a broadcast hot spot.</p>
+<p><a href="https://arxiv.org/abs/2611.09008" target="_blank" rel="noopener noreferrer">ISER-MoE: Dynamic In-Switch Replication of Hot Experts for Load Balancing in Expert-Parallel</a>, posted Nov 6 by a group at NVIDIA, attacks the copy problem with the NVLink switch itself. Hot experts are multicast through NVLink SHARP (NVLS) to fixed groups of GPUs, so each byte leaves its owner once no matter how many replicas it needs. The implementation is an <a href="https://github.com/NVIDIA/TensorRT-LLM/pull/19646" target="_blank" rel="noopener noreferrer">open TensorRT-LLM pull request</a>, and the headline is DeepSeek-V4-Pro prefill on GB300 at EP8: 17.4% more throughput on GSM8K and 7.2% on agentic prompts.</p>
+<h2>1. How bad the imbalance is</h2>
+<p>The authors recorded prefill routing for <a href="https://arxiv.org/abs/2606.19348" target="_blank" rel="noopener noreferrer">DeepSeek-V4-Pro</a> (61 MoE layers, 384 experts, top-6) on GSM8K, MMLU, IFBench, SciCode and SemiAnalysis agentic coding traces. They track R, the most loaded rank's routed tokens over the mean.</p>
+<ul>
+<li>At EP8, the 61-layer mean of R was 1.40 to 1.45 for four workloads and 1.69 for GSM8K. Random tokens hit 2.00.</li>
+<li>It varies by layer: 1.13 to 2.51 across layers of the agentic traces at EP8.</li>
+<li>It grows with EP degree. Per iteration of 8,192 tokens per rank on a mixed trace, R averaged 1.20, 1.44, 1.84 and 2.24 at EP4, EP8, EP16 and EP24.</li>
+</ul>
+<p>And it costs real time. On GB200 at EP8, MegaMoE without replicas fit 513 + 1051R microseconds per layer. The good news is that load is long-tailed: the four busiest of 384 experts took 13.02% of a layer's assignments on average, against 1.04% if uniform. At EP8, the four busiest home experts on a layer's hottest rank carried at least that rank's whole excess in 59 of 61 layers. So you only need to replicate a handful of experts.</p>
+<h2>2. Why the copy is the hard part</h2>
+<p>Each replica is a whole expert: 37.16 MB for DeepSeek-V4-Pro in NVFP4. The paper's peak-rate model is the part I'd hand to anyone sizing MoE prefill. Dense FP4 math to per-direction link bandwidth on GB300 is 16,667 FLOP per byte (15 PFLOP/s against 900 GB/s). At EP8 with 8,192 tokens per rank, DeepSeek-V4-Pro's routed expert compute (432.9 µs) beats its dispatch plus combine (385.4 µs) by only about 1.15 expert copies of 41.3 µs each. Four copies would outlast the compute by 117.6 µs.</p>
+<p>The shared expert is where the room is. It processes every token, needs no routing plan and no token traffic, and lasts 216.5 µs at that shape on GB300, enough for about five more copies at line rate. So ISER-MoE starts copying right after routing, beside the shared expert, instead of inside the MoE kernel. Counting the shared expert, all 16 modeled scenarios on GB300 allow the copies to overlap, against 12 with routed experts only.</p>
+<p>Then there's fan-out. A hot rank's busiest experts need several replicas each, and they all come from one owner. In trace replay, a greedy point-to-point planner modeled on UltraEP and MegaFlux had its busiest owner sending 7, 9 and 10 payloads per invocation at EP8, 16 and 24 (99th percentile). At line rate that's 289 to 413 µs, longer than the shared-expert window.</p>
+<p>The paper also measures why the obvious broadcasts fall short. A ring broadcast pays a pipeline fill that grows with group size. A software scatter plus all-gather moves the payload twice, capping it near half the link bandwidth. And single-port in-switch multicast from a copy engine topped out at 2.0 to 2.1 TB/s total output on four GB200 trays, so each receiver got 535, 266 and 127 GB/s at group sizes 4, 8 and 16.</p>
+<h2>3. The design</h2>
+<p><strong>Fixed groups, not fixed replicas.</strong> CUDA multicast objects have fixed membership, and a GB200 NVLink domain has 1,024 multicast IDs, which is why UltraEP set in-switch multicast aside. ISER-MoE creates a hierarchy of aligned groups once at startup: level 0 is all P ranks, then halves, quarters and so on down to groups of four. At EP16 that's 1 + 2 + 4 = 7 groups. Each layer invocation picks a level per hot expert.</p>
+<p><strong>HALO-Q, a GPU scheduler.</strong> One kernel per MoE layer. Ranks exchange route counts through a symmetric NVLink buffer with no host step, and every rank runs the same deterministic planner, so nobody broadcasts the plan. It moves the busiest rank's heaviest experts into a group at the finest level that can absorb them, down to the mean load. An owner exports at most S experts (S = 4 helper slots per rank by default), which bounds its egress. A coloring step gives each broadcast one helper slot index free on every member, which multicast needs because stores land at the same offset everywhere. A quota-repair pass then trades equal amounts of routes between rank pairs so tokens get computed locally where possible. On one CTA, planning took 3.8, 6.1, 8.7 and 12.2 µs at EP4, 8, 16 and 32.</p>
+<p><strong>SAMI, multi-port broadcast.</strong> The replication kernel copies with TMA from SMs, staging 8 KiB slices and storing them to the multicast address with <code>multimem.cp.async.bulk</code>. With SAMI, each of the g members pulls one slice in g from the owner and stores it through its own port to the multicast address, and the switch delivers it to everyone. It's scatter plus all-gather where the all-gather happens in the switch. The owner still sends W bytes, but injection is spread over all ports, at the price of W/g extra inbound traffic per non-owner member. It also serves groups that don't contain the owner, which turned out to matter: the chosen group excluded the owner in 53% of broadcasts at EP8 and 76% at EP16 to 24.</p>
+<p><strong>Overlap.</strong> HALO-Q and the copy run on the highest-priority stream while the main stream computes the shared expert. MegaMoE waits only for the plan. Only helper tiles wait on a READY flag; home tiles start immediately.</p>
+<h2>4. The numbers</h2>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Measurement</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Trace replay, excess load removed (EP4 to 24, S = 4)</td>
+<td>98.4 to 99.0%</td>
+</tr>
+<tr>
+<td>Trace replay, R after HALO-Q (EP4/8/16/24)</td>
+<td>1.002 / 1.006 / 1.010 / 1.020</td>
+</tr>
+<tr>
+<td>Static EPLB-style plan, R at EP8</td>
+<td>1.06 to 1.07</td>
+</tr>
+<tr>
+<td>MegaMoE kernel, power-law routing, GB200</td>
+<td>1.21x to 1.52x</td>
+</tr>
+<tr>
+<td>MegaMoE kernel, trace routes, 61 layers, GB200 EP8</td>
+<td>1,999.3 to 1,624.3 µs (1.23x)</td>
+</tr>
+<tr>
+<td>GB300 context-only, DEP8, GSM8K / AgentPerf</td>
+<td>+17.4% / +7.2%</td>
+</tr>
+<tr>
+<td>GB300 perfectly balanced routing, same</td>
+<td>+13.5% / +6.0%</td>
+</tr>
+<tr>
+<td>GB300 NVL72 disaggregated, P90 latency / output throughput</td>
+<td>3.1 to 4.3% / 1.4 to 1.9%</td>
+</tr>
+<tr>
+<td>Pre-release Rubin, DEP8, AgentPerf, BF16 combine</td>
+<td>+6.1% (8K), +9.1% (16K)</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The odd row is ISER-MoE beating forced perfect balance on GB300. The forced-balance arm uses TensorRT-LLM's perfect router, which forces synthetic routing whose outputs the paper says aren't meaningful, so I read it as a reference point, not a ceiling.</p>
+<p>SAMI against a carefully tuned <code>ncclBroadcast</code> (NCCL 2.31.2, best of protocol, buffers, channels, registration and CUDA graphs): 1.07x, 1.21x and 1.34x faster for one expert at 8, 12 and 16 GPUs, holding 101 to 107 µs per expert at every group size while the tuned ring grew with g. In the overlap test, copying four experts during an FP8 shared expert lengthened the span by 2.0% at 8K tokens per rank with SAMI, against 36.3% with owner-direct multicast.</p>
+<h2>5. What I'd keep in mind</h2>
+<ul>
+<li><strong>The copy still steals SMs.</strong> With the replication kernel at commit 99dac8f1 on eight SMs, SAMI slowed the 8K shared expert by 49%, because the copy ran beside its GEMMs and nothing held SMs back for them. The SM-free copy-engine prototype slowed it by only 2.9%. On Rubin, a profile showed the shared expert slowing by 127 µs from 182.6 µs. This is the cost I'd measure first.</li>
+<li><strong>BF16 combine eats the window.</strong> With the default BF16 combine, token traffic alone (685 µs) outlasts the routed experts (433 µs) on GB300, so copies only hide beside the shared expert. A model without a shared expert has room for about one copy.</li>
+<li><strong>Narrow scope.</strong> Prefill only, attention data parallel, one NVLink domain, eager mode. CUDA graphs aren't supported. Hardware runs cover EP4 to 8; EP16 and 24 are replay. Generation and training are untested.</li>
+<li><strong>Static plans get most of the way.</strong> By the GB200 fit, a static plan would capture 85 to 88% of the kernel-time gain, and there's no hardware comparison against one. Replicas also live for one invocation even though 74 to 78% of selections recur in the next iteration.</li>
+<li><strong>No fallback.</strong> A starved copy hits a 120 second timeout and aborts the job rather than falling back to home experts.</li>
+<li><strong>Kernel gains exclude planning and copy.</strong> The 1.21x to 1.52x installs replicas before timing. The end-to-end numbers are the honest ones, and they're smaller.</li>
+</ul>
+<p>If you run large MoE prefill on an NVL72, the takeaway is that the switch can do the fan-out your owner GPU can't, but only with groups you set up at init. And before you chase per-invocation replication at all, measure R on your own traffic and try a static EPLB plan. The paper's own data says that gets you most of the way there.</p>
+<h2>Sources</h2>
+<ul>
+<li>Peng, Zhang, Duan, Sheng, Li, Rosenfeld Rauch, Yang, Yang. <a href="https://arxiv.org/abs/2611.09008" target="_blank" rel="noopener noreferrer">ISER-MoE: Dynamic In-Switch Replication of Hot Experts for Load Balancing in Expert-Parallel</a>, arXiv 2611.09008, Nov 2026.</li>
+<li><a href="https://github.com/NVIDIA/TensorRT-LLM/pull/19646" target="_blank" rel="noopener noreferrer">NVIDIA/TensorRT-LLM pull request 19646: Add DynamicEPLB kernels and runtime integration</a>, GitHub.</li>
+<li>DeepSeek-AI. <a href="https://arxiv.org/abs/2606.19348" target="_blank" rel="noopener noreferrer">DeepSeek-V4: Towards Highly Efficient Million-Token Context Intelligence</a>, arXiv 2606.19348, 2026.</li>
+<li>Wei et al. <a href="https://arxiv.org/abs/2606.04101" target="_blank" rel="noopener noreferrer">UltraEP</a>, arXiv 2606.04101, 2026.</li>
+<li>Yao et al. <a href="https://arxiv.org/abs/2610.00671" target="_blank" rel="noopener noreferrer">MegaFlux: Skew-Resilient MoE Megakernels via Pipelined Expert Replication</a>, arXiv 2610.00671, 2026.</li>
+<li><a href="https://github.com/deepseek-ai/EPLB" target="_blank" rel="noopener noreferrer">deepseek-ai/EPLB</a> and <a href="https://github.com/MoonshotAI/MoonEP" target="_blank" rel="noopener noreferrer">MoonshotAI/MoonEP</a>, GitHub.</li>
+<li>NVIDIA. <a href="https://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MULTICAST.html" target="_blank" rel="noopener noreferrer">CUDA Driver API: Multicast Object Management</a>.</li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
