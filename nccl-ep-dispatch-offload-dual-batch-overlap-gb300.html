@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Let Go of the SM Sooner: NCCL-EP Dispatch Offload Under Dual-Batch Overlap on GB300 — Anpoo Sivanadi</title>
+  <meta name="description" content="Dual-batch overlap (DBO) is the standard trick for hiding expert-parallel MoE traffic in decode." />
+  <link rel="canonical" href="https://asivanadi0.github.io/nccl-ep-dispatch-offload-dual-batch-overlap-gb300.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Let Go of the SM Sooner: NCCL-EP Dispatch Offload Under Dual-Batch Overlap on GB300 — Anpoo Sivanadi" />
+  <meta property="og:description" content="Dual-batch overlap (DBO) is the standard trick for hiding expert-parallel MoE traffic in decode." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/nccl-ep-dispatch-offload-dual-batch-overlap-gb300.html" />
+  <meta property="article:published_time" content="2026-11-10T06:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Let Go of the SM Sooner: NCCL-EP Dispatch Offload Under Dual-Batch Overlap on GB300</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-10T06:00:00-08:00">10 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>Dual-batch overlap (DBO) is the standard trick for hiding expert-parallel MoE traffic in decode. You split the batch into two microbatches and run one microbatch's dispatch and combine underneath the other microbatch's compute. The catch is that the other microbatch can only start once the dispatch send kernel gives the GPU back. Whatever time the send kernel spends building work queue entries, ringing doorbells and waiting on credits is time nothing else runs. The network progress after that point can be hidden. The send itself can't.</p>
+<p><a href="https://arxiv.org/abs/2611.12362" target="_blank" rel="noopener noreferrer">Release Sooner, Expose Less: Offloading MoE Dispatch in NCCL-EP under Dual-Batch Overlap</a>, posted Nov 9 by a group at NVIDIA, goes after exactly that interval. They test three research configurations of <a href="https://arxiv.org/abs/2603.13606" target="_blank" rel="noopener noreferrer">NCCL-EP</a> on a GB300 NVL72 system. In disaggregated vLLM decode with DBO, all three lower median time per output token (TPOT) by 15 to 25% against NCCL-EP's default path. The argument: under DBO, minimize how long dispatch send holds the GPU, not how fast the network completes.</p>
+<h2>1. Where the time goes in default GDAKI</h2>
+<p>NCCL's GPU-Initiated Networking (<a href="https://arxiv.org/abs/2511.15076" target="_blank" rel="noopener noreferrer">GIN</a>) has two backends that matter here. The default, GDAKI, keeps the send queue and WQEs in GPU memory and lets GPU code drive the NIC directly. In the NCCL version tested (2.31.2), the sending SM reserves queue space, writes the WQE, advances the producer state, serializes shared queue-pair state and rings the doorbell. All of that happens before the kernel returns.</p>
+<p>Little is left in flight once the GPU lets go, but every one of those send steps sat on the critical path. The paper's model is simple. If the offloaded path releases the GPU ΔR earlier, the other microbatch's work starts up to ΔR earlier. Network progress that runs longer is fine as long as it finishes beneath that covering work. So a backend with slower completion can still finish the MoE layer sooner.</p>
+<h2>2. Three ways to return early</h2>
+<ul>
+<li><strong>GPI.</strong> The GPU builds a GPU-Friendly Descriptor (GFD) for each remote destination and writes it to NIC-accessible descriptor memory, then returns. The NIC turns each GFD into the transport operation. No CPU progress thread is involved in steady state.</li>
+<li><strong>GPI-MC.</strong> An experimental MoE-specific refinement of GPI. A token often goes to several destinations, so instead of one GFD per destination, the GPU publishes one GFD that describes the token's whole fan-out and the NIC expands it.</li>
+<li><strong>GDAKI Free Flow.</strong> The GPU still writes the full WQE, but instead of advancing the queue and ringing the doorbell, it release-orders the slot's absolute sequence number into a ready array and returns. A host thread finds the longest contiguous run of ready slots from the producer frontier, advances the frontier and rings the NIC. Using absolute sequence numbers keeps a stale marker from a previous lap of the queue from validating a reused slot.</li>
+</ul>
+<p>All four paths keep the two orderings dispatch needs: payload staged before submission, and payload delivered before the remote signal that announces it.</p>
+<h2>3. The test setup</h2>
+<ul>
+<li>GB300-CX8 NVL72, aarch64, CUDA 13.0, NCCL 2.31.2-based research forks with four GIN contexts per rank.</li>
+<li>Microbenchmarks: NCCL-EP low-latency path, BF16 activations, hidden size 2048, 128 experts, NVLink disabled, random top-k. The sweep crosses 4, 8 and 16 GPUs, dispatch SM caps of 32, 64 and 128, top-k of 4 and 8, and 1 to 256 tokens per rank. That's 648 cells with five matched rounds each.</li>
+<li>Serving: a vLLM 0.30.1rc0-based fork with one-stream DBO, Qwen3-30B-A3B in BF16, 2P2D on 16 GPUs (two four-GPU prefill nodes, two four-GPU decode nodes). NVLink stays on inside each node but cross-node NVLink is off, so every inter-node expert transfer uses the RDMA path under test. Prefill always uses default GDAKI; only the decode backend changes. DeepEP appears as a baseline through a v1.2.1-based low-latency fork running over NCCL GIN.</li>
+</ul>
+<h2>4. Dispatch-send time</h2>
+<p>At EP8, top-k 8, SM cap 128, here is how long each backend held the GPU during dispatch send:</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Tokens/rank</th>
+<th>Default GDAKI</th>
+<th>GPI</th>
+<th>GPI-MC</th>
+<th>Free Flow</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2</td>
+<td>29.5 µs</td>
+<td>14.5 µs</td>
+<td>16.4 µs</td>
+<td>19.0 µs</td>
+</tr>
+<tr>
+<td>128</td>
+<td>57.5 µs</td>
+<td>111.0 µs</td>
+<td>30.1 µs</td>
+<td>18.9 µs</td>
+</tr>
+<tr>
+<td>256</td>
+<td>107.1 µs</td>
+<td>210.9 µs</td>
+<td>101.3 µs</td>
+<td>25.7 µs</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>There's no single winner. GPI is best at small token counts and degrades as fan-out grows, since per-destination descriptors cost GPU-visible time. GPI-MC mostly repairs that at 128 tokens. Free Flow stays nearly flat. Across the whole sweep, GPI had the lowest mean in 57 of 72 cells at 1 to 8 tokens per rank, and Free Flow had it in 48 of 72 cells at 32 to 256 tokens per rank and in 25 of 30 16-GPU cells from 16 tokens up. Against default GDAKI, mean dispatch-send time dropped in 139 of 162 positions for GPI, 160 of 162 for GPI-MC and all 162 for Free Flow.</p>
+<h2>5. How much cover each path needs</h2>
+<p>The second experiment puts a calibrated GPU delay between send and receive (EP8, top-k 8, cap 128) and measures send plus receive time as the delay grows. Two things come out of it.</p>
+<p>Offload lengthens the in-flight interval. Default GDAKI needs only 16 to 32 µs of cover up to 128 tokens per rank and 64 µs at 256. GPI needs 64 µs even at 1 to 16 tokens and 512 µs at 256. GPI-MC halves GPI's window at 128 and 256 tokens (128 and 256 µs). Free Flow needs 32 to 64 µs up to 128 tokens and 96 µs at 256.</p>
+<p>Once covered, offload leaves less exposed time. At 1 to 16 tokens per rank, the floor is 22 to 24 µs for GPI and 24 to 27 µs for GPI-MC and Free Flow, against 34 to 41 µs for default GDAKI. At 256 tokens default GDAKI still exposes 108.8 µs, against 35.5 µs for Free Flow and 75.6 µs for GPI-MC. GPI rises to 180.5 µs there, which tells you its submission cost is still GPU-visible at high fan-out, not just its network progress.</p>
+<h2>6. TPOT in vLLM</h2>
+<div class="table-wrap" role="region" aria-label="Table 2" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Concurrency</th>
+<th>Default GDAKI TPOT</th>
+<th>GPI</th>
+<th>GPI-MC</th>
+<th>Free Flow</th>
+<th>DeepEP baseline</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>128</td>
+<td>15.19 ms</td>
+<td>-15.3%</td>
+<td>-16.2%</td>
+<td>-15.3%</td>
+<td>+1.2%</td>
+</tr>
+<tr>
+<td>256</td>
+<td>15.55 ms</td>
+<td>-19.8%</td>
+<td>-17.9%</td>
+<td>-18.0%</td>
+<td>+4.3%</td>
+</tr>
+<tr>
+<td>512</td>
+<td>16.63 ms</td>
+<td>-22.5%</td>
+<td>-20.5%</td>
+<td>-22.9%</td>
+<td>+10.5%</td>
+</tr>
+<tr>
+<td>1000</td>
+<td>17.36 ms</td>
+<td>-24.6%</td>
+<td>-22.7%</td>
+<td>-25.1%</td>
+<td>+30.0%</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The gain grows with concurrency for every path, and at each of these points the slowest run of each optimized path beat the fastest default-GDAKI run. At concurrency 256 with 128 input tokens, sweeping output length from 128 to 2,048 kept the gap: default GDAKI sat at 15.64 to 16.34 ms, GPI at 12.49 to 13.06 ms, GPI-MC at 12.74 to 13.37 ms and Free Flow at 12.71 to 13.24 ms.</p>
+<p>Concurrency 1 is a control. DBO never splits there, and the three paths land within -2.3% to +2.9% of baseline, which is what you'd expect with nothing to hide behind. Concurrency 32 and 64 are excluded as transport evidence. Near DBO's two-token threshold, some steps fail the all-rank split vote and fall back to eager execution because only the split graph was captured, and that's where you see numbers like +216.4% for GPI-MC.</p>
+<p>Correctness gets real attention. Every serving run had zero failed requests and was checked against DeepEP outputs. On GSM8K, correct configurations scored 0.884 to 0.890, against 0.888 for DeepEP and 0.89 on a single GPU, while configurations with a dma-buf address-wrap bug scored 0.526 to 0.644.</p>
+<h2>7. What I'd keep in mind</h2>
+<ul>
+<li><strong>These are research forks.</strong> GPI, GPI-MC and Free Flow are research configurations on NCCL 2.31.2-based forks and a vLLM fork. GPI-MC is explicitly an early, untuned prototype.</li>
+<li><strong>Free Flow costs a CPU core.</strong> It depends on a host thread polling for ready WQEs. CPU-saturated serving, affinity and PCIe contention weren't evaluated. If your hosts are busy with tokenization, retrieval or agent tool handling, measure before you trust it. GPI has no such polling thread.</li>
+<li><strong>The delay kernel isn't a GEMM.</strong> The cover experiment uses a one-thread delay, so it has no SM, register or memory-bandwidth contention. Real expert GEMMs will slow send and receive somewhat.</li>
+<li><strong>Small scale.</strong> One model (Qwen3-30B-A3B, BF16), two four-GPU decode nodes, 128-token prompts, three runs per point. Cross-node NVLink is off, so this doesn't model a fully connected NVL72 deployment, and the authors say the gains could grow or shrink in production.</li>
+<li><strong>Only dispatch send.</strong> Dispatch receive, combine send and combine receive are untouched. Only single-stream DBO was tested, with no comparison to multi-stream schedules or to serving without DBO.</li>
+<li><strong>Serving swaps whole backends.</strong> The TPOT gain can't be pinned on dispatch send alone, and the paper says so.</li>
+</ul>
+<p>If you run MoE decode with DBO over RDMA, the takeaway is to profile how long your dispatch send kernel holds the SM, not just your all-to-all latency. A backend that looks slower in an isolated latency microbenchmark can be the faster one inside DBO, as long as the other microbatch has enough work to cover the longer in-flight time. Which path wins depends on tokens per rank: GPI at small counts, Free Flow at high fan-out if you can spare a host thread.</p>
+<h2>Sources</h2>
+<ul>
+<li>Yin, Hamidouche, Ziemba, Kashyap, Markthub, Bhattacharya, Wen, Ravid, Gorentla Venkata, Bloch. <a href="https://arxiv.org/abs/2611.12362" target="_blank" rel="noopener noreferrer">Release Sooner, Expose Less: Offloading MoE Dispatch in NCCL-EP under Dual-Batch Overlap</a>, arXiv 2611.12362, Nov 2026.</li>
+<li>Goldman et al. <a href="https://arxiv.org/abs/2603.13606" target="_blank" rel="noopener noreferrer">NCCL EP: Towards a Unified Expert Parallel Communication API for NCCL</a>, arXiv 2603.13606, 2026.</li>
+<li>Hamidouche et al. <a href="https://arxiv.org/abs/2511.15076" target="_blank" rel="noopener noreferrer">GPU-Initiated Networking for NCCL</a>, arXiv 2511.15076, 2025.</li>
+<li>NVIDIA. <a href="https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/usage/deviceapi.html" target="_blank" rel="noopener noreferrer">NCCL User Guide: Device-Initiated Communication</a>.</li>
+<li>DeepSeek-AI. <a href="https://github.com/deepseek-ai/open-infra-index/blob/main/202502OpenSourceWeek/day_6_one_more_thing_deepseekV3R1_inference_system_overview.md" target="_blank" rel="noopener noreferrer">Day 6: DeepSeek-V3/R1 Inference System Overview</a>, Open Infra Index.</li>
+<li><a href="https://github.com/deepseek-ai/DeepEP/tree/v1.2.1" target="_blank" rel="noopener noreferrer">deepseek-ai/DeepEP v1.2.1</a>, GitHub.</li>
+<li>Baydamirli et al. <a href="https://arxiv.org/abs/2610.01380" target="_blank" rel="noopener noreferrer">GPU-initiated communication: Dissecting down to the bone</a>, arXiv 2610.01380, 2026.</li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
