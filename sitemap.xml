@@ -2,7 +2,7 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://asivanadi0.github.io/</loc>
-    <lastmod>2026-11-10</lastmod>
+    <lastmod>2026-11-11</lastmod>
   </url>
   <url>
     <loc>https://asivanadi0.github.io/cv.html</loc>
@@ -10,7 +10,11 @@
   </url>
   <url>
     <loc>https://asivanadi0.github.io/writing.html</loc>
-    <lastmod>2026-11-10</lastmod>
+    <lastmod>2026-11-11</lastmod>
+  </url>
+  <url>
+    <loc>https://asivanadi0.github.io/decode-token-parallelism-tknp-405b-h100.html</loc>
+    <lastmod>2026-11-11</lastmod>
   </url>
   <url>
     <loc>https://asivanadi0.github.io/detent-batch-invariant-serving-near-stock-speed.html</loc>
