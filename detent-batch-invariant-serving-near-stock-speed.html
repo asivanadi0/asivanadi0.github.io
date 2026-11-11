@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pin the Selector, Keep the Fast Kernels: Detent and Batch-Invariant Serving at Near-Stock Speed — Anpoo Sivanadi</title>
+  <meta name="description" content="If you send the same prompt at temperature 0 to vLLM or SGLang twice, you can get different bits back, and the reason is usually not the kernel." />
+  <link rel="canonical" href="https://asivanadi0.github.io/detent-batch-invariant-serving-near-stock-speed.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Pin the Selector, Keep the Fast Kernels: Detent and Batch-Invariant Serving at Near-Stock Speed — Anpoo Sivanadi" />
+  <meta property="og:description" content="If you send the same prompt at temperature 0 to vLLM or SGLang twice, you can get different bits back, and the reason is usually not the kernel." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/detent-batch-invariant-serving-near-stock-speed.html" />
+  <meta property="article:published_time" content="2026-11-10T18:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Pin the Selector, Keep the Fast Kernels: Detent and Batch-Invariant Serving at Near-Stock Speed</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-10T18:00:00-08:00">10 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>If you send the same prompt at temperature 0 to vLLM or SGLang twice, you can get different bits back, and the reason is usually not the kernel. It's the other requests in the batch. The engine looks at the batch's token count, KV lengths and message sizes, picks an attention split count, a fused-MoE config row and an all-reduce algorithm, and each of those picks fixes a different floating-point summation order. Change the neighbors and you change the rounding.</p>
+<p>Both engines now ship a deterministic mode that keeps one conservative kernel per operator (unsplit attention, NCCL tree all-reduce, one hard-coded MoE config). It works, and it's slow. A new paper, "<a href="https://arxiv.org/abs/2611.10611" target="_blank" rel="noopener noreferrer">Detent: Batch-Invariant LLM Serving and RL Rollouts at Near-Stock Speed</a>" (Xin, Feng, Guo, Wu, Yin; arXiv 2611.10611, Nov 7), argues you can keep the fast kernels and only freeze the handful of values the selection code reads from the batch. On four H100s with Llama-3.1-70B and Qwen3-30B-A3B, they report latency per output token at 1.04 to 1.17x stock, against 1.67 to 10.3x for the built-in deterministic modes.</p>
+<p>I care about this for on-policy RL, where trainer and sampler disagreeing on logprobs can wreck a run, and for evals you can actually rerun.</p>
+<h2>1. Where the batch leaks in</h2>
+<p>The paper's framing is clean. A request is batch-invariant when its output bits don't depend on what else is in its batch. There are two separate conditions:</p>
+<ul>
+<li><strong>Kernel batch invariance.</strong> Given its parameters, each kernel reduces a request's values in an order that depends only on that request. This is the work from <a href="https://thinkingmachines.ai/blog/defeating-nondeterminism-in-llm-inference/" target="_blank" rel="noopener noreferrer">Thinking Machines</a> (fixed split size for attention, one GEMM config) and the kernels behind <a href="https://lmsys.org/blog/2025-09-22-sglang-deterministic/" target="_blank" rel="noopener noreferrer">SGLang's deterministic mode</a> and <a href="https://docs.vllm.ai/en/latest/features/batch_invariance.html" target="_blank" rel="noopener noreferrer">vLLM's batch-invariant mode</a>.</li>
+<li><strong>Selection batch invariance.</strong> The choice of which kernel and which parameters must depend only on the model, deployment and request, never on the batch.</li>
+</ul>
+<p>Most fast kernels already satisfy the first condition on their own. What breaks invariance is the selector. The examples they show on H100:</p>
+<ul>
+<li>FlashAttention-3 picks its split count from total KV tokens and its tile width from the longest query. At head dimension 64, the 128-wide and 192-wide tiles disagree on 31 of 32 logprobs.</li>
+<li>The fused MoE kernel takes the row of its 18-row tuned config table nearest the batch's token count. On Qwen3-30B-A3B, all 18 rows happen to agree bit for bit with the one SGLang's deterministic mode hard-codes. Nothing in the source tells you which of these two cases you're in.</li>
+<li>The custom all-reduce switches between one-shot, two-shot and NCCL by message bytes.</li>
+<li>Prefix caching and chunked prefill move where prefill ends. A request that prefills 100 tokens and decodes 50 groups its keys differently from one that prefills all 150, which is exactly the RL rollout-versus-training split.</li>
+</ul>
+<p>The cost of not fixing this is concrete. Changing only the load changes stock SGLang's final answer on 33 of GSM8K's 1,319 problems for Qwen3-30B-A3B (16 for Llama-3.1-70B), and its output text on 790 and 484 respectively.</p>
+<h2>2. How Detent works</h2>
+<p>Detent turns kernel selection into a program it can analyze.</p>
+<ul>
+<li><strong>SelIR.</strong> Each call site's selection logic is rewritten in a Python-subset DSL. Batch-dependent inputs are marked, <code>knob</code> declares deployment settings like GEMM padding or all-reduce push versus pull, and <code>require</code>/<code>assume</code> state when a selection is valid. The engine executes the same program the solver analyzes, so pinning a value in the analysis pins it in production.</li>
+<li><strong>Partial evaluation.</strong> Most inputs are known per deployment: head dimension, head counts, dtype, GPU arch, TP degree, page size, max context. Folding those leaves one dependence graph. For FA3 on Llama-3.1-70B that graph has 8,076 values and 26 selection points, 3 of them batch-dependent.</li>
+<li><strong>Minimum vertex cut.</strong> A pin is a value replaced by a constant. The solver finds the smallest set of pins that blocks every path from a batch-dependent input to a selection point, via weighted max-flow. For FA3 the cut lands on 3 selection points. For the MoE it lands inside the program on the row key, and that one pin fixes 14 of 16 batch-dependent selection points. Constant folding alone would have needed 12 pins for FA3; skipping the cut would have needed 10 for the MoE.</li>
+<li><strong>Value range analysis.</strong> For each pin, it runs the program with candidate values substituted and keeps the ones where every <code>require</code> and <code>assume</code> holds. At serve time each new input combination is checked once, and a violation stops the engine rather than silently running a different kernel.</li>
+<li><strong>Tuner.</strong> The fastest pinned values depend on traffic, so Detent profiles a representative workload and commits a "commitment tuple" that stays fixed while serving. If each kernel family's time is additive, it can tune one family at a time. On Qwen3-30B-A3B that's 3,020 assignments instead of 1,607,040, and the largest cross-family interaction they measured was 1.04% of GPU time per output token, which bounds the per-family result to within 2.1% of the best tuple.</li>
+</ul>
+<p>Operationally, a cold FA3 solve takes 130 to 180 s on 32 cores and tuning one workload took 605 to 1,148 s (Qwen3-30B-A3B). Measuring all 18,472 FA3 configurations once would take about 4.8 days of a four-GPU node.</p>
+<p>They do bring some kernels: a rebuilt FA3 that keeps split-KV with a fixed split size, an all-reduce that sums each element in fixed rank order, DeepGEMM for matmul and Triton fused MoE. Swapped into stock, their GEMM and all-reduce kernels add 0.6% to 2.8% GPU time per output token, so the speed isn't coming from faster kernels.</p>
+<h2>3. What they measured</h2>
+<p>Setup: Llama-3.1-70B-Instruct and Qwen3-30B-A3B, bf16, TP=4 on H100, vLLM 0.26.0 and a 2026 SGLang development build, with FA3, CUDA graphs, prefix caching and chunked prefill all on. Workloads are ShareGPT multi-turn replay (decode-heavy, about 64% prefix reuse), 8k-token arXiv documents with Poisson arrivals, and a closed-loop arXiv run at concurrency 1 and 8.</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Arm</th>
+<th>p50 latency per output token vs stock (geomean)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Detent, tuned, SGLang</td>
+<td>1.10x (Llama-3.1-70B), 1.11x (Qwen3-30B-A3B)</td>
+</tr>
+<tr>
+<td>Detent, tuned, vLLM</td>
+<td>1.08x (Llama-3.1-70B), 1.11x (Qwen3-30B-A3B)</td>
+</tr>
+<tr>
+<td>SGLang deterministic mode</td>
+<td>2.4 to 2.6x slower than Detent at p50</td>
+</tr>
+<tr>
+<td>vLLM batch-invariant mode</td>
+<td>3.4 to 5.7x slower than Detent at p50</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Per workload, tuned Detent lands at 1.01 to 1.22x stock at p50 and 1.12 to 1.22x at geometric-mean p99.</p>
+<p>Invariance is checked with a 26-cell battery comparing the first 16 output logprobs bitwise across reruns, changed co-batched requests, moved rows and different prefix-cache hits. Detent and both deterministic modes pass. Stock SGLang fails 9 of 26 cells on Llama-3.1-70B and 5 on Qwen3-30B-A3B. Stock vLLM fails 19 of 24 and 2 of 23. GSM8K accuracy matches SGLang's deterministic mode within -0.15 to +0.53 points (McNemar p ≥ 0.14).</p>
+<p>Eight more deployments solved from specs alone (TP 1 to 8, head dimensions 64 to 256, one B200) all stay invariant; on the B200 the tuned tuples land at 1.07x and 1.09x stock.</p>
+<h2>4. The RL result</h2>
+<p>This is the part I'd read first if you run GRPO. With seeded sampling committed, a trainer using the same kernels and tuple matches every rollout logprob bit for bit, so KL is exactly 0. Under the same protocol on Llama-3.1-8B, a stock setup matches 1.0 to 47.7% of tokens, and SGLang's deterministic mode with batch-invariant trainer ops matches 9.9 to 63.9%. Detent's rollout costs 1.03x stock per generated token and the full step stays within 4%.</p>
+<p>On the bf16 GRPO sanity recipe from <a href="https://arxiv.org/abs/2510.26788" target="_blank" rel="noopener noreferrer">Qi et al.</a> (DeepSeek-R1-Distill-Qwen-1.5B), the stock run collapses: reward drops from 0.733 at step 299 to 0.436 at step 500, and AIME 2024 Pass@1 from 29.2% to 8.5%. Detent holds KL at 0 through step 600 and reaches reward 0.843, at 1.18x stock time per token. Qi et al. switched to FP16; this keeps bf16.</p>
+<h2>5. What I'd keep in mind</h2>
+<ul>
+<li><strong>The tuple is a bet on your traffic.</strong> The commitment tuple can't adapt per batch, which is the whole point. On Qwen3-30B-A3B, serving the arXiv workload with the tuple tuned for ShareGPT took 4.17x as long as its tuned tuple and raised median TTFT from 238 ms to 4.75 s. Untuned defaults were up to 233% slower in SGLang. If your traffic shifts, you need to re-tune and switch tuples cleanly, and the paper names this as an open problem.</li>
+<li><strong>Invariance is per deployment.</strong> Outputs match only within one engine build, GPU type, TP degree and tuple. Matching across TP degrees needs TP-invariant kernels like TBIK's on top.</li>
+<li><strong>Someone has to write SelIR.</strong> Every selection is transcribed by hand today. The authors plan LLM-assisted transcription and native-code selectors, but for now this is a patch you maintain against each engine version.</li>
+<li><strong>FP8 is out for now.</strong> Dynamic per-tensor FP8 activation scales span the batch, so batch-invariant FP8 serving needs per-token or static scales. Most of the evaluation is bf16 on H100.</li>
+<li><strong>No code link in the paper.</strong> I didn't find a public repository referenced in v1, so the vLLM and SGLang patches can't be inspected yet.</li>
+</ul>
+<p>The idea I'm taking away is that "deterministic mode" doesn't have to mean "slow mode." In most engines the non-determinism is a selection problem, a few runtime-dependent constants reaching a dispatch table, and that's something you can find with program analysis instead of giving up split-KV and fast all-reduce. If you run RL rollouts on vLLM or SGLang, a cheap first check is to log which FA3 split, MoE row and all-reduce path each step picks and see how often they move with load.</p>
+<h2>Sources</h2>
+<ul>
+<li>Xin, Feng, Guo, Wu, Yin. <a href="https://arxiv.org/abs/2611.10611" target="_blank" rel="noopener noreferrer">Detent: Batch-Invariant LLM Serving and RL Rollouts at Near-Stock Speed</a>, arXiv 2611.10611, Nov 2026.</li>
+<li>He and Thinking Machines Lab. <a href="https://thinkingmachines.ai/blog/defeating-nondeterminism-in-llm-inference/" target="_blank" rel="noopener noreferrer">Defeating Nondeterminism in LLM Inference</a>, 2025.</li>
+<li>The SGLang Team. <a href="https://lmsys.org/blog/2025-09-22-sglang-deterministic/" target="_blank" rel="noopener noreferrer">Towards Deterministic Inference in SGLang and Reproducible RL Training</a>, LMSYS blog, 2025.</li>
+<li>vLLM. <a href="https://docs.vllm.ai/en/latest/features/batch_invariance.html" target="_blank" rel="noopener noreferrer">Batch Invariance</a>, vLLM documentation.</li>
+<li>Qi et al. <a href="https://arxiv.org/abs/2510.26788" target="_blank" rel="noopener noreferrer">Defeating the Training-Inference Mismatch via FP16</a>, arXiv 2510.26788, 2025.</li>
+<li><a href="https://github.com/Dao-AILab/flash-attention" target="_blank" rel="noopener noreferrer">Dao-AILab/flash-attention</a> and <a href="https://github.com/deepseek-ai/DeepGEMM" target="_blank" rel="noopener noreferrer">deepseek-ai/DeepGEMM</a>, GitHub.</li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
