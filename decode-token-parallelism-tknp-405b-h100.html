@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Move the Tokens, Not the Weights: Decode Token Parallelism for Long-Context 405B Serving — Anpoo Sivanadi</title>
+  <meta name="description" content="Sizing a decode pool for a big dense model with long contexts, you hit the same wall from two sides." />
+  <link rel="canonical" href="https://asivanadi0.github.io/decode-token-parallelism-tknp-405b-h100.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Move the Tokens, Not the Weights: Decode Token Parallelism for Long-Context 405B Serving — Anpoo Sivanadi" />
+  <meta property="og:description" content="Sizing a decode pool for a big dense model with long contexts, you hit the same wall from two sides." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/decode-token-parallelism-tknp-405b-h100.html" />
+  <meta property="article:published_time" content="2026-11-11T06:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Move the Tokens, Not the Weights: Decode Token Parallelism for Long-Context 405B Serving</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-11T06:00:00-08:00">11 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>Sizing a decode pool for a big dense model with long contexts, you hit the same wall from two sides. Run data-parallel replicas and every node spends most of its HBM on a full copy of the weights, so the KV cache runs out long before the GPUs run out of work. Stretch tensor parallelism across nodes and you get the KV capacity back, but your dense all-reduces leave NVLink and start crossing InfiniBand on every layer. Decode context parallelism (DCP) shards the cache by sequence instead, and in vLLM's implementation it rides on the TP group, so it inherits the same cross-node collectives plus a merge of partial attention results.</p>
+<p>A new paper, "<a href="https://arxiv.org/abs/2611.13293" target="_blank" rel="noopener noreferrer">Decode Token Parallelism: Memory-Efficient Distributed Attention Parallelism for Scalable LLM Decoding</a>" (Shrestha, Settlemyer, Reddy; NVIDIA and Texas A&M; arXiv 2611.13293, Nov 9), takes a different cut. Keep each layer's dense math inside one node. Spread attention across nodes by request. Only send the current token's activations over the network. On Llama 3.1 405B and Nemotron-4 340B on up to 64 H100s, they report up to 2.06x the completion throughput of data parallelism and up to 1.7x over DCP at the same GPU count.</p>
+<p>Here's how it works and where it doesn't.</p>
+<h2>1. Dense layers and attention want different things</h2>
+<p>The motivation section is the most reusable part. All numbers are single-layer decode for Llama 3.1 405B on H100.</p>
+<ul>
+<li><strong>MLPs barely notice batch size.</strong> At TP8 with 32K context, going from batch 1 to batch 128 raises MLP latency by 1.24x. Attention latency rises 22x. At batch 128, attention is close to 70% of summed layer latency.</li>
+<li><strong>TP stops helping attention at the KV-head count.</strong> Llama 3.1 405B has eight KV heads. Attention at batch 128 drops 7.6x from TP1 to TP8 (5.38 ms to 0.71 ms), and TP64, with 8x more GPUs, gives no further improvement. Past eight ranks you're replicating KV heads, not adding bandwidth.</li>
+<li><strong>Cross-node TP is expensive for dense layers.</strong> At batch 128, one all-reduce costs 6.5x more at TP64 than at TP8, and end-to-end MLP latency goes up 55% even though each GPU does 8x less compute.</li>
+<li><strong>Pipeline parallelism repeats weight reads.</strong> Four batch-32 microbatches cost 3.17x one batch-128 MLP call.</li>
+</ul>
+<p>The memory side is just as blunt. With FP8 weights (some parameters kept in BF16), the model takes 454 GiB on one 8-GPU node and leaves 106 GiB for KV cache. Batch 128 at 32K context needs 2,016 GiB of BF16 KV before any output tokens, which is 19x one node's budget. On eight nodes, any layout that stores one copy of the weights (PP, DCP, or the paper's design) gets about 5.0x the usable KV capacity of eight DP replicas.</p>
+<p>So the dense layers want to stay in one NVLink domain with the biggest batch you can give them, and attention wants more nodes. Those two goals don't conflict if you stop tying attention to where the weights live.</p>
+<h2>2. How TKNP splits the work</h2>
+<p>The observation that makes this possible: attention over the KV cache has no parameters. All of a layer's weights are in the QKV projection, output projection and MLP. A node that owns a request's KV cache only needs the projected query, key and value for the current token.</p>
+<p>The design:</p>
+<ul>
+<li><strong>One model copy, split into layer blocks across nodes.</strong> Each node stores about 1/N of the parameters, sharded across its local TP ranks. Block boundaries balance weight bytes (including embedding and output endpoints and quantization differences) so every node is left with a similar KV budget.</li>
+<li><strong>An active root per block.</strong> When a block executes, its node runs QKV projection, output projection and MLP for the <em>full</em> batch with TP8 inside the node. That keeps the full-batch weight-read amortization DP has.</li>
+<li><strong>Requests have fixed owners.</strong> The scheduler assigns each new request to the eligible node with the lowest KV load. The prefill pool writes that request's KV straight to its owner, in TKNP's head layout. Ownership never changes, so no KV migration.</li>
+<li><strong>Per layer:</strong> the root computes QKV, scatters each owner's slice over the matching TP rank, every node (root included) applies RoPE, appends to its local cache and runs attention for its own requests, then the root gathers the outputs in batch order and finishes the layer. At a block boundary, hidden and residual activations hand off to the next node, which becomes the root.</li>
+</ul>
+<p>Attention is sharded by head inside a node and by request across nodes, and each owner computes complete outputs for its requests. There's no softmax merge across ranks.</p>
+<p>It's built on vLLM 0.19.0, reusing its FlashAttention-3 kernels and intra-node TP, with dedicated communicator groups between matching TP ranks and full CUDA graph replay over the distributed decode path.</p>
+<h2>3. What crosses the network</h2>
+<p>For Llama 3.1 405B at batch 128 on four TP8 nodes, the paper works through the per-rank tensors:</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Path</th>
+<th>Tensor per rank</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>TKNP QKV scatter, per remote owner</td>
+<td>144 KiB</td>
+</tr>
+<tr>
+<td>TKNP attention output gather, per remote owner</td>
+<td>128 KiB</td>
+</tr>
+<tr>
+<td>DCP partial attention outputs</td>
+<td>512 KiB</td>
+</tr>
+<tr>
+<td>DCP log-sum-exp statistics</td>
+<td>8 KiB</td>
+</tr>
+<tr>
+<td>Dense TP all-reduce operand (full batch hidden state)</td>
+<td>4 MiB</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The 4 MiB all-reduce stays on NVLink under TKNP. With DCP in vLLM today, TP spans nodes, so that operand crosses InfiniBand on top of the attention exchange. The authors note the 4x smaller output tensor isn't 4x less total traffic, since DCP also gathers queries and the collective algorithm sets the real volume. TKNP's transfer size doesn't depend on context length.</p>
+<h2>4. The numbers</h2>
+<p>Setup: two prefill nodes (TP8xDP2) feeding a decode pool of four or eight nodes. Each node is 8x 80 GB H100 with fourth-generation NVLink, dual Sapphire Rapids, and 8x 400 Gb/s InfiniBand. FP8 weights, BF16 KV cache, CUDA graphs, PyTorch 2.9.1, CUDA 12.9, NCCL 2.27.5. Prefix sharing is off. Under greedy decoding, TKNP's tokens match the DP baseline. Completion throughput runs from workload release to the last request finishing, including admission waits and drain.</p>
+<ul>
+<li><strong>Llama 3.1 405B, 32 GPUs, 32K/64K/96K context, 1,024 output tokens:</strong> DP wins at low concurrency, when everything fits in each replica. As batch and context grow, DP runs out of KV, pushes requests into later waves, and TKNP pulls ahead, up to 2.06x. The crossover arrives earlier as context grows.</li>
+<li><strong>Nemotron-4 340B, 32 GPUs, 64K:</strong> the smaller model leaves DP more KV room, so the gap shrinks to up to 1.54x over DP and 1.32x over DCP.</li>
+<li><strong>Scaling to 64 GPUs:</strong> for 128 requests at 32K, going from four to eight decode nodes raises single-copy TKNP throughput 1.81x (90.5% scaling efficiency) versus 1.37x for DCP. On eight nodes, TKNP is up to 1.53x DCP, and 1.7x with dual-active-root microbatching.</li>
+<li><strong>Mixed-length traffic:</strong> on a trace built from L-Eval, LongBench v1 and LongBench v2 (8,223 to 126,848 tokens, mean 32,898, median 19,048), TKNP has the highest throughput at every Poisson rate and under a synchronized burst. With a 100 ms per output token completion SLO (queueing included), TKNP hits full attainment at one request per second, while DP and DCP fall below 90%.</li>
+</ul>
+<p>The latency picture needs care. DP and TP show lower p95 inter-token latency for requests that are already running, because their resident batches are smaller. The win shows up in queue wait and mean completion time, since TKNP keeps more requests resident. If your SLO is only "ITL once you're decoding," the comparison looks different.</p>
+<p>Dual-active-root microbatching stores each block on two nodes so two roots can overlap one microbatch's dense work with the other's attention. It buys up to 11.1%, at the cost of KV capacity and scheduling complexity, and the authors suggest it mainly for pools of eight or more nodes.</p>
+<h2>5. What I'd keep in mind</h2>
+<ul>
+<li><strong>It's for dense models, long context and high concurrency.</strong> At small batches or short contexts, the per-layer scatter/gather and synchronization can cost more than they save, and DP is better. Both models tested are dense; combining with expert parallelism for MoE is future work.</li>
+<li><strong>H100 plus InfiniBand only.</strong> The authors say larger NVLink domains change the balance between intra- and inter-node traffic. On an NVL72-class rack, the problem TKNP solves (dense collectives falling off NVLink at TP16+) mostly goes away inside the rack, so I'd expect the case to be strongest across racks or on 8-GPU nodes.</li>
+<li><strong>One request has to fit on one node.</strong> Ownership is per request, so a single sequence whose KV exceeds a node's budget doesn't work. The paper proposes applying the same balanced placement to DCP as a fix, but that isn't built.</li>
+<li><strong>It needs a disaggregated prefill tier that knows the owner.</strong> Prefill has to write KV to the chosen decode node in TKNP's layout. If you aren't already running prefill/decode disaggregation, this is a bigger change than a flag.</li>
+<li><strong>Long-context accuracy isn't measured.</strong> Nemotron-4 340B runs past its native window with linear RoPE scaling; these are performance numbers only.</li>
+<li><strong>No code link in v1.</strong> I didn't find a repository referenced, so the vLLM changes can't be inspected yet.</li>
+</ul>
+<p>What I'm taking from this is a sizing rule more than a system. Before adding DP replicas to a long-context decode pool, check whether you're compute-bound or KV-bound. If requests are queued for cache space while each replica runs a small batch, the extra weight copies are what's costing you. The motivation measurements (flat MLP curve, attention flat past TP8, all-reduce cost at TP64) are easy to rerun on your own model and nodes before you decide.</p>
+<h2>Sources</h2>
+<ul>
+<li>Shrestha, Settlemyer, Reddy. <a href="https://arxiv.org/abs/2611.13293" target="_blank" rel="noopener noreferrer">Decode Token Parallelism: Memory-Efficient Distributed Attention Parallelism for Scalable LLM Decoding</a>, arXiv 2611.13293, Nov 2026.</li>
+<li>Bhatia et al. <a href="https://arxiv.org/abs/2507.07120" target="_blank" rel="noopener noreferrer">Helix Parallelism: Rethinking Sharding Strategies for Interactive Multi-Million-Token LLM Decoding</a>, arXiv 2507.07120, 2025.</li>
+<li>Yang et al. <a href="https://arxiv.org/abs/2411.01783" target="_blank" rel="noopener noreferrer">Context Parallelism for Scalable Million-Token Inference</a>, arXiv 2411.01783, 2025.</li>
+<li>vLLM. <a href="https://docs.vllm.ai/en/latest/serving/context_parallel_deployment.html" target="_blank" rel="noopener noreferrer">Context Parallel Deployment</a>, vLLM documentation.</li>
+<li>SGLang team. <a href="https://lmsys.org/blog/2024-12-04-sglang-v0-4/" target="_blank" rel="noopener noreferrer">SGLang v0.4</a> (data-parallel attention), LMSYS blog, Dec 2024.</li>
+<li>Chen et al. <a href="https://arxiv.org/abs/2405.01814" target="_blank" rel="noopener noreferrer">Efficient Heterogeneous LLM Decoding with Model-Attention Disaggregation</a> (Lamina), arXiv 2405.01814.</li>
+<li>Shah et al. <a href="https://arxiv.org/abs/2407.08608" target="_blank" rel="noopener noreferrer">FlashAttention-3</a>, arXiv 2407.08608, 2024.</li>
+<li>NVIDIA. <a href="https://arxiv.org/abs/2406.11704" target="_blank" rel="noopener noreferrer">Nemotron-4 340B Technical Report</a>, arXiv 2406.11704, 2024.</li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
