@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FP8 Won't Save Your FP64: What Ozaki Emulation Actually Buys on B200, GB300 and MI355X — Anpoo Sivanadi</title>
+  <meta name="description" content="If you buy GPUs for a mixed cluster that runs both AI training and real simulation codes, the FP64 column on the spec sheet has gotten strange." />
+  <link rel="canonical" href="https://asivanadi0.github.io/fp64-ozaki-emulation-limits-b200-gb300-mi355x.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="FP8 Won't Save Your FP64: What Ozaki Emulation Actually Buys on B200, GB300 and MI355X — Anpoo Sivanadi" />
+  <meta property="og:description" content="If you buy GPUs for a mixed cluster that runs both AI training and real simulation codes, the FP64 column on the spec sheet has gotten strange." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/fp64-ozaki-emulation-limits-b200-gb300-mi355x.html" />
+  <meta property="article:published_time" content="2026-11-11T18:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>FP8 Won't Save Your FP64: What Ozaki Emulation Actually Buys on B200, GB300 and MI355X</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-11T18:00:00-08:00">11 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>If you buy GPUs for a mixed cluster that runs both AI training and real simulation codes, the FP64 column on the spec sheet has gotten strange. Each AI-first generation adds low-precision tensor throughput and HBM, and native double precision stays flat or drops. The usual answer is that this is fine for two reasons. Most HPC codes are bandwidth-bound anyway, and when you need a real DGEMM you can emulate it with INT8 or FP8 tensor cores using the Ozaki scheme.</p>
+<p>A new paper, "<a href="https://arxiv.org/abs/2611.13332" target="_blank" rel="noopener noreferrer">FP64 Performance and the Limits of Ozaki Emulation on HPC Systems</a>" (Świrydowicz, Malaya, Wolfe, Bauman, Ghysels, Belof; arXiv 2611.13332, Nov 9), tests both reasons with measurements on an AMD MI355X, an NVIDIA B200 and an NVIDIA GB300. The short version: emulation is real and sometimes fast, but it only helps large, dense, GEMM-shaped work, it costs about 3x the HBM, and the "bandwidth-bound" argument stops holding once you change the machine's balance.</p>
+<p>One caveat up front: all six authors are at AMD, and the conclusion ends by recommending AMD's FP64-heavy MI430X. The measurements use public code (RIKEN's <a href="https://github.com/RIKEN-RCCS/GEMMul8" target="_blank" rel="noopener noreferrer">GEMMul8</a> and <a href="https://github.com/IlyaNyrkov/ozablas" target="_blank" rel="noopener noreferrer">ozablas</a> at pinned commits, test harness at <a href="https://github.com/kswirydo/ozaki_tests" target="_blank" rel="noopener noreferrer">kswirydo/ozaki_tests</a>), so you can check them yourself. I'd read the numbers as data and the closing recommendation as a vendor's opinion.</p>
+<h2>1. How Ozaki emulation works, briefly</h2>
+<p>Ozaki-I splits each FP64 matrix into scaled slices that fit in INT8 or FP8, multiplies the slices pairwise on tensor cores, and sums the scaled products. With INT8 and inputs that have a wide exponent range you need 7 to 8 slices, and the cost grows with the product of slice counts.</p>
+<p>Ozaki-II uses the Chinese Remainder Theorem instead. Rows and columns are scaled by powers of two until the entries are integers, then reduced modulo a set of coprime moduli close to 255. One low-precision GEMM per modulus, then Garner's algorithm rebuilds the result and scales it back to FP64. To hold FP64 accuracy you need about 15 to 16 moduli. Fewer GEMMs than Ozaki-I, so it's the one people actually deploy, and it's what the performance section measures.</p>
+<p>The paper uses names like "INT8 Ozaki-II 16", meaning INT8 tensor cores and 16 moduli.</p>
+<h2>2. The roofline argument breaks when the ridge moves</h2>
+<p>The authors profiled 47 configurations across 11 applications and benchmarks on MI350X/MI355X: XSBench, TeaLeaf, CloverLeaf, the CEED Bake-Off, Laghos, PENNANT, LAMMPS, Kripke, rocHPL, rocHPCG and BabelStream. That's 131 kernel instances in total. Most sit below the HBM ridge point on MI355X, so yes, they're bandwidth-sensitive today.</p>
+<p>The useful part is where they project that onto the next generation. Taking the paper's spec figures:</p>
+<ul>
+<li><strong>NVIDIA Vera Rubin:</strong> 33 TFLOP/s native FP64, 22 TB/s HBM4. Ridge about 1.50 FLOP/byte.</li>
+<li><strong>AMD MI455X:</strong> 5 TFLOP/s native FP64, 23.3 TB/s HBM4. Ridge about 0.21 FLOP/byte.</li>
+</ul>
+<p>Under a first-order roofline, about 50 of the 131 kernels would cross from bandwidth-bound to compute-bound on Rubin, and about 100 on MI455X. That's the point to remember. "Bandwidth-bound" describes a kernel on a specific machine, not a property of the kernel. Cut FP64 per byte of bandwidth far enough and the same code becomes FP64-limited.</p>
+<p>The paper also notes NVIDIA quotes 200 TFLOP/s of FP64 DGEMM for Rubin through tensor-core emulation. That number applies to GEMM only, not to vector math, reductions, stencils or sparse kernels.</p>
+<p>And emulation only helps GEMM. In their dataset, 10 of the 11 applications have no dominant DGEMM kernel. They estimate the large-dense-GEMM-dominated slice of the HPC ecosystem at under 10%.</p>
+<h2>3. Accuracy: fine, until you scale the inputs</h2>
+<p>The basic accuracy test uses 4096×4096 matrices with condition numbers set anywhere from 1 to 1e17. With enough moduli (INT8 Ozaki-II 12 or 16, FP8 Ozaki-II 10 or 12), the relative Frobenius error versus native DGEMM stays flat and doesn't depend on conditioning. Ozaki-I through ozablas behaves the same way. Accuracy depends on slice count, not on how ill-conditioned the matrix is. With only 6 or 8 slices, though, the Ozaki-I results sit noticeably above machine precision.</p>
+<p>The test that breaks it is nicer. Take random 1024×1024 A and B, pick a diagonal D of powers of two in [2^-m, 2^m], and compute As = AD and Bs = D⁻¹B. In exact arithmetic AsBs = AB. Native FP64 gives exactly the same result for both. INT8 Ozaki-II 16 and FP8 Ozaki-II 12 begin to diverge from the native answer at m ≈ 34, INT8 worse than FP8, and even modest m costs accuracy. Unscaled AB through the same Ozaki settings is fine.</p>
+<p>So two algebraically identical products can give materially different emulated results just because of how the operands are scaled. If your solver does row or column equilibration, or your data has a wide dynamic range per row, test this before trusting emulation.</p>
+<h2>4. Performance: big matrices only, and watch the HBM</h2>
+<p>Theoretical caps first. On B200, FP8/INT8 runs at up to 4.5 POPS against 40 TFLOP/s of FP64 GEMM, which caps INT8 Ozaki-II 16 at about 7.04× and FP8 Ozaki-II 12 at about 9.38×. MI355X has 78.6 TFLOP/s FP64 matrix against 5 POPS INT8, which caps INT8 Ozaki-II 16 at 3.98×. On the Blackwell Ultra part the paper lists 1.3 TFLOP/s FP64 GEMM, so the cap there goes way up.</p>
+<p>Measured, square matrices, κ = 1e3, mean of 50 runs after 10 warmups:</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>GPU</th>
+<th>Native FP64 (TFLOP/s)</th>
+<th>Best emulated result</th>
+<th>Break-even size</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MI355X</td>
+<td>~64 to 69 at large sizes</td>
+<td>INT8 Ozaki-II 12: 183.5 TFLOP/s, 2.85× at 40960</td>
+<td>4096 (1.31× for 12 moduli, 1.01× for 16)</td>
+</tr>
+<tr>
+<td>B200</td>
+<td>~35 to 36</td>
+<td>INT8 Ozaki-II 12: 174.7 TFLOP/s, 4.86× at 16384</td>
+<td>2048 for 12 moduli (1.16×), 4096 for 16</td>
+</tr>
+<tr>
+<td>GB300</td>
+<td>1.10</td>
+<td>FP8 Ozaki-II 10: 88.1 TFLOP/s, 79.85× at 32768</td>
+<td>512 to 1024</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Below 2048, emulation is a loss everywhere except GB300. At 384×384 it runs at 0.03× to 0.11× native on B200 and MI355X. The fixed cost of splitting, launching 12 to 16 GEMMs and rebuilding is O(n²) plus kernel launches, and it only fades once the O(n³) work dominates.</p>
+<p>GB300 is the special case. The 80× number looks great until you compare it to native B200. INT8 Ozaki-II on GB300 tops out under 12 TFLOP/s and never reaches B200's native 35 to 36. FP8 Ozaki-II needs 8192×8192 or larger to pass it. The speedup is large because the baseline is 1.10 TFLOP/s, not because emulation is fast.</p>
+<p>Then there's memory. GEMMul8's workspace isn't scratch space. For 40960×40960, A, B and C take about 37.5 GB. INT8 Ozaki-II adds 64.0 GB with 12 moduli or 83.2 GB with 16, so you need about 100 to 120 GB, or 2.6 to 3.1× native. FP8 needs almost twice as much workspace as INT8 at the same size. The paper got an out-of-memory error on B200 at 40960. If your code chooses problem size per GPU to fill HBM, emulation will make you shrink it.</p>
+<p>Misalignment hurts too. On MI355X, a 4097×4097 matrix instead of 4096 costs native DGEMM less than 5% and emulated GEMM more than 25%, because each of the 12 or 16 inner GEMMs pays for padding tiles.</p>
+<h2>5. One point in emulation's favor</h2>
+<p>Reproducibility. The authors multiplied the same saved 4096×4096 pairs on all three GPUs. Every Ozaki-II variant gave bitwise identical results across MI355X, B200 and GB300, regardless of moduli count. Native DGEMM did not, and the gap grew with condition number. That's not "more correct". Nobody checked against an exact answer. But if cross-platform determinism matters to you, emulated DGEMM gives it to you for free.</p>
+<h2>What I'd keep in mind</h2>
+<ul>
+<li><strong>It's standalone GEMM.</strong> No full solver was run end to end with emulation and no multi-node runs. The authors list that as future work. App-level speedup will be lower than the GEMM tables.</li>
+<li><strong>The roofline projection is first-order.</strong> Rubin and MI455X numbers come from spec sheets, not measurements. The ~50 and ~100 kernel crossings are a projection, not a benchmark.</li>
+<li><strong>Square matrices only in the tables.</strong> They say non-square results depend mostly on the inner dimension, which has to be large.</li>
+<li><strong>κ = 1e3 for the performance runs.</strong> Inputs that need the wide-exponent path or more slices will run slower.</li>
+<li><strong>Vendor authorship.</strong> The data is reproducible. The MI430X pitch is their conclusion, not a finding.</li>
+</ul>
+<p>For context on the other side of the argument, see Matsuoka's "<a href="https://arxiv.org/abs/2606.06510" target="_blank" rel="noopener noreferrer">FP8 is all you need (part 1)</a>" and NVIDIA's <a href="https://arxiv.org/abs/2511.13778" target="_blank" rel="noopener noreferrer">guaranteed-accuracy Ozaki extensions</a>.</p>
+<p>If I were planning capacity for a cluster that has to run both, here's what I'd do. Profile which of your FP64 kernels are actually large dense GEMMs. Count them as emulation candidates only if they're above about 4096 on the inner dimension and you can afford 3× the HBM. Everything else, the stencils, sparse solvers, transport sweeps and reductions, runs at whatever native FP64 the part ships with, divided by whatever bandwidth it gained. Do that division before signing the PO.</p>
+<h2>Sources</h2>
+<ul>
+<li>Świrydowicz et al., <a href="https://arxiv.org/abs/2611.13332" target="_blank" rel="noopener noreferrer">FP64 Performance and the Limits of Ozaki Emulation on HPC Systems</a>, arXiv 2611.13332</li>
+<li><a href="https://github.com/RIKEN-RCCS/GEMMul8" target="_blank" rel="noopener noreferrer">GEMMul8</a>, RIKEN-RCCS</li>
+<li><a href="https://github.com/IlyaNyrkov/ozablas" target="_blank" rel="noopener noreferrer">ozablas</a></li>
+<li><a href="https://github.com/kswirydo/ozaki_tests" target="_blank" rel="noopener noreferrer">ozaki_tests</a>, authors' test harness</li>
+<li>Matsuoka, <a href="https://arxiv.org/abs/2606.06510" target="_blank" rel="noopener noreferrer">FP8 is all you need (part 1)</a>, arXiv 2606.06510</li>
+<li>Schwarz et al., <a href="https://arxiv.org/abs/2511.13778" target="_blank" rel="noopener noreferrer">Guaranteed DGEMM accuracy while using reduced-precision tensor cores</a>, arXiv 2511.13778</li>
+<li>Uchino, Ozaki, Imamura, <a href="https://arxiv.org/abs/2603.10634" target="_blank" rel="noopener noreferrer">Ozaki-II with FP8 quantization</a>, arXiv 2603.10634</li>
+<li>Abdelfattah et al., <a href="https://arxiv.org/abs/2506.11277" target="_blank" rel="noopener noreferrer">Analysis of floating-point matrix multiplication computed via integer arithmetic</a>, arXiv 2506.11277</li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
