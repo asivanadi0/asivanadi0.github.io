@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Keep the Cache, Swap the Weights? KV Reuse Across Model Updates on DeepSeek-V4-Flash — Anpoo Sivanadi</title>
+  <meta name="description" content="Every serving team that runs a big prefix cache hits the same awkward moment." />
+  <link rel="canonical" href="https://asivanadi0.github.io/kv-cache-reuse-across-model-updates-deepseek-v4-flash.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Keep the Cache, Swap the Weights? KV Reuse Across Model Updates on DeepSeek-V4-Flash — Anpoo Sivanadi" />
+  <meta property="og:description" content="Every serving team that runs a big prefix cache hits the same awkward moment." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/kv-cache-reuse-across-model-updates-deepseek-v4-flash.html" />
+  <meta property="article:published_time" content="2026-11-12T06:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Keep the Cache, Swap the Weights? KV Reuse Across Model Updates on DeepSeek-V4-Flash</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-12T06:00:00-08:00">12 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>Every serving team that runs a big prefix cache hits the same awkward moment. A post-trained refresh of the model lands, same architecture, same parameter count, new weights. You roll it out, and every cached prefix you have, the system prompts, the RAG documents, the long agent histories sitting in host memory or on SSD, is now technically stale. The safe move is to flush and pay for a full re-prefill across the fleet. The tempting move is to keep serving those pages to the new weights and hope nothing breaks.</p>
+<p>A new paper from Rank Computing, "<a href="https://arxiv.org/abs/2611.14051" target="_blank" rel="noopener noreferrer">Can KV Cache Be Reused Across Model Updates? A DeepSeek-V4-Flash Case Study</a>" (Tao, Jin, Zhao; arXiv 2611.14051, Nov 10), measures what actually happens when you do the tempting thing. No mapping, no selective recomputation. The updated model just reads its predecessor's cache. The answer is more useful than "it works" or "it doesn't": sometimes the cache keeps the task information you care about, and it almost never keeps the new model's exact behavior.</p>
+<h2>1. The setup</h2>
+<p>The paper splits each request into a shared prefix and a question suffix and compares three runs:</p>
+<ul>
+<li><strong>Target:</strong> the new model prefills the prefix and answers.</li>
+<li><strong>Source:</strong> the old model prefills and answers.</li>
+<li><strong>KV Reuse:</strong> the old model's prefix cache is handed to the new model, which processes the question and generates.</li>
+</ul>
+<p>Four update pairs, each with unchanged architecture and size:</p>
+<ul>
+<li>GLM-5.2 to GLM-5.3 (750B nominal backbone)</li>
+<li>DeepSeek-V4.1-Flash to Flash-1017 (552B)</li>
+<li>DeepSeek-V4-Flash to Flash-0731 (284B), the main case study</li>
+<li>Qwen3-30B-A3B to Qwen3-30B-A3B-Instruct-2507 (30.5B)</li>
+</ul>
+<p>DeepSeek-V4 is not a plain KV cache, which makes this a harder test than it sounds. The handoff has to carry the KV anchor, the sliding-window attention state, the C4 compression state and its indexer state, the C128 compression state, and two associated state bundles. The serving experiments run on SGLang (commit 1fdd6c89) across eight H100s at TP=8, with file-backed HiCache, 256-token storage pages and 4,096-token chunked prefill. The harness checks file presence, size and SHA-256 for every page component before and after each run, and a partial or non-storage hit counts as a failure, not a result. That's the level of care I'd want before trusting any of the numbers.</p>
+<h2>2. Retrieval: it depends a lot on the model</h2>
+<p>The controlled test is key-value needle retrieval with single-token keys and values, about one record per 16 tokens, prefixes from 512 to 32K, 192 queries per length. Accuracy at 32K:</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Update</th>
+<th>Target</th>
+<th>Source</th>
+<th>KV Reuse</th>
+<th>Harmful flip rate</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GLM-5.2 to 5.3</td>
+<td>86.46%</td>
+<td>89.58%</td>
+<td>90.62%</td>
+<td>4.22%</td>
+</tr>
+<tr>
+<td>V4.1-Flash to Flash-1017</td>
+<td>97.92%</td>
+<td>98.44%</td>
+<td>97.92%</td>
+<td>0.53%</td>
+</tr>
+<tr>
+<td>V4-Flash to Flash-0731</td>
+<td>25.52%</td>
+<td>55.73%</td>
+<td>31.25%</td>
+<td>26.53%</td>
+</tr>
+<tr>
+<td>Qwen3-30B-A3B to Instruct-2507</td>
+<td>55.21%</td>
+<td>0.00%</td>
+<td>13.02%</td>
+<td>78.30%</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The harmful flip rate is the share of answers the new model got right on its own cache that turn wrong on the old cache. That's the column I'd actually watch, because an aggregate accuracy number can hide damage. On V4-Flash at 32K, reuse breaks 13 of the target's 49 correct answers and repairs 24 of its errors, so overall accuracy goes up while a quarter of previously correct answers change.</p>
+<p>The Qwen row is a warning about small models. Reuse loses accuracy at every length, down to 13.02% at 32K, even with RoPE phase alignment. (The 0% source score is an artifact of the protocol: the older model's thinking-style output fills the eight-token budget before it answers.)</p>
+<p>The V4.1-Flash pair was pushed out to 512K. It tracks the target at 64K (94.79% reuse vs 95.83% target), then drifts. At 512K reuse gets 61.46% against 66.15% native. The authors also tried a closed-form ridge mapper adapted from <a href="https://arxiv.org/abs/2608.03893" target="_blank" rel="noopener noreferrer">Heo et al.</a> to translate old caches into new coordinates. On V4-Flash at 32K it helped (40.10% vs 31.25%). On V4.1-Flash at 256K and 512K it was far worse than plain reuse: 52.60% and 40.10% against 72.40% and 61.46%. So a learned mapper isn't a free upgrade.</p>
+<h2>3. Latency and quality on real QA</h2>
+<p>For V4-Flash to Flash-0731, the paper runs 585 examples from BABILong, HotpotQA, 2WikiMQA and MultiFieldQA-en. TTFT here is measured with the old cache already on storage, and includes lookup, loading and restore. Old-model prefill and model startup are excluded.</p>
+<div class="table-wrap" role="region" aria-label="Table 2" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Benchmark</th>
+<th>Median prefix</th>
+<th>Median TTFT speedup</th>
+<th>Native score</th>
+<th>Reuse score</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>HotpotQA (F1)</td>
+<td>14.3K</td>
+<td>5.08x</td>
+<td>69.3</td>
+<td>66.3</td>
+</tr>
+<tr>
+<td>2WikiMQA (F1)</td>
+<td>6.4K</td>
+<td>2.10x</td>
+<td>61.7</td>
+<td>54.7</td>
+</tr>
+<tr>
+<td>MultiFieldQA-en (F1)</td>
+<td>7.7K</td>
+<td>2.51x</td>
+<td>45.9</td>
+<td>46.2</td>
+</tr>
+<tr>
+<td>BABILong (acc.)</td>
+<td>1.7K</td>
+<td>0.86x</td>
+<td>59.0</td>
+<td>58.7</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Two operator lessons fall out of this table. First, the speedup is about prefix length, not magic. On BABILong's short prompts, loading pages from storage costs more than the prefill it saves, and 201 of 300 reuse requests were slower than native. On the longest HotpotQA quartile, the median speedup is 10.51x. Your break-even depends on your storage tier and page size, so measure it. Second, the quality hit is task-specific. MultiFieldQA held its score, while multi-hop QA lost 3 to 7 F1 points, with confidence intervals that exclude zero.</p>
+<h2>4. Same first token, different answer</h2>
+<p>This is the part I think matters most for anyone who promises reproducible outputs across a rollout. On the QA sets, reuse often agrees with native inference on the first token and then diverges. MultiFieldQA-en had 87.5% first-token agreement and only 41.2% full-sequence agreement. The paper shows two failure shapes:</p>
+<ul>
+<li><strong>Stopping changes.</strong> Native answers "Switchfoot" and stops. Reuse answers "Switchfoot is still together." Same entity, F1 falls from 1.00 to 0.40.</li>
+<li><strong>Content changes.</strong> Native says the father died in Washington, D.C. Reuse says St. Louis, Missouri, a place the context ties to the son. F1 falls from 0.67 to 0.00.</li>
+</ul>
+<p>They also define Functional Cache Divergence, a scaled Jensen-Shannon divergence (0 to 100) between next-token distributions under the native and reused caches. For needle retrieval on V4-Flash it climbs from 2.87 at 512 tokens to 30.62 at 32K. For natural-text continuation on FineWeb-Edu it stays between 3.04 and 3.64 at all lengths. Prose has enough local cues that the model recovers. Exact lookups in long context don't.</p>
+<p>One more finding changes how I think about what a cache is. Injecting Flash's cache into Flash-Base, the pretrained model with no instruction tuning, takes Base from 0% to 91.15% retrieval accuracy at 2K with its weights unchanged. The cache carries the old model's processing of the instruction "return only the value," not just the records. A cached prefix is partly a cached behavior.</p>
+<h2>5. What I'd keep in mind</h2>
+<ul>
+<li><strong>Single runs, not SLOs.</strong> Each request was timed once. The authors say the latency numbers describe these runs, not service-level latency.</li>
+<li><strong>Serving-path noise is mixed in.</strong> Same-version restore through SGLang already changes outputs: only 52 of 85 MultiFieldQA-en responses fully matched native with the same model. The QA deltas combine cross-version drift with that handoff variation.</li>
+<li><strong>Easy updates only.</strong> All four pairs keep architecture and size, and the DeepSeek ones are post-training refreshes. A new tokenizer, a changed compressor, or a different layer count breaks this entirely.</li>
+<li><strong>One H100 setup.</strong> The DeepSeek results come from TP=8 on eight H100s with file HiCache. Different page sizes or storage tiers move the break-even point.</li>
+</ul>
+<p>If I were running a long-context fleet through a model refresh, here's how I'd use this. Don't treat old pages as valid by default. Version-tag every cached prefix with the weights that produced it. If you want the TTFT win during the rollout window, allow cross-version hits only for long prefixes on tasks that tolerate drift, like summarization, chat over documents, or continuation. Force a fresh prefill for exact-lookup traffic, tool calls with strict output formats, and anything you've promised to be deterministic. And before you enable it, run your own harmful-flip-rate check on your own traffic, not just an accuracy average. That's the number that tells you how many correct answers you're about to change.</p>
+<h2>Sources</h2>
+<ul>
+<li>Tao, Jin, Zhao, <a href="https://arxiv.org/abs/2611.14051" target="_blank" rel="noopener noreferrer">Can KV Cache Be Reused Across Model Updates? A DeepSeek-V4-Flash Case Study</a>, arXiv 2611.14051</li>
+<li>DeepSeek, <a href="https://api-docs.deepseek.com/updates" target="_blank" rel="noopener noreferrer">API change log (V4-Flash update, July 31, 2026)</a></li>
+<li>DeepSeek, <a href="https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash-Base" target="_blank" rel="noopener noreferrer">DeepSeek-V4-Flash-Base model repository</a></li>
+<li>Z.ai, <a href="https://huggingface.co/zai-org/GLM-5.3" target="_blank" rel="noopener noreferrer">GLM-5.3 model card</a></li>
+<li>Heo et al., <a href="https://arxiv.org/abs/2608.03893" target="_blank" rel="noopener noreferrer">Cross-model KV cache transfer in LLM families: a closed-form linear mapping for prefill reuse</a>, arXiv 2608.03893</li>
+<li>Shi, Zheng, Lou, <a href="https://arxiv.org/abs/2609.10266" target="_blank" rel="noopener noreferrer">KVShareArena: KV-cache reuse across contexts and model checkpoints</a>, arXiv 2609.10266</li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
