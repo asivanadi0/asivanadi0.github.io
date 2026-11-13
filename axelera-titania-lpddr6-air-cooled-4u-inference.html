@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Axelera Titania: 1 TB of LPDDR6 in an Air-Cooled 4U, Checked Against the Fine Print — Anpoo Sivanadi</title>
+  <meta name="description" content="Most inference hardware news this year has assumed you are buying a liquid-cooled rack and a new power feed to go with it." />
+  <link rel="canonical" href="https://asivanadi0.github.io/axelera-titania-lpddr6-air-cooled-4u-inference.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Axelera Titania: 1 TB of LPDDR6 in an Air-Cooled 4U, Checked Against the Fine Print — Anpoo Sivanadi" />
+  <meta property="og:description" content="Most inference hardware news this year has assumed you are buying a liquid-cooled rack and a new power feed to go with it." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/axelera-titania-lpddr6-air-cooled-4u-inference.html" />
+  <meta property="article:published_time" content="2026-11-12T18:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Axelera Titania: 1 TB of LPDDR6 in an Air-Cooled 4U, Checked Against the Fine Print</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-12T18:00:00-08:00">12 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>Most inference hardware news this year has assumed you are buying a liquid-cooled rack and a new power feed to go with it. Axelera AI's Titania pitch is the opposite: keep the air-cooled racks you already have, skip HBM entirely, and still serve large mixture-of-experts models at interactive speed. On November 12 the Eindhoven company published the <a href="https://axelera.ai/news/axelera-ai-unveils-titania-architecture-hpc-class-ai-responsiveness-without-liquid-cooled-racks-targeting-110b-underserved-market" target="_blank" rel="noopener noreferrer">architecture announcement</a> and a <a href="https://axelera.ai/aipu/titania" target="_blank" rel="noopener noreferrer">Titania product page</a> with real numbers on it, ahead of a deeper session at SC26 in Chicago (November 15 to 19).</p>
+<p>I covered its predecessor, <a href="/axelera-europa-629-tops-edge-232p.html">Europa</a>, as a 45 W PCIe card for vision and agent lanes. Titania is a different class of part, and the product page has enough detail to do some arithmetic. One thing up front, because Axelera says it plainly: every Titania performance figure is a simulation run through Axelera's production compiler. There is no Titania silicon result yet, and production starts in the second half of 2027.</p>
+<h2>1. What Axelera actually disclosed</h2>
+<p>Per package (Axelera calls it a SiP, system-in-package):</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Titania SiP</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Chiplets</td>
+<td>2</td>
+</tr>
+<tr>
+<td>AI cores</td>
+<td>64 (32 per chiplet), third-generation digital in-memory compute</td>
+</tr>
+<tr>
+<td>RISC-V cores</td>
+<td>32 per chiplet</td>
+</tr>
+<tr>
+<td>On-chip SRAM</td>
+<td>128 MB shared per chiplet</td>
+</tr>
+<tr>
+<td>Compute</td>
+<td>2.5 PFLOPS FP8</td>
+</tr>
+<tr>
+<td>Power</td>
+<td>400 W</td>
+</tr>
+<tr>
+<td>Memory</td>
+<td>128 GB LPDDR6 at 2,458 GB/s</td>
+</tr>
+<tr>
+<td>Formats</td>
+<td>MXFP4, FP4, MXFP8, FP8, BF16</td>
+</tr>
+<tr>
+<td>Video</td>
+<td>On-chip AV1 and H.265, 8K decode and 4K encode</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The reference server, codenamed AX8, puts eight SiPs in a standard 4U chassis: 20 PFLOPS FP8, 1 TB of accelerator memory, 19.6 TB/s aggregate bandwidth, and 5 to 6 kW typical, air-cooled. Form factors are PCIe cards and OCP OAM modules on a UBB baseboard with the eight modules on a scale-up network. The software is the same Voyager SDK as Metis and Europa, with tensor, expert and pipeline parallelism, speculative decoding, KV cache offload and disaggregation listed as supported. Axelera says it has more than $300 million in confirmed commitments, and that the Titania PCIe card is a drop-in for the four-chip Europa Server 250p, with that migration landing in 2028.</p>
+<h2>2. Putting the server next to the GPU boxes</h2>
+<p>NVIDIA's <a href="https://www.nvidia.com/en-us/data-center/hgx/" target="_blank" rel="noopener noreferrer">HGX page</a> gives the comparison points. These are spec sheets against a simulated part, so read the table as shape, not verdict.</p>
+<div class="table-wrap" role="region" aria-label="Table 2" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>8-accelerator box</th>
+<th>Memory</th>
+<th>Memory bandwidth</th>
+<th>FP8</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Axelera AX8 (Titania)</td>
+<td>1 TB LPDDR6</td>
+<td>19.6 TB/s</td>
+<td>20 PFLOPS (sparsity not stated)</td>
+</tr>
+<tr>
+<td>HGX B300</td>
+<td>2.1 TB HBM3e</td>
+<td>not listed on the HGX page</td>
+<td>72 PFLOPS sparse, 36 dense</td>
+</tr>
+<tr>
+<td>HGX Rubin NVL8</td>
+<td>2 TB HBM4</td>
+<td>130 TB/s</td>
+<td>130 PFLOPS (FP8/FP6 training, dense)</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The honest headline is that the AX8 has about 15% of a Rubin NVL8's memory bandwidth and half its capacity. LPDDR6 doesn't close that gap, and Axelera doesn't claim it does.</p>
+<p>What surprised me is the ratio. Titania works out to roughly 1,017 FP8 FLOPs per byte of memory bandwidth (2.5 PFLOPS over 2,458 GB/s). A single Rubin GPU, at 17.5 PFLOPS dense FP8 and 22 TB/s, is about 795. So Titania is not a big compute engine starved by cheap memory. It is a smaller, balanced part. That matters for decode, where you're bandwidth-bound almost all the time, and it's why Axelera keeps pointing at sparse MoE models: when only a small slice of the weights is active per token, capacity decides whether the model fits at all, and bandwidth sets the ceiling on per-user speed.</p>
+<h2>3. Capacity math I'd actually use</h2>
+<p>Axelera says one AX8 holds a 1.6-trillion-parameter model at FP4 with headroom for KV cache. My arithmetic, not theirs: MXFP4 stores an 8-bit scale per 32 elements, so it's about 4.25 bits per parameter. That puts 1.6T parameters at roughly 850 GB, leaving about 170 GB of the 1,024 GB for KV cache, activations and runtime across eight packages. That's "fits," not "fits comfortably" for long contexts at any real concurrency.</p>
+<p><a href="https://huggingface.co/deepseek-ai/DeepSeek-R1" target="_blank" rel="noopener noreferrer">DeepSeek-R1</a> is the friendlier case. At 671B total parameters, the same 4.25-bit estimate is about 356 GB, so you'd have roughly 650 GB left for cache. With 37B active parameters per token, a decode step reads about 20 GB of weights before any KV traffic. Spread perfectly over 19.6 TB/s, that's a ceiling near 1,000 tokens per second for a single stream. Axelera's rack simulation targets 200+ tokens/s per user, which sits well inside that ceiling, so the claim isn't physically odd. Whether the compiler and the scale-up network get anywhere near the ceiling is exactly what a simulation can't tell you.</p>
+<h2>4. The rack numbers, re-derived</h2>
+<p>The most useful chart on the product page is the rack-level one, because the footnote gives absolute numbers. Setup: one air-cooled rack, 200+ tokens/s per user, 8K input and 1K output, FP4, Axelera internal simulation from October 2026.</p>
+<div class="table-wrap" role="region" aria-label="Table 3" tabindex="0">
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Titania rack</th>
+<th>GPU rack (unnamed)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Hardware</td>
+<td>8 × 4U, 64 accelerators</td>
+<td>3 × 10U, 24 GPUs</td>
+</tr>
+<tr>
+<td>DeepSeek-R1 tokens/s</td>
+<td>43,816</td>
+<td>26,900</td>
+</tr>
+<tr>
+<td>GPT-OSS-120B tokens/s</td>
+<td>431,425</td>
+<td>152,234</td>
+</tr>
+<tr>
+<td>DeepSeek-R1 tokens/s per kW</td>
+<td>1,053</td>
+<td>656</td>
+</tr>
+<tr>
+<td>GPT-OSS-120B tokens/s per kW</td>
+<td>10,371</td>
+<td>3,709</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Three things fall out when you divide these yourself.</p>
+<ul>
+<li><strong>Both racks are about 41 kW.</strong> 43,816 divided by 1,053 is 41.6 kW for Titania, and 26,900 divided by 656 is 41.0 kW for the GPU rack. That's an air-cooled rack, but it's not the "legacy 15 kW rack" from the press release, where Axelera says two servers fit. If your existing racks are 15 kW, you get two AX8s per rack, not eight.</li>
+<li><strong>Per chip, the GPU still wins.</strong> 26,900 over 24 GPUs is about 1,121 tokens/s per GPU on DeepSeek-R1. 43,816 over 64 SiPs is about 685 per Titania. The rack win, 1.63x on R1 and 2.83x on GPT-OSS-120B, comes from packing more, lower-power packages into the same envelope.</li>
+<li><strong>The power basis is TDP against TDP.</strong> That's a fair first cut, but neither side's real draw at this load is shown. 64 SiPs at 400 W is 25.6 kW of accelerator TDP out of about 41.6 kW, so the rest is host, fans, memory and network overhead in Axelera's model.</li>
+</ul>
+<p>The product page also says it outright: rack-scale GPUs still lead at very large batch throughput. Titania's case rests on holding per-user speed at small and mid batch.</p>
+<h2>5. What's missing</h2>
+<ul>
+<li><strong>No silicon.</strong> Every Titania figure is simulated. Axelera's CTO points to Europa turning 88% of its memory bandwidth into tokens on shipping silicon, but Europa is a 200 GB/s part. That doesn't show the same efficiency at 2.4 TB/s per package across a scale-up network.</li>
+<li><strong>Anonymous competitors.</strong> The interactivity chart uses "Competitor 1 to 4" from September 2026 InferenceX data, and the rack chart's 10U GPU server isn't named. I'd want the SKU, the serving engine and the version before I trusted the ratios.</li>
+<li><strong>No scale-up numbers.</strong> "High bandwidth scale-up connectivity" has no bandwidth, topology or link count. For expert parallelism across eight packages, that's the spec I'd ask for first.</li>
+<li><strong>No process node, LPDDR6 speed grade, sparsity basis for 2.5 PFLOPS, or price.</strong></li>
+<li><strong>The Vera Rubin line.</strong> The product page says one 4U Titania server is designed to match the per-user speed of a liquid-cooled Vera Rubin NVL72 rack on DeepSeek-R1. That's per-user speed, not throughput, and it's simulated.</li>
+</ul>
+<h2>6. Where I land</h2>
+<p>Titania is the first non-HBM inference part I've seen this year that comes with enough published numbers to check the logic, and the logic mostly holds. A balanced compute-to-bandwidth ratio, a lot of cheap capacity, and air cooling at 5 to 6 kW per 4U is a real option for teams serving sparse MoE models to interactive users in racks they already own. It isn't a Rubin replacement, and the per-chip numbers say so.</p>
+<p>If I were planning 2028 capacity, I'd put Titania on the list with two conditions: first silicon numbers on a named open model, and a scale-up bandwidth spec. Until both show up, it's a promising simulation with a credible software story. If you're at SC26 next week, ask Axelera for the scale-up link numbers and the identity of the 10U GPU server. Those two answers will tell you more than any of the charts.</p>
+<h2>Sources</h2>
+<ul>
+<li>Axelera AI, <a href="https://axelera.ai/news/axelera-ai-unveils-titania-architecture-hpc-class-ai-responsiveness-without-liquid-cooled-racks-targeting-110b-underserved-market" target="_blank" rel="noopener noreferrer">Titania architecture announcement</a>, November 12, 2026 (also on <a href="https://www.businesswire.com/news/home/20261112290507/en/Axelera-AI-Unveils-Titania-Architecture-HPC-Class-AI-Responsiveness-Without-Liquid-Cooled-Racks-Targeting-%24110B-Underserved-Market" target="_blank" rel="noopener noreferrer">Business Wire</a>)</li>
+<li>Axelera AI, <a href="https://axelera.ai/aipu/titania" target="_blank" rel="noopener noreferrer">Titania product page</a>, including the simulation footnotes</li>
+<li>Axelera AI, <a href="https://www.youtube.com/watch?v=dEF29ezYTXs" target="_blank" rel="noopener noreferrer">Inside the accelerator architecture video</a></li>
+<li>Marco Chiappetta, <a href="https://www.forbes.com/sites/marcochiappetta/2026/11/12/axelera-ai-thinks-theres-a-better-way-to-scale-ai-inference/" target="_blank" rel="noopener noreferrer">Axelera AI Thinks Titania Is A Better Way To Scale AI Inference</a>, Forbes, November 12, 2026</li>
+<li>NVIDIA, <a href="https://www.nvidia.com/en-us/data-center/hgx/" target="_blank" rel="noopener noreferrer">HGX platform specifications</a> (HGX B300, HGX Rubin NVL8, Rubin GPU)</li>
+<li>DeepSeek, <a href="https://huggingface.co/deepseek-ai/DeepSeek-R1" target="_blank" rel="noopener noreferrer">DeepSeek-R1 model card</a> (671B total, 37B activated)</li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
