@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AMD's 21,333 Tokens per Second on MI455X and the 288 GB MI450X, Read Against the Footnotes — Anpoo Sivanadi</title>
+  <meta name="description" content="On November 12 AMD posted an MI400 Series update that packs three things into one page: a new DeepSeek-R1 throughput number for MI455X on the Helios rack, a new lower-memory part called MI450X, and more detail on the FP64-heavy MI430X." />
+  <link rel="canonical" href="https://asivanadi0.github.io/amd-mi455x-deepseek-r1-mi450x-288gb-footnotes.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="AMD's 21,333 Tokens per Second on MI455X and the 288 GB MI450X, Read Against the Footnotes — Anpoo Sivanadi" />
+  <meta property="og:description" content="On November 12 AMD posted an MI400 Series update that packs three things into one page: a new DeepSeek-R1 throughput number for MI455X on the Helios rack, a new lower-memory part called MI450X, and more detail on the FP64-heavy MI430X." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/amd-mi455x-deepseek-r1-mi450x-288gb-footnotes.html" />
+  <meta property="article:published_time" content="2026-11-13T06:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>AMD's 21,333 Tokens per Second on MI455X and the 288 GB MI450X, Read Against the Footnotes</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-13T06:00:00-08:00">13 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>On November 12 AMD posted an <a href="https://newsroom.amd.com/news/amd-advances-instinct-mi400-series-ai-scientific-computing/" target="_blank" rel="noopener noreferrer">MI400 Series update</a> that packs three things into one page: a new DeepSeek-R1 throughput number for MI455X on the Helios rack, a new lower-memory part called MI450X, and more detail on the FP64-heavy MI430X. The headline is "up to 30% higher throughput than Nvidia Vera Rubin." The part I'd actually plan around is the MI450X, and the part I'd push back on is how the 30% was measured.</p>
+<p>I've written about <a href="/helios-ualoe.html">Helios and its UALink-over-Ethernet scale-up</a>, the <a href="/vera-rubin-nvl72-mlperf-v6-1.html">Vera Rubin NVL72 MLPerf v6.1 preview</a>, and <a href="/vera-rubin-hbm4-nvlink-spec-revision.html">NVIDIA's revised Rubin HBM4 and NVLink numbers</a>. This post leans on all three, because the new claims only make sense next to them.</p>
+<h2>1. What AMD published</h2>
+<p>From the newsroom post and the two product pages (<a href="https://www.amd.com/en/products/accelerators/instinct/mi400/mi455x.html" target="_blank" rel="noopener noreferrer">MI455X</a>, <a href="https://www.amd.com/en/products/accelerators/instinct/mi400/mi450x.html" target="_blank" rel="noopener noreferrer">MI450X</a>):</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th></th>
+<th>MI455X</th>
+<th>MI450X</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Architecture</td>
+<td>CDNA 5, TSMC 2 nm and 3 nm</td>
+<td>same</td>
+</tr>
+<tr>
+<td>Work group processors</td>
+<td>256</td>
+<td>256</td>
+</tr>
+<tr>
+<td>Peak MXFP4</td>
+<td>40.3 PFLOPS</td>
+<td>40.3 PFLOPS</td>
+</tr>
+<tr>
+<td>Peak FP8 / MXFP8</td>
+<td>20.1 PFLOPS</td>
+<td>20.1 PFLOPS</td>
+</tr>
+<tr>
+<td>Peak matrix FP64</td>
+<td>5 TFLOPS</td>
+<td>5 TFLOPS</td>
+</tr>
+<tr>
+<td>HBM4 capacity</td>
+<td>432 GB, 12 stacks</td>
+<td>288 GB, 8 stacks</td>
+</tr>
+<tr>
+<td>Peak memory bandwidth</td>
+<td>23.3 TB/s</td>
+<td>23.3 TB/s</td>
+</tr>
+<tr>
+<td>L2 cache</td>
+<td>192 MB</td>
+<td>192 MB</td>
+</tr>
+<tr>
+<td>Scale-up (UALoE, bidirectional)</td>
+<td>3.6 TB/s</td>
+<td>3.6 TB/s</td>
+</tr>
+<tr>
+<td>Scale-out (bidirectional)</td>
+<td>600 GB/s</td>
+<td>600 GB/s</td>
+</tr>
+<tr>
+<td>Form factor, cooling</td>
+<td>EAM, direct liquid</td>
+<td>EAM, direct liquid</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>So MI450X is the same 320-billion-transistor part with a third less memory. AMD's wording: "for workloads that fit within its memory capacity," it meets throughput and response-time targets "while optimizing operating expenses." AMD gives no price, no power difference and no savings figure.</p>
+<p>The inference claim, from footnote 1: AMD Performance Labs measured 21,333 tokens per second per GPU on DeepSeek-R1 "on an AMD-tested MLPerf Inference Offline configuration" in October 2026, compared with NVIDIA's published MLPerf Inference v6.1 Closed result for Vera Rubin NVL72 (entry 6.1-0106).</p>
+<h2>2. The 30% is AMD's own run against a peer-reviewed one</h2>
+<p>MLPerf results are worth something because MLCommons reviews them. An "AMD-tested MLPerf Inference Offline configuration" means AMD ran the benchmark harness itself. It wasn't submitted to MLCommons and nobody outside AMD has checked it. The NVIDIA side of the comparison went through review, as a preview-category entry. These are different kinds of evidence, and the footnote says so if you read it.</p>
+<p>There are other gaps too. The post doesn't say how many MI455X GPUs were in the run, whether it was a full 72-GPU Helios rack or a single tray, what precision was used, or which serving stack ran it. NVIDIA's <a href="https://blogs.nvidia.com/blog/vera-rubin-nvl72-mlperf-inference/" target="_blank" rel="noopener noreferrer">MLPerf blog</a> says its Rubin DeepSeek-R1 runs used TensorRT-LLM with disaggregated prefill and decode and large-scale expert parallelism. If AMD used a different scheme, per-GPU throughput is not an apples-to-apples unit.</p>
+<p>Offline is also the easiest scenario. It's a pure batch throughput test with no latency limit. Nebius published a Server-scenario DeepSeek-R1 number for its Rubin preview system (591,368 tokens per second), and AMD compared only on Offline. If you run interactive traffic, the Server and Interactive results are the ones you'd want to see.</p>
+<p>For scale, <a href="https://nebius.com/blog/posts/mlperf-inference-v6-1-results" target="_blank" rel="noopener noreferrer">Nebius's v6.1 results</a> list a separate Vera Rubin preview entry (6.1-0107) at 558,803 tokens per second offline on 36 Rubin GPUs. That works out to about 15,522 per GPU (my arithmetic). Taking AMD's "up to 30%" literally puts NVIDIA's own entry near 16,400 per GPU. I haven't confirmed that number on the MLCommons results page, so treat it as implied rather than published.</p>
+<p>None of this makes 21,333 wrong. It makes it a vendor number. The fix is cheap: submit it in the next MLPerf round.</p>
+<h2>3. The bandwidth lead grew because NVIDIA's number shrank</h2>
+<p>Footnote 2 says Helios has "up to 20% higher HBM bandwidth" than Vera Rubin, based on Rubin's "current memory bandwidth specifications." That word "current" matters.</p>
+<p>In September, AMD's Helios footnotes claimed about 6% more HBM bandwidth than Rubin. Since then NVIDIA's NVL72 page has cut Rubin from 22 TB/s to 19.2 TB/s per GPU, and NVLink from 3.6 TB/s to 3 TB/s. Against the new figures, 23.3 over 19.2 is 1.21, and 3.6 over 3.0 is 1.2. MI455X didn't get faster. The comparison point moved.</p>
+<p>One oddity: the comparison chart on AMD's own MI455X product page still shows Vera Rubin at 22.0 TB/s next to MI455X's 23.3 TB/s. The newsroom footnote and the product page are using different Rubin numbers. Anyone building a slide off either one should pick one and cite it.</p>
+<h2>4. MI450X: the capacity math</h2>
+<p>This is where I'd spend my planning time. A 288 GB MI450X has the same HBM4 capacity as a Rubin GPU, while keeping MI455X's compute and bandwidth. Using the 72-GPU Helios rack from AMD's earlier materials, the rack drops from about 31 TB of HBM4 to about 20.7 TB (72 × 288 GB, my arithmetic).</p>
+<p>For DeepSeek-R1, MXFP4 stores an 8-bit scale per 32 values, so it's about 4.25 bits per parameter. At 671 billion parameters that's roughly 356 GB of weights. That doesn't fit on one MI450X but does fit on one MI455X with about 75 GB to spare. Nobody serves R1 on a single GPU at scale, though. With expert parallelism across a tray or a rack, the weights are a small slice of the 20.7 TB, and what's left goes to KV cache. KV cache is the thing that scales with context length and concurrency, and that's exactly where AMD says MI455X "provides additional memory headroom."</p>
+<p>A rough way to decide:</p>
+<ul>
+<li>If your model fits with room to spare and your contexts are short to medium (chat, agent tool calls, most code completion), the MI450X gives up capacity you aren't using, at the same bandwidth and compute.</li>
+<li>If you run long contexts at high concurrency, or you keep large prefix caches warm, the extra 144 GB per GPU on MI455X is the whole point. Running out of KV cache space means smaller batches or recomputing prefixes, and both cost you more than the memory would.</li>
+<li>If you're planning one fleet for several models, buy for the biggest model's KV cache footprint, not its weights.</li>
+</ul>
+<p>The question I'd ask AMD first: the MI450X has 8 HBM4 stacks against MI455X's 12, at the same 23.3 TB/s. That's about 2.9 TB/s per stack versus about 1.9 TB/s. On a 2,048-bit HBM4 interface, 2.9 TB/s needs roughly 11.4 Gb/s per pin, well above JEDEC HBM4's 8 Gb/s baseline, while 1.9 TB/s is about 7.6 Gb/s. Either the 8-stack part runs its memory much faster, or the 23.3 TB/s on the MI450X page is a copy of the MI455X row. I'd want that answered before sizing anything on it, because for decode, bandwidth is the spec that actually sets your tokens per second.</p>
+<h2>5. MI430X and the FP64 split</h2>
+<p>The same post adds detail on MI430X: native FP64, 432 GB of HBM4, up to 23.3 TB/s. AMD cites internal research across 47 configurations of 11 applications showing where FP64 emulation helps and where codes need native double precision. That fits with the <a href="/fp64-ozaki-emulation-limits-b200-gb300-mi355x.html">Ozaki emulation paper from AMD authors</a> I wrote up this week. The product split is now explicit. MI455X and MI450X list 5 TFLOPS of matrix FP64, which is a token amount, and MI430X is the part for simulation. If you run mixed HPC and AI clusters, don't assume the AI SKU will run your FP64 codes.</p>
+<h2>What I'd do with this</h2>
+<ul>
+<li>Treat 21,333 tokens per second per GPU as an AMD lab result until it shows up on the MLCommons results page, ideally in the Server scenario as well as Offline.</li>
+<li>When you compare bandwidth, write down which Rubin number you used, 22 or 19.2 TB/s, because AMD's own pages don't agree.</li>
+<li>Look at MI450X seriously if your models fit in 288 GB with KV cache headroom. Get the per-stack bandwidth confirmed first.</li>
+<li>Keep FP64 work on MI430X or on CPUs. The AI parts aren't built for it.</li>
+</ul>
+<h2>Sources</h2>
+<ul>
+<li>AMD Newsroom, <a href="https://newsroom.amd.com/news/amd-advances-instinct-mi400-series-ai-scientific-computing/" target="_blank" rel="noopener noreferrer">AMD Advances the Instinct MI400 Series for AI and Scientific Computing</a>, November 12, 2026, including footnotes MI400-031a, MI400-004a and MI400-013</li>
+<li>AMD, <a href="https://www.amd.com/en/products/accelerators/instinct/mi400/mi455x.html" target="_blank" rel="noopener noreferrer">Instinct MI455X product page</a></li>
+<li>AMD, <a href="https://www.amd.com/en/products/accelerators/instinct/mi400/mi450x.html" target="_blank" rel="noopener noreferrer">Instinct MI450X product page</a></li>
+<li>AMD, <a href="https://www.amd.com/en/blogs/2026/exascale-was-the-beginning-amd-instinct--mi430x-gpus.html" target="_blank" rel="noopener noreferrer">Exascale Was the Beginning: AMD Instinct MI430X GPUs</a></li>
+<li>NVIDIA, <a href="https://blogs.nvidia.com/blog/vera-rubin-nvl72-mlperf-inference/" target="_blank" rel="noopener noreferrer">Vera Rubin NVL72 MLPerf Inference blog</a></li>
+<li>Nebius, <a href="https://nebius.com/blog/posts/mlperf-inference-v6-1-results" target="_blank" rel="noopener noreferrer">MLPerf Inference v6.1 results</a></li>
+<li>Earlier posts: <a href="/helios-ualoe.html">Helios UALoE</a>, <a href="/vera-rubin-nvl72-mlperf-v6-1.html">Vera Rubin NVL72 MLPerf v6.1</a>, <a href="/vera-rubin-hbm4-nvlink-spec-revision.html">Rubin HBM4 and NVLink spec revision</a>, <a href="/fp64-ozaki-emulation-limits-b200-gb300-mi355x.html">FP64 Ozaki emulation limits</a></li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
