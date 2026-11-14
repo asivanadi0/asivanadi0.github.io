@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Your GPU Is Briefly Drawing 1.3x Its TDP: What PACER Measured on MI300X, and Why a Lower Clock Cap Made Prefill Faster — Anpoo Sivanadi</title>
+  <meta name="description" content="Most fleet dashboards I&#x27;ve looked at sample GPU power somewhere between once a second and every 50 ms." />
+  <link rel="canonical" href="https://asivanadi0.github.io/pacer-gpu-power-excursions-frequency-caps-mi300x.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Your GPU Is Briefly Drawing 1.3x Its TDP: What PACER Measured on MI300X, and Why a Lower Clock Cap Made Prefill Faster — Anpoo Sivanadi" />
+  <meta property="og:description" content="Most fleet dashboards I&#x27;ve looked at sample GPU power somewhere between once a second and every 50 ms." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/pacer-gpu-power-excursions-frequency-caps-mi300x.html" />
+  <meta property="article:published_time" content="2026-11-14T06:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Your GPU Is Briefly Drawing 1.3x Its TDP: What PACER Measured on MI300X, and Why a Lower Clock Cap Made Prefill Faster</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-14T06:00:00-08:00">14 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>Most fleet dashboards I've looked at sample GPU power somewhere between once a second and every 50 ms. At that resolution an inference node looks calm: prefill sits near the power limit, decode sits below it, and the line is flat enough to plan rack budgets around.</p>
+<p><a href="https://arxiv.org/abs/2611.17206" target="_blank" rel="noopener noreferrer">arXiv:2611.17206</a>, "PACER: GPU Excursion Management for ML Workloads", looks at the same thing at roughly 1 ms and finds something different. On an AMD Instinct MI300X (750 W TDP), LLM prefill keeps punching through TDP in short bursts, the firmware keeps correcting the clock afterward, and the same kernel never runs at the same frequency twice. The authors are from UW-Madison and AMD (six of the nine are AMD, and the first author did the work as an AMD intern), so read this as a vendor-adjacent study. It's still the most concrete public data I've seen on what power transients do to inference latency, and the fix they land on is a knob operators already have: a graphics clock cap.</p>
+<h2>1. What an excursion is, and how much headroom the spec allows</h2>
+<p>The paper calls these events EDPp, electrical design power peaks: any moment where board power goes above TDP. They're allowed, within limits. The paper reproduces the OCP Accelerator Module guidance for a hypothetical 700 W part:</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Peak</th>
+<th>Allowed duration</th>
+<th>Who handles it</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2.0x TDP</td>
+<td>up to 20 µs</td>
+<td>hardware</td>
+</tr>
+<tr>
+<td>1.7x TDP</td>
+<td>up to 2 ms</td>
+<td>hardware or software</td>
+</tr>
+<tr>
+<td>1.5x TDP</td>
+<td>up to 5 ms</td>
+<td>software</td>
+</tr>
+<tr>
+<td>1.25x TDP</td>
+<td>up to 10 ms</td>
+<td>software</td>
+</tr>
+<tr>
+<td>1.1x TDP</td>
+<td>up to 20 ms</td>
+<td>software</td>
+</tr>
+<tr>
+<td>1.0x TDP</td>
+<td>indefinitely</td>
+<td>software</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The power manager has to keep the board inside that envelope no matter what, so it carries margin and throttles early. If excursions are rare, the throttling doesn't matter. If they're frequent, you pay for it in clock speed.</p>
+<p>The MI300X's firmware power manager adjusts voltage and frequency on a 1 to 2 ms cadence. LLM kernels, especially at small batch, run for a few hundred microseconds to a few milliseconds, and adjacent kernels differ in arithmetic intensity by more than two orders of magnitude (the paper's Figure 2, a Llama 3 8B prefill trace). The firmware picks a clock for the last kernel, and the next one overshoots.</p>
+<p>One caveat the authors state clearly: they read Total Board Power from AMD's hardware counters at 1 ms granularity, so anything shorter than that, including the 2x TDP class of spikes, gets averaged away. What they report is a floor.</p>
+<h2>2. What they measured</h2>
+<p>They ran graph analytics (Gunrock and Skywalker kernels on indochina, uk-2005 and Orkut), HPC (MILC, LULESH) and ML (Llama 3 8B and 70B, Qwen3 14B, Mixtral 8x7B, Stable Diffusion, Llama 2 fine-tuning) on a single MI300X.</p>
+<ul>
+<li><strong>ML workloads look alike.</strong> Regardless of model or batch size, about 80% of excursions sit between 1.0x and 1.2x TDP, with a long tail up to 1.7x TDP that shows up less than 1% of the time.</li>
+<li><strong>Graph and HPC are calmer.</strong> All the graph workloads and MILC keep over 90% of their excursions below 1.2x TDP. LULESH had big peaks but rarely. Several graph workload and input pairs had no excursions at all.</li>
+<li><strong>Llama 3 70B inference produced the most excursions</strong> of anything they tested.</li>
+<li><strong>Prefill is where it happens.</strong> In Llama 3 8B, prefill had most of the excursions and the bigger ones. Small prefill batches were worst because kernels were shortest. Decode flipped: bigger decode batches pushed power toward TDP and raised the odds of a spike.</li>
+</ul>
+<p>The part I found most useful for anyone who assumes kernel fusion or megakernels will smooth this out: they show it won't, at least not entirely. GEMMs have tail effects. For one Llama 3 8B GEMM (M, N, K = 28672, 8192, 4096) on MI300X's 304 CUs, the work comes out to 23.5 waves of workgroups, so the last wave uses about half the GPU. Power dips, the firmware raises the clock, the next GEMM starts hot. The same GEMM sees different frequency depending on what ran before it.</p>
+<h2>3. Clamping at TDP is the wrong answer</h2>
+<p>AMD built an experimental hardware path: a counter-based digital power estimator (7% geomean error against measured power, 12% at worst across their ML workloads) driving the GPU's adaptive clock response at microsecond timescale. That let them clamp excursions at chosen thresholds from 1.0x to 1.5x TDP.</p>
+<p>On Llama 3 8B prefill (4,096 input tokens, batch 1):</p>
+<ul>
+<li>Clamping hard at 1.0x TDP (750 W) removed the peaks and made TTFT <strong>26% worse</strong>.</li>
+<li>Across the four models at batch 1, a 1.0x clamp cost <strong>28% geomean</strong>. Mixtral 8x7B was the extreme case at 127% worse.</li>
+<li>Raising the threshold recovered performance until it matched baseline at <strong>1.4x TDP</strong>.</li>
+<li>A <strong>1.2x to 1.3x TDP</strong> clamp removed the high-magnitude excursions for all four models with near-baseline performance.</li>
+</ul>
+<p>By my arithmetic, 1.3x of a 750 W TDP is 975 W. So the GPU wants roughly 225 W of short-term headroom above its rated power to sprint through dense kernels, and gains nothing from more than that. That's useful to know when someone proposes enforcing a strict per-GPU power cap to squeeze more GPUs into a rack.</p>
+<p>This hardware clamp isn't something you can turn on. It ran on an experimental system built on production MI300X parts. The firmware result below is the part you can actually try.</p>
+<h2>4. The firmware fix: cap the clock per prompt-length bucket</h2>
+<p>MI300X graphics clocks go up to 2100 MHz, and memory clock has three states (1300, 1550 and 1800 MHz). PACER does two things:</p>
+<ol>
+<li><strong>Offline:</strong> for each batched-token bucket, run uncapped, trace kernels, take the top kernels that cover over 50% of runtime, and record each one's p90 effective frequency. The bucket's cap is the highest of those p90s, so the most frequency-hungry kernel still gets what it needs. Memory clock is pinned to whatever state the GPUs spent most of their time in.</li>
+<li><strong>Online:</strong> inside the vLLM V1 scheduler, track batched tokens per step with an EWMA (alpha 0.3, so a single spike doesn't make firmware oscillate), look up the bucket, apply the cap.</li>
+</ol>
+<p>The caps it picked, from the paper's Table 4:</p>
+<div class="table-wrap" role="region" aria-label="Table 2" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Batched tokens</th>
+<th>Llama 3.1 405B cap</th>
+<th>DeepSeek V3.2 cap</th>
+<th>Mistral Medium 3.5 128B cap</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>under 2k</td>
+<td>1900 MHz</td>
+<td>2100 MHz</td>
+<td>2000 MHz</td>
+</tr>
+<tr>
+<td>2k to 4k</td>
+<td>1500 MHz</td>
+<td>2000 MHz</td>
+<td>1900 MHz</td>
+</tr>
+<tr>
+<td>4k to 8k</td>
+<td>1600 MHz</td>
+<td>1900 MHz</td>
+<td>1700 MHz</td>
+</tr>
+<tr>
+<td>8k to 16k</td>
+<td>1400 MHz</td>
+<td>OOM</td>
+<td>1600 MHz</td>
+</tr>
+<tr>
+<td>16k to 32k</td>
+<td>1300 MHz</td>
+<td>OOM</td>
+<td>1400 MHz</td>
+</tr>
+<tr>
+<td>32k to 64k</td>
+<td>1300 MHz</td>
+<td>OOM</td>
+<td>1400 MHz</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Longer prompts mean bigger GEMMs, more throttling, and a lower best cap. The dense models want the middle memory clock (1550 MHz). DeepSeek V3.2 wants the highest memory clock and a near-uncapped core clock, because its 61 kernels per layer (against 11 for the dense models) include a lot of memory-bound gather and elementwise work that never pushes power to the limit.</p>
+<p>On a single 8x MI300X node, TP=8, ROCm 7.0.0, prefill/decode disaggregated, 500 LongBench prompts with Poisson arrivals up to 0.3 QPS:</p>
+<ul>
+<li><strong>Llama 3.1 405B (FP8):</strong> median TTFT down 9 to 12% at every request rate. TTFT SLO attainment went from 72.6% to 78.2% at 0.3 QPS, where queueing makes every saved millisecond count.</li>
+<li><strong>Mistral Medium 3.5 128B (FP8):</strong> median TTFT down 4 to 5%, SLO attainment up to 2% better. p99 was flat or slightly worse.</li>
+<li><strong>DeepSeek V3.2 (FP8):</strong> median TTFT at most 1.2% better. The caps barely differ from stock, so PACER barely does anything.</li>
+</ul>
+<p>On single-GPU offline runs, a single best cap per workload improved TTFT by up to about 4% over stock firmware, and the paper puts PACER within 3% of an oracle that picks the ideal frequency for every kernel.</p>
+<h2>5. What I'd take from it</h2>
+<ul>
+<li><strong>Your power telemetry is probably too coarse to see this.</strong> If you're debugging prefill jitter or unexplained kernel-time variance and your power data is 50 ms or 1 s averages, you're looking at the flat line from the paper's Figure 1, not the spikes.</li>
+<li><strong>Lower clocks can be faster on dense models.</strong> Capping keeps small excursions, which help, and removes the big ones that trigger throttling. Kernel durations also got more consistent at lower caps. For TP=8 jobs that sync every layer, less per-GPU jitter should matter, though the paper argues that point rather than measuring it at multi-node scale.</li>
+<li><strong>Don't apply one cap to everything.</strong> The best cap depends on model and prompt length. A single fleet-wide clock lock would have taken 405B gains and handed DeepSeek a slowdown.</li>
+<li><strong>MoE models gain little here.</strong> That matches what you'd guess from DeepSeek's kernel mix, and it's good to see it measured.</li>
+</ul>
+<p>What's missing: this is MI300X, not MI355X or anything newer, and the authors' own Figure 1 shows TDP climbing toward 1,400 W. It's one node, prefill only, and below 0.35 QPS, where they estimate prefill saturates. There's no NVIDIA data, though they cite excursions of up to 500 W over TDP reported on other accelerators. I didn't find a code release. And the most interesting mechanism, the microsecond hardware clamp, isn't something customers can use.</p>
+<p>Still, the core finding transfers. If you run dense-model prefill on any modern accelerator near its power limit, you can measure the same thing yourself: sweep the graphics clock cap per prompt-length bucket and watch TTFT. The paper says that profiling is a one-time cost when a cluster serves a single model, and I agree.</p>
+<p>For context on the MI355X generation's fleet numbers, see my notes on <a href="/amd-mi355x-mlperf-v6-1-512-gpu.html">AMD's 512-GPU MLPerf v6.1 submission</a>.</p>
+<h2>Sources</h2>
+<ul>
+<li>Jain et al., "PACER: GPU Excursion Management for ML Workloads," arXiv:2611.17206, submitted Nov 12, 2026: https://arxiv.org/abs/2611.17206</li>
+<li>Choukse et al., "Power Stabilization for AI Training Datacenters," arXiv:2508.14318 (cited in PACER for related excursion work): https://arxiv.org/abs/2508.14318</li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
