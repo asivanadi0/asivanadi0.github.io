@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NVIDIA Vera, Measured by Someone Else: 1,088 GB/s STREAM, Spatial SMT, and Where Turin Still Wins — Anpoo Sivanadi</title>
+  <meta name="description" content="In September I wrote about AMD&#x27;s Venice vs Vera slide." />
+  <link rel="canonical" href="https://asivanadi0.github.io/nvidia-vera-bristol-independent-benchmarks-grace-turin-granite-rapids.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="NVIDIA Vera, Measured by Someone Else: 1,088 GB/s STREAM, Spatial SMT, and Where Turin Still Wins — Anpoo Sivanadi" />
+  <meta property="og:description" content="In September I wrote about AMD&#x27;s Venice vs Vera slide." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/nvidia-vera-bristol-independent-benchmarks-grace-turin-granite-rapids.html" />
+  <meta property="article:published_time" content="2026-11-13T18:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>NVIDIA Vera, Measured by Someone Else: 1,088 GB/s STREAM, Spatial SMT, and Where Turin Still Wins</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-13T18:00:00-08:00">13 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>In September I wrote about <a href="/epyc-venice-vera-specrate-stream.html">AMD's Venice vs Vera slide</a>. Every Vera number in that post came from a vendor: AMD's internal SPECrate estimates and a roughly 1.2 TB/s STREAM figure taken from vendor and secondhand sources. This week there's finally a measured one.</p>
+<p><a href="https://arxiv.org/abs/2611.15926" target="_blank" rel="noopener noreferrer">arXiv:2611.15926</a>, from Joseph Moore, Thomas Green and Simon McIntosh-Smith at the University of Bristol, puts a single socket of NVIDIA Vera next to Grace, an AMD EPYC 9R45 (Turin) and an Intel Xeon 6975P-C (Granite Rapids). It was accepted at PMBS26, a workshop at SC26 next week, and it ships an artifact description with the scripts on <a href="https://doi.org/10.5281/zenodo.22969070" target="_blank" rel="noopener noreferrer">Zenodo</a>. The authors call it the first independent microarchitectural characterization of Vera. NVIDIA supplied the engineering sample, which they acknowledge, but the runs, tools and analysis are theirs.</p>
+<p>The workloads are HPC: NAS kernels, miniapps, CASTEP, GROMACS, WRF. None of it is inference. I still think it's the most useful Vera document so far for anyone planning a Vera Rubin deployment, because the CPU in that rack does real work (data loading, tokenization, KV and checkpoint traffic, sidecars), and until now nobody outside NVIDIA had published how it behaves.</p>
+<h2>1. The test bench</h2>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Vera</th>
+<th>Grace</th>
+<th>EPYC 9R45 (Turin)</th>
+<th>Xeon 6975P-C (GNR)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Cores / threads</td>
+<td>88 / 176</td>
+<td>72 / 72</td>
+<td>96 / 96 (SMT off)</td>
+<td>96 / 192</td>
+</tr>
+<tr>
+<td>System</td>
+<td>Engineering sample, air-cooled, capped to 450 W TDP equivalent</td>
+<td>Isambard 3, one socket of a Grace-Grace node</td>
+<td>AWS c8a.metal-24xl</td>
+<td>AWS c8i.metal-48xl</td>
+</tr>
+<tr>
+<td>Memory</td>
+<td>LPDDR5X-9600, 32 x 32-bit channels</td>
+<td>LPDDR5X, 32 x 16-bit, measured 8532 MT/s</td>
+<td>cloud SKU</td>
+<td>cloud SKU, 3 NUMA domains</td>
+</tr>
+<tr>
+<td>L3</td>
+<td>164 MiB shared</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Vector</td>
+<td>6 x 128-bit SVE</td>
+<td>4 x 128-bit SVE</td>
+<td>512-bit</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Compiler: GCC 15.3.0 everywhere, with <code>-mcpu=olympus</code> on Vera. Libraries: open-source FFTW and OpenBLAS on all four chips, no vendor math libraries. The authors chose that on purpose so the comparison reflects the hardware rather than library maturity, and they say plainly that it probably understates Vera on BLAS- and FFT-heavy codes.</p>
+<p>Things to keep in mind before quoting any number from this paper:</p>
+<ul>
+<li>It's one socket. Dual-socket and CPU-to-GPU behavior over NVLink-C2C wasn't available to test.</li>
+<li>The Vera board was power-capped and air-cooled. Production trays won't look like that.</li>
+<li>The x86 parts are cloud SKUs picked for availability and a similar core count. Bigger Turin and Granite Rapids parts with more memory channels exist, so treat this as "Vera vs these two SKUs," not "Vera vs x86."</li>
+<li>Per the artifact description, the NAS, miniapp and application runs were each done once per configuration.</li>
+</ul>
+<h2>2. Memory bandwidth is the headline</h2>
+<p>Vera has 32 channels of 32-bit LPDDR5X at 9600 MT/s. The paper's peak math is 9600 MT/s x 4 bytes x 32 channels = 1,228.8 GB/s, 2.25x Grace's 546.0 GB/s per-socket peak.</p>
+<p>Measured STREAM Triad, all cores:</p>
+<ul>
+<li>Vera: <strong>1,088.2 GB/s</strong> (88.6% of peak)</li>
+<li>Granite Rapids 6975P-C: 552.6 GB/s</li>
+<li>Grace: 449.4 GB/s (82.3% of its peak)</li>
+<li>Turin 9R45: 332.1 GB/s</li>
+</ul>
+<p>That's 1.97x the next-best CPU and 2.42x Grace. Per core, by my division, it's about 12.4 GB/s on Vera against about 6.2 on Grace, 5.8 on Granite Rapids and 3.5 on this Turin SKU.</p>
+<p>The number I'd pay most attention to is the partial-socket one. At 12 cores, Vera already pulls 725.5 GB/s. By my arithmetic that's two-thirds of its all-core bandwidth from about 14% of its cores, and the paper puts it at 2.54x Grace, 2.24x Turin and 3.41x Granite Rapids at the same core count. Placement also didn't matter on Vera. Turin and Granite Rapids needed a stride-8 spread across CCDs and chiplets to scale, and Vera got the same bandwidth either way.</p>
+<p>That's directly relevant to a GPU host. Host-side jobs rarely get the whole socket. A dataloader or KV offload process that's pinned to a dozen cores is the normal case, and Vera seems built for exactly that.</p>
+<p>It also corrects my September post. The ~1.2 TB/s figure I quoted for Vera came from vendor and secondhand sources. Independently measured, on a capped engineering board, it's 1,088 GB/s.</p>
+<h2>3. Latency: the prefetchers make the curve look strange</h2>
+<p>The authors measured load latency with Linus Torvalds' <code>test-tlb</code> pointer-chase. Turin and Granite Rapids show the usual staircase at each cache boundary. On Vera, time per load stays near the L1d value past 96 KiB and only rises gradually up to 2 MiB. A load that misses L2 can't come back at L2 hit time, so something is prefetching it.</p>
+<p>NVIDIA lists five prefetcher classes for the Olympus core: Stream, Indirect, Correlated-Miss, Spatial and Graph. The correlated-miss one is a temporal prefetcher. It records chains of misses and replays them, so a benchmark that repeats the same random permutation is exactly what it catches. The authors couldn't turn individual prefetchers off, so Vera's real L1d and L2 hit latencies were never measured.</p>
+<p>Two takeaways:</p>
+<ul>
+<li>Up to 128 MiB, Vera had the lowest time per load of the four. Code with repeated irregular access (sparse solvers, unstructured meshes) should benefit.</li>
+<li>Above 512 MiB, Vera's main-memory latency was the highest of the four. LPDDR5X costs you there. If your access pattern isn't repeatable, or it outgrows the 164 MiB L3, the prefetchers don't help.</li>
+</ul>
+<p>Core-to-core latency is the cleaner result. Vera's mean is 17% lower than Grace's despite 22% more cores, and 31% lower than Granite Rapids, where each hop between compute chiplets adds about 14 ns. Inside one CCD, Turin is fastest at about 27 ns. Across CCDs it jumps to 130 to 244 ns, while Vera's worst pair is 77 ns.</p>
+<h2>4. Spatial multithreading needs a per-job flag</h2>
+<p>Vera has 2-way SMT, but it isn't Hyper-Threading. Olympus physically splits almost every pipeline resource between the two threads, so each thread gets half the core's width while both are active, and the threads mostly share only the caches. With one thread idle, the core gives the active thread everything.</p>
+<p>Results ranged widely:</p>
+<ul>
+<li>Neutral, a latency-bound Monte Carlo miniapp: IPC went from 1.17 to 2.31 and runtime improved <strong>1.91x</strong>.</li>
+<li>NAS EP: 1.39x, with perf showing 1.43x higher IPC.</li>
+<li>NAS FT, class D: <strong>0.61x</strong>. Two threads fought over L2, LLC misses went up 5.5x, and the LLC miss rate rose from 20.4% to 32.8%. Changing the block factor from 32 to 8 turned it into a 1.13x gain.</li>
+<li>Across the scientific applications, SMT gave a 1.11x geomean on Vera. Hyper-Threading on Granite Rapids gave 1.05x where it helped at all.</li>
+</ul>
+<p>For a host CPU next to GPUs, I'd leave SMT on at the node level and make thread placement a per-workload choice, then test each pipeline stage both ways. Cache-heavy stages can lose 40%, and latency-bound stages can almost double.</p>
+<h2>5. Where Vera loses</h2>
+<p>Each Olympus core has six 128-bit SVE units (FP64, FP32 and FP8). That's 1.5x Grace's per-cycle FLOPs, still narrow next to 512-bit x86. Compute-bound code shows the gap:</p>
+<ul>
+<li><strong>miniBUDE</strong>: Turin is 2.38x faster than Vera. Vera ran 3.91x more instructions per core at a higher IPC (4.32) and still lost.</li>
+<li><strong>GROMACS</strong>: Granite Rapids beats Vera by 1.65x. On both Arm chips, GROMACS was built with NEON rather than SVE because NEON ran faster.</li>
+<li><strong>CASTEP</strong>: Vera got 1.25x over Grace (1.43x with SMT), against 1.63x for Turin and 2.34x for Granite Rapids. zgemm dominates, so this is mostly a test of OpenBLAS on each chip.</li>
+<li><strong>NAS CG class D</strong>: Turin leads by 1.22x. Vera took 94.5x more dTLB misses per operation, so it's limited by address translation, not bandwidth. The authors ran on 64 KiB pages and 2 MiB huge pages, not the 512 MiB huge pages NVIDIA recommends, to keep the comparison fair to Grace. In production I'd test the larger pages before accepting that result.</li>
+</ul>
+<p>The authors' explanation is that NVIDIA expects heavy FLOPs to run on the GPU. That's reasonable for a Rubin host. It's a real cost if you planned to use spare Vera sockets for CPU-side numerical work.</p>
+<h2>6. Overall results</h2>
+<p>Geomean speedup over a single Grace socket, best of SMT on or off:</p>
+<div class="table-wrap" role="region" aria-label="Table 2" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Suite</th>
+<th>Vera</th>
+<th>Turin 9R45</th>
+<th>GNR 6975P-C</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>NAS (class D)</td>
+<td>2.13x</td>
+<td>1.18x</td>
+<td>1.15x</td>
+</tr>
+<tr>
+<td>Miniapps</td>
+<td>2.41x</td>
+<td>1.56x</td>
+<td>1.24x</td>
+</tr>
+<tr>
+<td>Scientific apps</td>
+<td>1.89x</td>
+<td>1.39x</td>
+<td>1.72x</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>(Figures 6, 9 and 11 in the paper. The x86 values are read from the bar labels in the order the legend lists the chips.)</p>
+<p>The bandwidth-bound codes track the bandwidth gain closely. OpenFOAM is 2.20x over Grace, CloverLeaf 2.76x, NAMD 1.88x and WRF 1.91x (2.07x with SMT).</p>
+<h2>What I'd do with this</h2>
+<p>If I were sizing the host side of a Vera Rubin cluster, I'd take three things from this paper:</p>
+<ol>
+<li>Plan for about 1.0 to 1.1 TB/s of sustained host bandwidth per Vera socket, not the 1.2 TB/s peak, and don't spend effort on NUMA pinning on Vera. Granite Rapids still needs it.</li>
+<li>Make SMT a per-job setting backed by a measurement, not a node-wide default someone picked once.</li>
+<li>Keep FLOP-heavy CPU work (CPU-side quantization or packing, numerical preprocessing) off Vera unless you've benchmarked it, or move it to the GPU.</li>
+</ol>
+<p>The paper doesn't cover the parts that matter most for AI: dual-socket behavior, NVLink-C2C traffic to Rubin, and Vera against Venice or Diamond Rapids, which the authors list as future work. Until someone publishes those, treat this as a good single-socket baseline, not a full rack result.</p>
+<h3>Sources</h3>
+<ul>
+<li>Moore, Green, McIntosh-Smith, "NVIDIA Vera: A Microarchitecture-Level Comparison with Grace, Turin, and Granite Rapids," arXiv:2611.15926, accepted at PMBS26 (SC26 Workshops): https://arxiv.org/abs/2611.15926 (PDF: https://arxiv.org/pdf/2611.15926)</li>
+<li>Artifact (scripts for STREAM, test-tlb, core-to-core latency, NAS, miniapps, applications): https://doi.org/10.5281/zenodo.22969070</li>
+<li>test-tlb: https://github.com/torvalds/test-tlb · core-to-core-latency: https://github.com/nviennot/core-to-core-latency</li>
+<li>My earlier notes: <a href="/epyc-venice-vera-specrate-stream.html">AMD EPYC Venice vs Nvidia Vera</a>, <a href="/vera-rubin-nvl72-mlperf-v6-1.html">Vera Rubin NVL72 MLPerf v6.1</a>, <a href="/vera-rubin-hbm4-nvlink-spec-revision.html">Vera Rubin HBM4 and NVLink spec revision</a></li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
