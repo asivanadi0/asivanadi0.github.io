@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NVIDIA Snapshot Brings a 913 GB MoE Replica Back in 40 Seconds: Reading the Cold-Start Tables — Anpoo Sivanadi</title>
+  <meta name="description" content="Every time an inference deployment scales up, the new replica pays the same tax: start the engine, read the weights, allocate the KV cache, run `torch.compile`, autotune kernels, capture CUDA graphs." />
+  <link rel="canonical" href="https://asivanadi0.github.io/nvidia-snapshot-gpu-checkpoint-restore-cold-start-b200-b300.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="NVIDIA Snapshot Brings a 913 GB MoE Replica Back in 40 Seconds: Reading the Cold-Start Tables — Anpoo Sivanadi" />
+  <meta property="og:description" content="Every time an inference deployment scales up, the new replica pays the same tax: start the engine, read the weights, allocate the KV cache, run `torch.compile`, autotune kernels, capture CUDA graphs." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/nvidia-snapshot-gpu-checkpoint-restore-cold-start-b200-b300.html" />
+  <meta property="article:published_time" content="2026-11-15T06:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>NVIDIA Snapshot Brings a 913 GB MoE Replica Back in 40 Seconds: Reading the Cold-Start Tables</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-15T06:00:00-08:00">15 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>Every time an inference deployment scales up, the new replica pays the same tax: start the engine, read the weights, allocate the KV cache, run <code>torch.compile</code>, autotune kernels, capture CUDA graphs. For a small model that's a couple of minutes. For an 8-GPU MoE it can be a quarter of an hour, during which the GPUs are allocated and serving nothing. That is why most teams I know keep idle replicas warm instead of scaling to zero.</p>
+<p>NVIDIA's answer, published on Nov 10, is <a href="https://developer.nvidia.com/blog/start-and-restore-gpu-workloads-in-seconds-with-nvidia-snapshot/" target="_blank" rel="noopener noreferrer">Snapshot</a>, an open-source (<a href="https://github.com/ai-dynamo/snapshot" target="_blank" rel="noopener noreferrer">ai-dynamo/snapshot</a>) checkpoint and restore system for GPU pods on Kubernetes. It captures a fully initialized workload, including CPU and GPU memory, and restores it on another node with the same GPU model and driver. The process continues from where it was checkpointed, so weight loading, compilation and graph capture are skipped. The post came with full per-phase tables across vLLM, SGLang and TensorRT LLM, and two design partners, Crusoe and Saturn Cloud, published their own B300 runs the same day. I haven't run it yet; these are notes from the tables and the repo docs.</p>
+<h2>1. How it works</h2>
+<p>Snapshot is built on two pieces that already exist: CRIU, the standard Linux tool for checkpointing processes, and NVIDIA's <code>cuda-checkpoint</code> utility. A privileged node agent on every GPU node invokes both against live processes, according to <a href="https://www.crusoe.ai/resources/blog/nvidia-snapshot-crusoe-cloud" target="_blank" rel="noopener noreferrer">Crusoe's write-up</a>.</p>
+<p>The Kubernetes surface is small. A <code>PodSnapshot</code> checkpoints a running pod. A <code>SnapshotJob</code> starts a pod from a template and checkpoints it as soon as it is ready. To restore, you add the annotation <code>nvidia.com/restore-from</code> to a new pod, naming the snapshot. The workload needs a short handshake: pause generation before the checkpoint and resume after restore. The repo ships examples for vLLM, SGLang and TensorRT LLM. The KV cache is released before every checkpoint, so it isn't part of the artifact.</p>
+<p>Multi-GPU workloads are captured as one artifact across ranks on a single node, including TP, data plus expert parallelism, and decode context parallelism. Multi-node workloads are not supported.</p>
+<h2>2. The B200 numbers</h2>
+<p>NVIDIA's setup: B200, driver 615.71.09, VAST over NFS for storage, vLLM 0.31.0, SGLang 0.5.21, TensorRT LLM 1.3.0. Cold start is timed from process launch to engine-ready; restore is timed from the restore request to serving. Both exclude image pulls and container runtime setup. A selection from the post's Table 1:</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>Engine</th>
+<th>GPUs</th>
+<th>Weights (GB)</th>
+<th>Checkpoint (GB)</th>
+<th>Checkpoint time (s)</th>
+<th>Cold start (s)</th>
+<th>Restore (s)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Qwen3-14B</td>
+<td>vLLM</td>
+<td>TP1</td>
+<td>29.54</td>
+<td>37.71</td>
+<td>19.98</td>
+<td>122.76</td>
+<td>5.72</td>
+</tr>
+<tr>
+<td>gpt-oss-120b</td>
+<td>SGLang</td>
+<td>TP4</td>
+<td>65.25</td>
+<td>693.89</td>
+<td>174.20</td>
+<td>240.17</td>
+<td>29.64</td>
+</tr>
+<tr>
+<td>GLM-5.3-NVFP4</td>
+<td>vLLM</td>
+<td>TEP8</td>
+<td>464.82</td>
+<td>604.00</td>
+<td>282.80</td>
+<td>393.65</td>
+<td>28.64</td>
+</tr>
+<tr>
+<td>DeepSeek-V4.1-Flash</td>
+<td>vLLM</td>
+<td>TEP8</td>
+<td>510.30</td>
+<td>647.18</td>
+<td>274.75</td>
+<td>1110.65</td>
+<td>30.96</td>
+</tr>
+<tr>
+<td>DeepSeek-V4-Pro-NVFP4</td>
+<td>vLLM</td>
+<td>TEP8</td>
+<td>913.09</td>
+<td>996.53</td>
+<td>193.84</td>
+<td>908.48</td>
+<td>39.56</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Across all 22 configurations, restore took 3.6 to 42.7 seconds, 8x to 36x faster than cold start. The largest MoE configurations, with checkpoints of roughly 600 GB to 1 TB across eight GPUs, came back in under 43 seconds against 6 to 19 minutes cold.</p>
+<h2>3. Weight loading is not where the time goes</h2>
+<p>The breakdown table (Table 2) is the part I found most useful, because it splits cold start into startup, model load, initialization, and compilation plus autotuning plus graph capture.</p>
+<p>For DeepSeek-V4.1-Flash on vLLM at TEP8, the cold start of 1,110.65 seconds breaks down as 63.96 s startup, 184.90 s model load, 77.25 s initialization and 784.54 s of compilation, autotuning and graph capture. By my arithmetic, that last phase is about 71% of the total and model load is about 17%. For GLM-5.3-NVFP4 on vLLM, compilation is 213.42 of 393.65 seconds, about 54% (my arithmetic).</p>
+<p>If you've been optimizing cold start by putting weights on faster storage or streaming them in, these numbers say you've been attacking the smaller part. Snapshot's value is that it skips the compile and graph capture work along with the weight read, which no amount of storage tuning does.</p>
+<h2>4. Restore is a storage problem</h2>
+<p>The restore side (Table 3) splits into agent setup, CRIU restore of CPU process state, CUDA restore of GPU memory, and wake/remap. For the 8-GPU MoE runs, CUDA restore took 18 to 29 seconds and CRIU 4.2 to 10.8 seconds. For GLM-5.3 on vLLM, CUDA restore was 20.61 of 28.64 seconds.</p>
+<p><a href="https://www.crusoe.ai/resources/blog/nvidia-snapshot-crusoe-cloud" target="_blank" rel="noopener noreferrer">Crusoe</a> took this further on HGX B300 with GLM-5.3, comparing an NFS-backed artifact with local NVMe (cold page cache, Snapshot v0.2.0-rc.2 plus their PR #602):</p>
+<ul>
+<li>Moving 594 GB of GPU state took 15.0 s from NVMe (about 40 GB/s) versus 33.3 s from NFS (about 18 GB/s).</li>
+<li>Total agent restore fell from 41.4 s to 22.9 s.</li>
+<li>CRIU restore stayed at about 5 s on both backends.</li>
+<li>Pod created to Ready fell from 50 s to 31 s, against roughly 8 minutes cold, which they report as about 15.5x.</li>
+</ul>
+<p>Their summary is "storage is the lever," and the numbers back it: once the artifact sits on local NVMe, CRIU and pod lifecycle overhead (about 8 of the 31 seconds sits outside the agent's work) are what's left.</p>
+<p><a href="https://saturncloud.io/blog/benchmarking-nvidia-dynamo-snapshot" target="_blank" rel="noopener noreferrer">Saturn Cloud</a> ran a different measurement on a Nebius 8x B300 node with six 3.84 TB NVMe drives in RAID0: pod creation to first successful reply, vLLM 0.31.0, Snapshot 0.2.0-rc.3. GLM-5.3-NVFP4 went from 8m22s to 8m29s cold to 33 to 34 s restored; single-GPU Qwen3-14B, Qwen3-32B and GPT-OSS-120B went from 1m51s to 2m44s cold to 6 to 9 s. Their cold runs used a warm file cache, and they note these are one paired run per small model and two for GLM, not averages. Their GLM snapshot was 564 GiB, which by my conversion is about 606 GB, consistent with NVIDIA's 604.00 GB GLM-5.3 checkpoint on vLLM.</p>
+<p>Neither partner is fully independent of NVIDIA: Crusoe co-tuned with the Snapshot team, and Saturn is a DSX ecosystem partner. But they ran on different hardware (B300 versus B200), different storage, and with their own timing boundaries, and landed in the same place.</p>
+<h2>5. Two things the tables show that the post doesn't discuss</h2>
+<p><strong>Checkpoint size can be far larger than the weights.</strong> For gpt-oss-120b on SGLang at TP4, the checkpoint is 693.89 GB for 65.25 GB of weights, about 10.6x by my arithmetic, while the same model on vLLM at TP4 checkpoints at 119.69 GB. For DeepSeek-V4-Pro-NVFP4 on vLLM the ratio is about 1.09x. The post doesn't explain the SGLang TP4 figure, and since restore time is dominated by moving GPU state, I'd measure artifact size per engine and parallelism before budgeting storage.</p>
+<p><strong>Breakeven is the first replica, but barely in one case.</strong> NVIDIA says checkpoint plus restore was shorter than one cold start in every configuration. The tightest one is gpt-oss-120b on SGLang at TP4: 174.20 + 29.64 = 203.84 seconds versus a 240.17-second cold start, about 85% (my arithmetic). For the big MoE models it's not close: DeepSeek-V4.1-Flash on vLLM is 305.71 seconds versus 1,110.65.</p>
+<h2>6. The constraints that will bite</h2>
+<p>The <a href="https://github.com/ai-dynamo/snapshot/blob/main/docs/reference/workload-contract.md" target="_blank" rel="noopener noreferrer">workload contract</a> and <a href="https://github.com/ai-dynamo/snapshot/blob/main/docs/get-started/prerequisites.md" target="_blank" rel="noopener noreferrer">prerequisites</a> are worth reading before anyone gets excited:</p>
+<ul>
+<li><strong>Drivers.</strong> Kernel-mode driver 580 or newer. Multi-GPU workloads need GPU CustomStorage, which needs CUDA driver API 13.4, meaning user-mode driver (<code>libcuda.so</code>) 615 or newer in every relevant process. Without it, a multi-GPU restore "takes too long and uses too much memory to be practical."</li>
+<li><strong>Cluster.</strong> GPU Operator 26.3 or newer with MIG disabled, Linux 5.13 or newer, a ReadWriteMany volume (or S3 in releases after v0.2.0), and a privileged DaemonSet with <code>hostPID</code>, <code>hostIPC</code> and <code>hostNetwork</code>. That last item will be a security review in most shops.</li>
+<li><strong>Same GPU model and driver</strong> on the restore node, and a CPU that has every instruction set the source had. The agent refuses a restore with a named missing flag, but only for flags on its list.</li>
+<li><strong>Engine settings.</strong> Workers must use <code>spawn</code>, not <code>fork</code> (for vLLM, <code>VLLM_WORKER_MULTIPROC_METHOD=spawn</code>). Transports CRIU can't restore must be off, for example <code>TLLM_NCCL_SYMMETRIC_ZERO_COPY=0</code> and <code>UCX_TLS=tcp,self</code>. io_uring is blocked by a seccomp profile. File handles must be reopenable, so <code>HF_HUB_DISABLE_XET=1</code> and <code>HF_HUB_OFFLINE=1</code>.</li>
+<li><strong>Mounts are part of the contract.</strong> Crusoe's restore failure showed up as <code>binfmt_misc: Operation not permitted</code>, but the real cause was a missing <code>/cache/vllm</code> mount in the restore pod. Their fix (PR #532) now names the missing mount before CRIU runs.</li>
+</ul>
+<h2>7. What I'd take from it</h2>
+<ul>
+<li>For 8-GPU MoE replicas, cold start is mostly compilation and graph capture, not weight loading. Snapshot skips both.</li>
+<li>Restore speed is set by how fast you can move GPU state. Local NVMe roughly halved it versus NFS in Crusoe's test.</li>
+<li>Scale-to-zero for large models starts to look realistic at 30 to 40 seconds of restore, but only within one node, one GPU model and one driver.</li>
+<li>Expect to rebuild artifacts whenever you change the engine version, driver or GPU SKU, and budget storage per configuration, not per model.</li>
+</ul>
+<p>In my <a href="/dynamo-1-6-upgrade-notes.html">Dynamo 1.6 notes</a> last month, Snapshot came up only because snapshot mode stopped forcing some NCCL variables off. The contract above now asks for <code>TLLM_NCCL_SYMMETRIC_ZERO_COPY=0</code> explicitly, so set it yourself. Snapshot now lives in its own repository with its own releases, and I'd treat it as part of the serving stack, not an add-on.</p>
+<h2>Sources</h2>
+<ul>
+<li>NVIDIA Technical Blog, "Start and Restore GPU Workloads in Seconds with NVIDIA Snapshot" (Nov 10, 2026): https://developer.nvidia.com/blog/start-and-restore-gpu-workloads-in-seconds-with-nvidia-snapshot/</li>
+<li>ai-dynamo/snapshot repository: https://github.com/ai-dynamo/snapshot</li>
+<li>Snapshot workload contract: https://github.com/ai-dynamo/snapshot/blob/main/docs/reference/workload-contract.md</li>
+<li>Snapshot prerequisites: https://github.com/ai-dynamo/snapshot/blob/main/docs/get-started/prerequisites.md</li>
+<li>Crusoe, "NVIDIA and Crusoe cut GLM-5.3 startup from 8 minutes to 31 seconds with NVIDIA Snapshot" (Nov 10, 2026): https://www.crusoe.ai/resources/blog/nvidia-snapshot-crusoe-cloud</li>
+<li>Saturn Cloud, "Benchmarking NVIDIA Snapshot for Loading Large Models in Seconds" (Nov 2, updated Nov 10, 2026): https://saturncloud.io/blog/benchmarking-nvidia-dynamo-snapshot</li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
