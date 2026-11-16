@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Zero-SM NCCL: When Copy-Engine Collectives Pay Off on GB200 and B200, and When They Don't — Anpoo Sivanadi</title>
+  <meta name="description" content="Every generation of NVLink makes the same trade worse." />
+  <link rel="canonical" href="https://asivanadi0.github.io/zero-sm-nccl-copy-engine-collectives-gb200-b200.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Zero-SM NCCL: When Copy-Engine Collectives Pay Off on GB200 and B200, and When They Don't — Anpoo Sivanadi" />
+  <meta property="og:description" content="Every generation of NVLink makes the same trade worse." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/zero-sm-nccl-copy-engine-collectives-gb200-b200.html" />
+  <meta property="article:published_time" content="2026-11-16T06:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Zero-SM NCCL: When Copy-Engine Collectives Pay Off on GB200 and B200, and When They Don't</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-16T06:00:00-08:00">16 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>Every generation of NVLink makes the same trade worse. To saturate the link, NCCL's SM-based kernels need more Streaming Multiprocessors, and those SMs are taken from the GEMMs you were trying to overlap. A new paper from NVIDIA and ETH Zurich, <a href="https://arxiv.org/abs/2611.18075" target="_blank" rel="noopener noreferrer">Zero-SM NCCL</a> (arXiv 2611.18075, posted Nov 13), puts a number on that: the SMs NCCL needs to saturate NVLink went from 8 on Pascal to 32 on Blackwell. Its answer is to stop using SMs for communication at all, for data movement and for synchronization.</p>
+<p>What makes the paper worth reading is that it doesn't stop at the microbenchmark win. The authors ran about 2,800 GPU-hours of Megatron-LM training across 19 recipes on GB200 NVL72 and B200 NVL8, and they report plenty of cases where zero-SM loses. These are my notes from the paper and the <a href="https://github.com/spcl/zero-sm-artifact" target="_blank" rel="noopener noreferrer">artifact repo</a>. I haven't run it on my own jobs yet.</p>
+<h2>1. How it avoids SMs</h2>
+<p>The hard part of offloading collectives was never the bytes. Copy engines (CEs) have done <code>cudaMemcpyAsync</code> over NVLink for years. The hard part is synchronization: spinning on flags, barriers and completion tracking all run in SM kernels today. Prior work like NCCLX moves bulk data with CEs but still launches a small kernel per collective to keep stream order. VCCL has an SM-free mode, but only for point-to-point.</p>
+<p>Zero-SM NCCL uses three pieces:</p>
+<ul>
+<li><strong>Synchronization through CUDA stream memory operations.</strong> <code>cuStreamWriteValue64</code> and <code>cuStreamWaitValue64</code> write or wait on a memory word as part of a stream, without a kernel. Each signal uses a monotonically increasing sequence number, so a stale value from the previous iteration can't unblock a wait.</li>
+<li><strong>Copy engines inside the scale-up domain.</strong> Buffers are symmetrically registered, so a CE copies straight into a peer's user buffer. A stream memory operation can't target a remote GPU, so publishing a signal takes two steps: write the sequence number into a local staging word, then CE-copy that word into the peer's signal slot. CEs don't expose atomics, which is why.</li>
+<li><strong>A stream-ordered CPU proxy for RDMA.</strong> Across scale-up domains, the host thread posts a descriptor, a stream write tells the proxy the source buffer is ready, and a stream wait blocks later work until the proxy marks the RDMA done. The signal is an ordered put-with-signal in NCCL's network plugin interface, so it isn't tied to IB atomics. The paper names AWS EFA as a non-IB example.</li>
+</ul>
+<p>On top of that are two new one-sided APIs, <code>ncclPutSignal</code> and <code>ncclWaitSignal</code>, and the data-movement collectives: AllGather, AlltoAll, Gather and Scatter. AllReduce and ReduceScatter aren't covered, because they need arithmetic. The authors suggest NVLink SHARP could eventually do those reductions in the fabric.</p>
+<p>Two details I liked. When NVLS multicast is available, a single CE copy to a multicast address reaches every GPU in the domain, and the tuner uses multicast for data only below a size threshold. And for same-device copies, where <code>cudaMemcpyAsync</code> would normally pick SMs because they saturate HBM better, they force the CE with <code>cudaMemcpyFlagPreferOverlapWithCompute</code>. CUDA graph capture works too, using a flag protocol that resets each replay, at the cost of a few extra stream memory operations per transfer.</p>
+<p>In the experiments it's enabled with <code>NCCL_CTA_POLICY=ZERO</code> on NCCL 2.32.3, plus some unreleased pieces. The pipelined rail schedule and its tuner are not in a released NCCL yet.</p>
+<h2>2. The microbenchmarks</h2>
+<p>Both test systems use NVLink5 at 900 GB/s per direction and 148 SMs per GPU. The GB200 NVL72 rack is one 72-GPU NVLink domain with 4 x 400 Gb/s NICs per 4-GPU node and Grace CPUs. The B200 NVL8 nodes each form their own NVLink domain, with 8 x 400 Gb/s NICs and dual Xeon Platinum 8570.</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Measurement</th>
+<th>Zero-SM (CE)</th>
+<th>SM-based NCCL</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>NVLink put, 8 B latency (B200)</td>
+<td>16.7 µs</td>
+<td>9.7 µs (Send/Recv)</td>
+</tr>
+<tr>
+<td>NVLink put, 4 GiB bandwidth</td>
+<td>773 GB/s</td>
+<td>658 GB/s</td>
+</tr>
+<tr>
+<td>Cross-node put, 8 B latency</td>
+<td>15.9 µs</td>
+<td>31.4 µs</td>
+</tr>
+<tr>
+<td>AllGather 4 GiB, one NVLink domain</td>
+<td>714-746 GB/s</td>
+<td>537-678 symmetric, 613-698 legacy</td>
+</tr>
+<tr>
+<td>AllGather 1 KiB, one node</td>
+<td>25-29 µs</td>
+<td>12-18 µs</td>
+</tr>
+<tr>
+<td>AllGather 1 KiB, 72 GPUs</td>
+<td>52 µs</td>
+<td>118 µs (legacy ring)</td>
+</tr>
+<tr>
+<td>AllGather 4 GiB, 4 / 8 B200 nodes</td>
+<td>503 / 436 GB/s</td>
+<td>482 / 430 GIN symmetric, 372 legacy</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The bulk bandwidth win is a hardware fact: on Blackwell a CE issues wider NVLink transactions than SM-initiated copies. The latency loss is the price of issuing everything from the host. On one node, CE only overtakes the symmetric kernel from 128 to 512 MiB. Across nodes, CE gets close to the NIC bound the authors compute (517 and 450 GB/s), so the network, not the method, is the limit there.</p>
+<h2>3. The number that matters: what it does to your GEMMs</h2>
+<p>The overlap benchmark replays real GEMM chains from pretraining traces on one B200 node. Qwen3-30B-A3B is 100 MXFP8 MoE GEMMs at 640 thread blocks each, overlapped with a 144 MiB per-rank AllGather. Median GEMM slowdown:</p>
+<ul>
+<li>Legacy ring, 32 CTAs: 32.9%</li>
+<li>Symmetric kernel, default 4 CTAs: 6.2%</li>
+<li>Symmetric kernel, forced to 32 CTAs: 24.0%</li>
+<li>Copy engines: 3.9%, which the authors attribute to memory contention</li>
+</ul>
+<p>With the smaller Llama-3-8B AllGather (26 MiB), CE slowed no GEMM by more than 0.2%, while legacy slowed them by a median of 9.9%. NCCL's symmetric kernels already captured most of this gain at 4 CTAs. The gap between 6.2% and 3.9% is real, but it's not the 33-to-4 headline unless you're still on the legacy ring.</p>
+<h2>4. End-to-end: smaller than the overlap number, and conditional</h2>
+<p><strong>FSDP.</strong> Megatron-FSDP already allocates from an <code>ncclMemAlloc</code> pool, so registering that pool as a symmetric window made the parameter AllGathers eligible without changing the schedule. Against the legacy ring, CE sped up GPU-bound dense recipes by up to 3.5% on GB200 and 1.9% on B200. Against the symmetric kernel, the result was mixed. CE lost on host-bound recipes and on Qwen3-235B on B200.</p>
+<p>Issuing one CE AllGather costs 26-41 µs of host time on GB200, against 11-17 µs to launch the symmetric kernel. On B200 it's 77-86 µs against 5-7 µs. If your step is host-bound, that extra host work lands on the critical path. On GB200, FSDP gathers up to about 240 MiB tied or lost against the symmetric kernel, and an 820 MiB gather won.</p>
+<p><strong>Pipeline parallelism.</strong> This is the bigger result, and it isn't really about freed SMs. Replacing stage-to-stage <code>ncclSend</code>/<code>ncclRecv</code> with one-sided puts removes the rendezvous: a fast stage writes into a preallocated slot and moves on instead of waiting for its slower neighbor. Deep pipelines gained up to 14.9% (Qwen3-Next on GB200). Shallow or heavily interleaved ones gained nothing or lost. Two-stage Qwen3-32B lost 3.9% on B200. Llama-70B with deep interleaving, 322 transfers per iteration, saw the per-put cost cancel the gain.</p>
+<p>There's also a platform note on GB200. Host-side memory unmapping waited on GPU address-translation invalidations, for much longer with peer-mapped buffers and NVLink traffic in flight. They worked around it with a preloaded allocator shim that routes Python's memory arenas through <code>malloc</code>/<code>free</code>, in every arm. If you run host-bound jobs on GB200, that's worth checking on its own.</p>
+<h2>5. What I'd check before turning it on</h2>
+<p>The paper reduces its findings to a few conditions. Here's how I'd apply them:</p>
+<ul>
+<li><strong>Are you GPU-bound?</strong> If the host doesn't run far ahead, the extra host work per collective (26-41 µs on GB200 and 77-86 µs on B200 in the paper) will cost you more than the freed SMs give back.</li>
+<li><strong>Are your gathers large?</strong> On one domain, below roughly 128-512 MiB the symmetric kernel is still faster. FSDP with small units won't benefit.</li>
+<li><strong>Which baseline are you on?</strong> If you're still on the legacy ring, the gain is larger. If NCCL already picks symmetric kernels for you, expect low single digits or nothing.</li>
+<li><strong>Does your pipeline have a big bubble?</strong> Deep PP with uneven stages, MoE expert imbalance, or heavy embedding and loss stages on the ends is where one-sided puts pay. Two stages or deep interleaving likely won't.</li>
+<li><strong>What else is on the wire?</strong> Multicast versus unicast depends on concurrent traffic. Under concurrent all-to-all, a unicast CE AllGather on GB200 was delayed 1.8 ms, six times more than multicast. On B200, all-to-all delayed the legacy ring by up to 8.2 ms per AllGather and CE by at most 1.3 ms. Under concentrated TP traffic on GB200, though, unicast did better.</li>
+</ul>
+<p>Limits worth stating: no reduction collectives, a CPU proxy thread that consumes host resources on the scale-out path, a finite number of CEs for high fan-out, and higher costs under graph capture. The dollar figures in the paper ($2.6M over a 15T-token run) use CoreWeave on-demand list prices and are not a deployment cost model, which the authors say themselves.</p>
+<p>This fits with the <a href="/fsdp2-zero-copy-collectives-tide.html">TIDE collectives paper</a> I wrote about on Nov 1, which also moved FSDP all-gather onto copy engines and multicast. TIDE is a research system that also handles reduce-scatter. Zero-SM NCCL is the path inside NCCL itself, and its main lesson is the negative results. The authors call out RL weight sync and KV-cache transfer in disaggregated serving as strong fits: bulk transfers that overlap SM-bound work. That's where I'd test it first.</p>
+<h2>Sources</h2>
+<ul>
+<li>He, Shen, Wen et al., "Zero-SM NCCL: A Systematic Guide to Designing and Deploying SM-Free GPU Communication," arXiv 2611.18075 (Nov 13, 2026): https://arxiv.org/abs/2611.18075</li>
+<li>Full text (HTML): https://arxiv.org/html/2611.18075</li>
+<li>Artifact repository (NCCL patches, harnesses, recipes): https://github.com/spcl/zero-sm-artifact</li>
+<li>CUDA Driver API, stream memory operations: https://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEMOP.html</li>
+<li>NCCL: https://developer.nvidia.com/nccl</li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
