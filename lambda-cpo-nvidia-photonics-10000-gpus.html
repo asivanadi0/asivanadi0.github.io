@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Co-Packaged Optics at 10,000 GPUs: What Lambda's NVIDIA Photonics Numbers Show, and What They Leave Out — Anpoo Sivanadi</title>
+  <meta name="description" content="Co-packaged optics has spent years as a slide in switch roadmaps." />
+  <link rel="canonical" href="https://asivanadi0.github.io/lambda-cpo-nvidia-photonics-10000-gpus.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Co-Packaged Optics at 10,000 GPUs: What Lambda's NVIDIA Photonics Numbers Show, and What They Leave Out — Anpoo Sivanadi" />
+  <meta property="og:description" content="Co-packaged optics has spent years as a slide in switch roadmaps." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/lambda-cpo-nvidia-photonics-10000-gpus.html" />
+  <meta property="article:published_time" content="2026-11-17T06:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Co-Packaged Optics at 10,000 GPUs: What Lambda's NVIDIA Photonics Numbers Show, and What They Leave Out</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-17T06:00:00-08:00">17 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>Co-packaged optics has spent years as a slide in switch roadmaps. On Nov 16, at SC26, Lambda <a href="https://lambda.com/blog/worlds-first-large-scale-deployment-of-nvidia-photonics-switches-with-cpo" target="_blank" rel="noopener noreferrer">announced</a> that it runs NVIDIA Photonics CPO switches in production, connecting more than 10,000 NVIDIA Blackwell Ultra GPUs in <a href="https://www.nvidia.com/en-us/data-center/gb300-nvl72/" target="_blank" rel="noopener noreferrer">GB300 NVL72</a> racks at its Quebec campus. NVIDIA published a <a href="https://blogs.nvidia.com/blog/lambda-photonics/" target="_blank" rel="noopener noreferrer">companion post</a> the same day, and the deployment is slated for NVIDIA's SC26 special address.</p>
+<p>Lambda calls it the first large-scale CPO deployment. I can't verify "first," and it isn't the interesting part. What's useful is that an operator has published measured numbers from a real fabric next to conventional pluggable optics. These are my notes on those numbers, which ones are Lambda's measurements and which are NVIDIA's platform claims, and what's missing if you're deciding whether CPO belongs in your next build.</p>
+<h2>1. What changes physically</h2>
+<p>In a conventional switch, the ASIC drives electrical signals across the board to the front panel, where a pluggable transceiver turns them into light. That trace is inches long, so long-reach SerDes and often retimer chips sit in the path to keep the signal clean at 800G-class lane rates.</p>
+<p>CPO moves the optical engines onto the switch package, next to the ASIC. Both posts describe the electrical path shrinking "from inches to millimeters," which cuts signal loss and removes the retimers. Fewer parts in the signal path means fewer watts and fewer things that can fail.</p>
+<p>The detail that matters most for operations is the laser. In a pluggable module the laser lives inside the transceiver, and a dead laser means swapping the whole module. NVIDIA's design pulls the light source out into separate modules. Each switch in Lambda's deployment has <strong>18 removable external light sources</strong> that feed the on-package optical engines, and technicians can replace them in the field. NVIDIA also says the design uses 4x fewer lasers than pluggable optics.</p>
+<h2>2. The switch configuration</h2>
+<p>From the two posts:</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GPUs connected</td>
+<td>10,000+ NVIDIA Blackwell Ultra (GB300 NVL72 racks)</td>
+</tr>
+<tr>
+<td>Switch ports</td>
+<td>144 per switch at 800 Gb/s</td>
+</tr>
+<tr>
+<td>Cooling</td>
+<td>Liquid cooling for switch chip and optical engines</td>
+</tr>
+<tr>
+<td>External light sources</td>
+<td>18 per switch, field-replaceable</td>
+</tr>
+<tr>
+<td>Site</td>
+<td>Lambda Quebec campus, 142 MW secured, PUE guaranteed at 1.2</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>By my arithmetic, 144 ports at 800 Gb/s is 115.2 Tb/s of front-panel bandwidth per switch. Neither post names the switch model or says whether this fabric is InfiniBand or Ethernet, so I'm not going to guess.</p>
+<p>Liquid cooling is not optional here. With the optics on the package, the heat from the optical engines sits right next to the hottest chip in the box. If your facility can't bring liquid to the network rows, that's the first question to settle, before any of the numbers below.</p>
+<h2>3. What Lambda measured</h2>
+<p>Lambda benchmarked CPO against conventional pluggable optics at three scales: rack, scalable unit and pod. Its reported results:</p>
+<ul>
+<li><strong>Throughput:</strong> identical to pluggable optics at every scale.</li>
+<li><strong>Latency:</strong> lower at every scale, with the gap growing from <strong>3.8% at rack</strong> to <strong>10.1% at pod</strong>. NVIDIA's post rounds these to about 4% and up to about 10%.</li>
+<li><strong>Optics temperature:</strong> median <strong>36°C</strong> for CPO against <strong>51°C</strong> for pluggable optics.</li>
+<li><strong>Signal integrity:</strong> "more stable" than pluggable, per both posts.</li>
+</ul>
+<p>The throughput result is the one I'd weigh most. CPO was never sold as a bandwidth upgrade at the same lane rate. The worry was that a new packaging approach would cost you something in delivered bandwidth or stability. Equal throughput at pod scale removes the most basic objection.</p>
+<p>The latency trend is plausible given the mechanism. If each optical hop saves a little time by dropping retimers and long electrical traces, a pod-scale path crosses more switch hops than a rack-scale path, so the saving adds up. That's my reading, not something Lambda states. What I can't tell is what the percentages are of. Neither post gives absolute latencies, message sizes, or whether the test was a point-to-point ping, a collective like all-reduce, or a training step. A 10% drop in small-message tail latency matters a lot for decode-heavy inference and for latency-bound collectives. A 10% drop in a latency term that's dwarfed by bandwidth time in large all-reduces barely moves a training step.</p>
+<p>The temperature delta is the most direct operational number. Fifteen degrees cooler at the median is a big gap for optics, where laser aging is strongly temperature-dependent. But a median says nothing about the tail, and the hot outliers are what you replace.</p>
+<h2>4. What's still a vendor claim</h2>
+<p>Several of the headline figures come from NVIDIA's platform description, not from Lambda's benchmarks:</p>
+<ul>
+<li><strong>Up to 5x better power efficiency</strong> than pluggable optics.</li>
+<li><strong>Up to 15x higher reliability.</strong> Lambda's release links this to the cooler, more stable optics, but it doesn't report its own failure counts.</li>
+<li><strong>Longer mean time between interruptions (MTBI).</strong> The NVIDIA post says Lambda gets longer MTBI, with no figure attached.</li>
+</ul>
+<p>None of these are unreasonable. Removing retimers and pluggable DSP paths does save power, and fewer lasers running cooler should fail less. But "up to" numbers are ceilings, and a reliability multiplier needs a fleet, a time window and a failure definition behind it. A 10,000-GPU fabric that recently went into production hasn't had time to show a 15x reliability gain in its own failure logs.</p>
+<h2>5. Why reliability is the real story</h2>
+<p>For anyone running large training jobs, the network part of the failure budget is mostly optics. A single flapping link can stall a synchronous job across thousands of GPUs, and the job then pays the full cost of a checkpoint restore. NVIDIA's post makes the same point for agentic inference, where one link disruption causes latency cascades across many sessions.</p>
+<p>That's why the field-replaceable light source matters more to me than the latency percentages. Today a failing pluggable is a module swap: pull it, insert a spare, re-seat the fiber, and hope you picked the right port. With CPO, the optical engine is part of the switch package. If the laser is the part that fails, replacing an external light-source module is the intended repair. If the optical engine itself fails, the repair story is very different, because that engine is bonded to the switch package. Neither post says how that case is handled, how many ports go dark when one light-source module is pulled, or whether the swap is hitless.</p>
+<h2>6. What I'd ask before planning CPO into a build</h2>
+<ul>
+<li><strong>Latency method.</strong> Absolute numbers, message sizes, and whether the 3.8% to 10.1% applies to collectives or only point-to-point.</li>
+<li><strong>Failure data.</strong> Link flaps and optics replacements per thousand ports per month, CPO against pluggable, on the same fabric and workload.</li>
+<li><strong>Blast radius.</strong> How many ports a single light-source module feeds, and what happens to traffic during a swap.</li>
+<li><strong>Optical engine failures.</strong> Whether a failed on-package engine means replacing the whole switch, and what the spares model looks like.</li>
+<li><strong>Power at the wall.</strong> Measured switch power per port against the pluggable baseline, rather than the "up to 5x" ceiling.</li>
+<li><strong>Facility fit.</strong> Liquid cooling at the network rows, which this design depends on.</li>
+</ul>
+<h2>My take</h2>
+<p>This is the first time I've seen an operator publish side-by-side measurements of CPO and pluggable optics at five-figure GPU scale, and the results are clean where they're specific: same throughput, lower latency that grows with scale, and much cooler optics. The bigger claims, 5x power and 15x reliability, are still NVIDIA's numbers. Lambda's campus will produce the data that settles them, and the optics failure rate after a year in service is the figure I'll be watching for.</p>
+<h2>Sources</h2>
+<ul>
+<li>Lambda, "Lambda announces the world's first large-scale CPO deployment of NVIDIA Photonics switches" (Nov 16, 2026): https://lambda.com/blog/worlds-first-large-scale-deployment-of-nvidia-photonics-switches-with-cpo</li>
+<li>NVIDIA blog, "Lambda Boosts AI Factory Resiliency and Efficiency With NVIDIA Photonics" (Nov 16, 2026): https://blogs.nvidia.com/blog/lambda-photonics/</li>
+<li>NVIDIA SC26 announcements: https://blogs.nvidia.com/sc26-news/</li>
+<li>Lambda's November 2025 early-adoption announcement: https://www.businesswire.com/news/home/20251120689633/en/Lambda-Leads-Early-Adoption-of-NVIDIA-Co-Packaged-Optics-for-Next-Gen-AI-Factories</li>
+<li>NVIDIA Photonics product page: https://www.nvidia.com/en-us/networking/products/silicon-photonics/</li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
