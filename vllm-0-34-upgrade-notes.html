@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>vLLM 0.34 Upgrade Notes: Bigger KV Cache by Default, 64-Token Blocks, and No More V1 Runner — Anpoo Sivanadi</title>
+  <meta name="description" content="vLLM v0.34.0 was published at 23:22 UTC on November 16, 2026, which was 3:22 PM PT." />
+  <link rel="canonical" href="https://asivanadi0.github.io/vllm-0-34-upgrade-notes.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="vLLM 0.34 Upgrade Notes: Bigger KV Cache by Default, 64-Token Blocks, and No More V1 Runner — Anpoo Sivanadi" />
+  <meta property="og:description" content="vLLM v0.34.0 was published at 23:22 UTC on November 16, 2026, which was 3:22 PM PT." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/vllm-0-34-upgrade-notes.html" />
+  <meta property="article:published_time" content="2026-11-16T18:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>vLLM 0.34 Upgrade Notes: Bigger KV Cache by Default, 64-Token Blocks, and No More V1 Runner</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-16T18:00:00-08:00">16 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>vLLM <a href="https://github.com/vllm-project/vllm/releases/tag/v0.34.0" target="_blank" rel="noopener noreferrer">v0.34.0</a> was published at 23:22 UTC on November 16, 2026, which was 3:22 PM PT. The release notes count 1,061 commits from 412 contributors, 120 of them new. The repo has a v0.33.0 tag, but no v0.33.0 release was ever published on GitHub; the last release before this one was v0.33.0rc3 on November 2.</p>
+<p>As with my <a href="/vllm-0-32-upgrade-defaults.html">0.32 notes</a>, I'm skipping most of the model-specific kernel work. What matters when you roll a new image across a fleet is the default that changed under you. This release has three of those that touch memory, startup and request latency on every model, plus a handful of removals that fail loudly. Numbers below come from the release notes and the linked PRs. Anything that is my own reading is labeled that way.</p>
+<h2>1. The KV cache is now sized after warmup, and <code>gpu_memory_utilization</code> defaults to 1.0</h2>
+<p>This is the biggest operational change. <a href="https://github.com/vllm-project/vllm/pull/56492" target="_blank" rel="noopener noreferrer">PR #56492</a> turns on what the project calls the extensible KV cache, by default on CUDA and ROCm.</p>
+<p>The problem it solves is old. Captured CUDA graphs bake in the KV cache's addresses, so the cache has to exist before capture. That meant vLLM sized it from a profiling run that happened before graph capture and warmup, then left slack to absorb whatever it couldn't measure: graph memory, attention workspaces, sampler and logprobs buffers, spec-decode drafts. The PR describes that slack as the <code>gpu_memory_utilization=0.92</code> default, 8% of the device, or about 15 GiB of a 192 GiB GPU sitting idle.</p>
+<p>The new path reserves the cache's full address range with the driver's virtual memory API and backs only the blocks that capture and warmup actually touch. After warmup each worker measures what is really free, and the engine maps more physical memory into the same range. Addresses never move, so the captured graphs stay valid.</p>
+<p>What the PR and release notes report:</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Claim</th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>4–10% more KV cache tokens (4.9–11.3 GiB per GPU) across eight models on GB200</td>
+<td>PR #56492</td>
+</tr>
+<tr>
+<td>MiniMax-M3 on H200: 433k to 672k tokens</td>
+<td>Release notes</td>
+</tr>
+<tr>
+<td>Engine init time, excluding weight loading, down 21–34% (5–34 s)</td>
+<td>PR #56492</td>
+</tr>
+<tr>
+<td>End-to-end startup down 6–18%</td>
+<td>PR #56492</td>
+</tr>
+<tr>
+<td>TPOT up 6–18% on some H200 models at concurrency 128</td>
+<td>Release notes</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Two details I'd read twice. First, the latency trade-off is real and the project says so: a larger cache admits more concurrent requests, and per-token decode latency can rise. If you have a TPOT SLO tighter than your throughput target, test at your actual concurrency before rolling. Second, the PR notes that if you pin <code>gpu_memory_utilization=0.92</code> explicitly, the cache comes out 1–4% smaller than before, because it now subtracts graph and warmup memory it measured instead of letting the slack absorb it. So "I'll just keep my old flag" does not give you the old cache size.</p>
+<p>To opt out, the release notes give <code>--gpu-memory-utilization 0.9</code> or <code>--no-enable-extensible-kv-cache</code>. If you share a GPU between processes, the utilization setting is still a cap, and <a href="https://github.com/vllm-project/vllm/pull/66704" target="_blank" rel="noopener noreferrer">PR #66704</a> adds a startup warning when an explicit value withholds memory from the cache.</p>
+<p>My reading: a fleet that sets <code>gpu_memory_utilization</code> in a Helm chart or launch script out of habit should look at that value again. It used to be headroom against OOMs. Now it mostly costs cache.</p>
+<h2>2. Default <code>--block-size</code> is 64, except on ROCm</h2>
+<p><a href="https://github.com/vllm-project/vllm/pull/63231" target="_blank" rel="noopener noreferrer">PR #63231</a> changes the default from 16 to 64 tokens per KV block. An explicit <code>--block-size</code> still wins, and attention backends that declare a preferred size still override the default. ROCm keeps 16-token blocks for default runs so it stays on its native C++ paged-attention kernel, which supports 16 and 32, instead of falling back to the slower Triton path.</p>
+<p>The PR's validation section is worth reading because it shows where 16 was baked in. The first CI run with only the default change failed in offloading-connector chunk sizes, shared-storage connector hash counts, an autotune cache-key test, and a 25-minute MI250 hang in RocmAttn with 64-token blocks. All were fixed in the PR, and the MI250 job went from timeout to passing in 8m51s.</p>
+<p>My reading: those failures are a list of the places your own setup might also assume 16. If you run a KV connector or offload tier, check that its chunk size and prefix-hash assumptions still line up with the GPU block size. Prefix-cache hits are also tracked per block, so coarser blocks can mean fewer full-block hits on short shared prefixes. I haven't measured that on this release; it's the first thing I'd look at on a workload with many short system prompts. <code>--block-size 16</code> restores the old behavior.</p>
+<h2>3. Model Runner V1 is gone</h2>
+<p><a href="https://github.com/vllm-project/vllm/pull/63373" target="_blank" rel="noopener noreferrer">PR #63373</a> removes it. Model Runner V2 is now the only GPU runner. <code>VLLM_USE_V2_MODEL_RUNNER=0</code> now fails at startup instead of silently selecting the old path, so a leftover env var in a deployment manifest will turn into a crash loop. Custom V1 logits processors need to move to <code>vllm.v1.worker.gpu.sample.logits_processor</code>.</p>
+<p>On the positive side, dual-batch overlap now runs on MRV2 with speculative decoding and DCP (<a href="https://github.com/vllm-project/vllm/pull/61464" target="_blank" rel="noopener noreferrer">#61464</a>), and suffix decoding runs on MRV2 with a GPU speculator, so Arctic Inference is no longer needed for it (<a href="https://github.com/vllm-project/vllm/pull/60339" target="_blank" rel="noopener noreferrer">#60339</a>).</p>
+<h2>4. Removals that fail loudly</h2>
+<p>These won't degrade quietly; they stop the server or the load. Still worth grepping your configs for before the rollout:</p>
+<ul>
+<li><strong>ROCm 7.2 images and wheels are dropped.</strong> Release artifacts are ROCm 10.0 only, and <code>-rocm72</code> tags are no longer published (<a href="https://github.com/vllm-project/vllm/pull/61939" target="_blank" rel="noopener noreferrer">#61939</a>).</li>
+<li><strong><code>huggingface_hub &gt;= 2.0.0</code> is required</strong>, along with <code>tokenizers &gt;= 0.23.3</code> and <code>timm &gt;= 1.0.30</code> (<a href="https://github.com/vllm-project/vllm/pull/64779" target="_blank" rel="noopener noreferrer">#64779</a>). If you build your own image with pinned deps, this is where it breaks.</li>
+<li><strong><code>fp_quant</code> checkpoints no longer load</strong>, since QuTLASS and <code>fp_quant</code> were removed (<a href="https://github.com/vllm-project/vllm/pull/65230" target="_blank" rel="noopener noreferrer">#65230</a>).</li>
+<li><strong>Marlin W4A8 is removed.</strong> The replacement is <code>--quantization humming</code> with <code>VLLM_HUMMING_INPUT_QUANT_CONFIG</code> instead of <code>VLLM_MARLIN_INPUT_DTYPE</code> (<a href="https://github.com/vllm-project/vllm/pull/65542" target="_blank" rel="noopener noreferrer">#65542</a>).</li>
+<li><strong>Keye-VL and Keye-VL-1.5 are removed</strong> (<a href="https://github.com/vllm-project/vllm/pull/64287" target="_blank" rel="noopener noreferrer">#64287</a>).</li>
+</ul>
+<h2>5. Quieter defaults worth knowing</h2>
+<ul>
+<li><strong>NUMA binding is on by default</strong>, best effort, with <code>--no-numa-bind</code> to disable (<a href="https://github.com/vllm-project/vllm/pull/61258" target="_blank" rel="noopener noreferrer">#61258</a>). If you already pin workers with <code>numactl</code> or a Kubernetes CPU manager policy, check that the two don't fight.</li>
+<li><strong>The default CUDA image now ships the AWS EFA userspace</strong> (libfabric, aws-ofi-nccl). A separate <code>-efa</code> image adds DeepEP built for EFA and routes NCCL over EFA by default (<a href="https://github.com/vllm-project/vllm/pull/65576" target="_blank" rel="noopener noreferrer">#65576</a>).</li>
+<li><strong><code>VLLM_COMPILE_ON_ONE_RANK</code> is on by default</strong>, giving a device-neutral compile cache, and all graph-affecting config fields are now hashed into compile cache keys (<a href="https://github.com/vllm-project/vllm/pull/63247" target="_blank" rel="noopener noreferrer">#63247</a>, <a href="https://github.com/vllm-project/vllm/pull/65652" target="_blank" rel="noopener noreferrer">#65652</a>). If you share a compile cache across nodes, expect a cold cache on the first start.</li>
+<li><strong><code>num_redundant_experts</code> defaults to the minimum valid value</strong> (<a href="https://github.com/vllm-project/vllm/pull/30614" target="_blank" rel="noopener noreferrer">#30614</a>).</li>
+<li><strong>Kimi K3.1 groundwork landed, but K3.1 is not servable in this release.</strong> The notes say this directly.</li>
+</ul>
+<h2>6. New things I'd actually try</h2>
+<ul>
+<li><strong>Checkpoint/restore over HTTP.</strong> <code>/checkpoint/prepare</code>, <code>/checkpoint/status</code> and <code>/checkpoint/restore</code>, built on CRIU and <code>cuda-checkpoint</code>, in both the Python and Rust frontends (<a href="https://github.com/vllm-project/vllm/pull/62570" target="_blank" rel="noopener noreferrer">#62570</a>). For cold-start-sensitive autoscaling this is the most interesting feature in the release.</li>
+<li><strong>Fault-tolerant DP+EP scale-down.</strong> Dead ranks are removed and their experts redistributed without a restart, through <code>POST /v1/fault_tolerance/apply</code> (<a href="https://github.com/vllm-project/vllm/pull/46370" target="_blank" rel="noopener noreferrer">#46370</a>).</li>
+<li><strong>EP weight filtering.</strong> With <code>--enable-ep-weight-filter</code> and EPLB, DeepSeek-R1 NVFP4 at DEP8 reads 105 GiB per rank instead of 385 GiB (<a href="https://github.com/vllm-project/vllm/pull/64187" target="_blank" rel="noopener noreferrer">#64187</a>).</li>
+<li><strong>NIXL on MI355X.</strong> Setting <code>ucx_backend_params</code> to rocm_ipc took transfer from 3.4 to 483.7 Gbps in the PR's test (<a href="https://github.com/vllm-project/vllm/pull/62905" target="_blank" rel="noopener noreferrer">#62905</a>).</li>
+</ul>
+<p>The headline speedups (up to 1.95x decode for Step5 NVFP4 MoE on 4×GB200, 1.6x output throughput for GLM-5.3-Flash with DeepGEMM FP8 MegaMoE, 1.24–1.40x faster GLM-5.3 TTFT at 32K–128K on GB200) are model-specific. Read them as "this model got faster," not as a fleet-wide number.</p>
+<h2>My rollout checklist</h2>
+<ol>
+<li>Grep manifests for <code>VLLM_USE_V2_MODEL_RUNNER</code>, <code>VLLM_MARLIN_INPUT_DTYPE</code>, <code>-rocm72</code> tags and <code>fp_quant</code> checkpoints.</li>
+<li>Decide on purpose whether to keep an explicit <code>gpu_memory_utilization</code>. Leave it unset unless you share the GPU.</li>
+<li>Run your real concurrency profile and compare TPOT, not just throughput.</li>
+<li>If you use a KV connector, offload tier or many short shared prefixes, compare block size 64 against 16 on cache hit rate.</li>
+<li>Check NUMA binding against your existing CPU pinning.</li>
+</ol>
+<h2>Sources</h2>
+<ul>
+<li>vLLM v0.34.0 release notes: https://github.com/vllm-project/vllm/releases/tag/v0.34.0</li>
+<li>Extensible KV cache: https://github.com/vllm-project/vllm/pull/56492</li>
+<li>Default block size 64: https://github.com/vllm-project/vllm/pull/63231</li>
+<li>Model Runner V1 removal: https://github.com/vllm-project/vllm/pull/63373</li>
+<li>NUMA binding default: https://github.com/vllm-project/vllm/pull/61258</li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
