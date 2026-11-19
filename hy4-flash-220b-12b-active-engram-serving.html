@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hy4 Flash Serving Notes: 220B Total, 12B Active, 64B of Engram Tables in Host RAM — Anpoo Sivanadi</title>
+  <meta name="description" content="Tencent published Hy4 Flash as open weights this week, in three repos: the instruct model in BF16, an FP8 instruct checkpoint and the pre-trained base model." />
+  <link rel="canonical" href="https://asivanadi0.github.io/hy4-flash-220b-12b-active-engram-serving.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Hy4 Flash Serving Notes: 220B Total, 12B Active, 64B of Engram Tables in Host RAM — Anpoo Sivanadi" />
+  <meta property="og:description" content="Tencent published Hy4 Flash as open weights this week, in three repos: the instruct model in BF16, an FP8 instruct checkpoint and the pre-trained base model." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/hy4-flash-220b-12b-active-engram-serving.html" />
+  <meta property="article:published_time" content="2026-11-18T18:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Hy4 Flash Serving Notes: 220B Total, 12B Active, 64B of Engram Tables in Host RAM</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-18T18:00:00-08:00">18 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>Tencent published <a href="https://huggingface.co/tencent/Hy4-flash" target="_blank" rel="noopener noreferrer">Hy4 Flash</a> as open weights this week, in three repos: the instruct model in BF16, an <a href="https://huggingface.co/tencent/Hy4-flash-FP8" target="_blank" rel="noopener noreferrer">FP8 instruct checkpoint</a> and the pre-trained <a href="https://huggingface.co/tencent/Hy4-flash-base" target="_blank" rel="noopener noreferrer">base model</a>. The Hugging Face repos were created late on November 16 PT and the model card was last edited on November 17. vLLM shipped a <a href="https://recipes.vllm.ai/tencent/Hy4-flash" target="_blank" rel="noopener noreferrer">recipe</a> on November 18, and SGLang has a matching <a href="https://docs.sglang.io/cookbook/autoregressive/Tencent/Hy4-flash" target="_blank" rel="noopener noreferrer">cookbook entry</a>.</p>
+<p>The headline numbers are 220B total parameters, 12B active per token and a 1,048,576-token context. Three of its design choices change how you size a node for it, and one moves a large chunk of the model off the GPU. Everything below comes from the model card, <code>config.json</code> and the vLLM recipe. Arithmetic that is mine is labeled.</p>
+<h2>1. Where the 220B actually lives</h2>
+<p>The card splits the parameter count, and the split matters more than the total:</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Parameters</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MoE backbone (excluding Engram, ViT, drafter)</td>
+<td>155.5B</td>
+</tr>
+<tr>
+<td>Engram n-gram embedding tables</td>
+<td>63.5B</td>
+</tr>
+<tr>
+<td>Vision encoder (SigLIP2-So400m based)</td>
+<td>0.43B</td>
+</tr>
+<tr>
+<td>DFly2 drafter</td>
+<td>0.85B</td>
+</tr>
+<tr>
+<td>Active per token</td>
+<td>11.3B text + 0.43B vision</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The backbone has 42 layers: one dense FFN layer and 41 MoE layers. Each MoE layer has 512 routed experts plus one shared expert, and each token activates 16 routed experts. The card calls this LatentMoE: routed experts run in a 1,536-dimensional latent space rather than the 3,072-dimensional hidden size, and the expert intermediate size is also 1,536. Small experts and a high top-k mean a lot of small GEMMs per token. I would not trust a throughput number for it that does not state batch size.</p>
+<p>Engram is the unusual part. Four backbone layers (indices 1, 11, 21 and 31) look up learned bigram and trigram representations through multi-head hashing: 8 hash heads per n-gram order, about 10.3M slots per head, 768 dimensions per order. That is 63.4B parameters of embedding table, roughly 29% of the model, and a token touches only a few rows of it.</p>
+<p>The vLLM recipe states the operational consequence directly: "Engram tables live in host memory." They are offloaded to host RAM by default, and the recipe tells you to provision host memory on top of GPU memory. My arithmetic: 63.4B parameters is about 127 GB in BF16. <code>config.json</code> sets <code>engram_fp8_embedding: true</code>, which would put it near 63 GB if the runtime stores the tables in FP8. Neither document says which one you get on the host, so I would measure it on the first boot rather than guess.</p>
+<p>A node sized on GPU memory alone can fit the weights in HBM and still fail at load.</p>
+<h2>2. The KV cache is small by design</h2>
+<p>Attention is a hybrid of two kinds of Multi-head Latent Attention layers. The layout is 2 sparse layers, then 10 repeats of 3 sliding-window layers followed by 1 sparse layer: 12 sparse layers and 30 sliding-window layers in total.</p>
+<ul>
+<li><strong>Sliding-window layers</strong> attend over a 512-token causal window (511 preceding tokens plus the current one), 64 heads, RoPE base 10,000.</li>
+<li><strong>Sparse layers</strong> use a compressed indexer to select up to 2,048 positions through group-level selection, 32 heads, RoPE base 10,000,000.</li>
+<li>Both use MLA with <code>kv_lora_rank</code> 512 and a 64-dimensional RoPE key.</li>
+</ul>
+<p>Tencent's claim is that hybrid attention, LatentMoE and Engram together cut KV cache size to 1/6 of Hy4 and 1/24 of Hy3.</p>
+<p>My arithmetic on what that looks like: an MLA layer caches 512 + 64 = 576 values per token. The 30 sliding-window layers hold at most 512 tokens each, about 17.7 MB per sequence in BF16 no matter how long the context gets. The 12 sparse layers grow with context: at the full 1,048,576 tokens that is about 14.5 GB per sequence in BF16, before the indexer's own compressed keys. Context length, not concurrency, is what will push you past one node.</p>
+<h2>3. A drafter that shares the target's cache</h2>
+<p>DFly2 is a 5-layer, 0.85B-parameter speculative decoding drafter that ships inside the checkpoint. Each draft layer is paired with one of the target's sparse attention layers and reuses that layer's KV cache ("KV Share") and the indexer's chosen 2,048 positions ("Index Share"). The card lists three consequences:</p>
+<ol>
+<li>Each draft token attends to at most about 2K keys, regardless of context length.</li>
+<li>The drafter keeps no KV cache of its own.</li>
+<li>It does not take part in prefill. In a prefill/decode disaggregated setup, the extra state moved to the decode side is one last-layer hidden state.</li>
+</ol>
+<p>The third point is the one I care about. Separate draft models are awkward in disaggregated serving because the drafter needs its own prefill and its own cache transfer. Here the extra cost is one hidden state per request. Both recipes turn it on by default: vLLM uses <code>--speculative-config '{"num_speculative_tokens":5,"method":"dfly"}'</code>, and the SGLang example uses <code>--speculative-algorithm DFLY --speculative-dfly-block-size 6</code>. The vLLM recipe also notes that MTP is not supported by this implementation.</p>
+<p>Tencent says megakernels, 4-bit quantization and DFly2 together push decode speed "past 150 tokens/s". The released checkpoints are BF16 and FP8, plus a GGUF build that the card describes as "for end-to-end testing purposes." My reading is that the 150 tokens/s figure describes Tencent's own serving stack, not what you get from the public images today. The card gives no hardware, batch size or context length for it.</p>
+<h2>4. What the public serving path supports today</h2>
+<p>The vLLM recipe is specific about limits:</p>
+<ul>
+<li><strong>Hardware:</strong> Hopper or Blackwell data-center GPUs (H100, H200, B200, GB200, B300, GB300). AMD Instinct is not supported yet; no ROCm image ships the model.</li>
+<li><strong>Install:</strong> only the dedicated <code>vllm/vllm-openai:hy4-flash</code> image. No released vLLM wheel registers the model class or the DFly drafter, so pip installs are not supported. SGLang likewise points to a prebuilt <code>lmsysorg/sglang:hy4-flash</code> image (x86 and Arm).</li>
+<li><strong>Parallelism:</strong> tensor parallel, optionally with expert parallel. Data parallel, pipeline parallel, context parallel, EPLB, DBO and LoRA are not supported.</li>
+<li><strong>Default shape:</strong> the recipe's H200 example runs TP=8 with <code>--max-model-len 8192</code>, <code>--max-num-seqs 4</code> and one image per prompt.</li>
+<li><strong>Footprint:</strong> the checkpoints download at 440.5 GB (BF16) and 287.1 GB (FP8). The recipe's 529 GB and 345 GB VRAM hints are those sizes times 1.2, which it calls conservative estimates rather than measured minima, since Engram sits on the CPU.</li>
+<li><strong>Transformers:</strong> support is not merged yet; the card pins a pull request branch (#50903).</li>
+</ul>
+<p>My arithmetic on fit: 8 x H200 is 1,128 GB of HBM and 8 x H100 is 640 GB, so the FP8 checkpoint fits on either before Engram offload. The interesting gap is between the 1M-token context the model advertises and the 8,192-token, 4-sequence starting point in the recipe. Without context parallelism, every long request has to fit inside one TP group, and the recipe gives no tested long-context configuration.</p>
+<h2>5. How much to trust the quality and cost claims</h2>
+<p>The base-model table compares Hy4 Flash Base with Hy4 Base, Hy3 preview Base and DeepSeek-V4-Flash-Base. Hy4 Flash Base scores 88.7 on MMLU against 89.7 for DeepSeek-V4-Flash-Base, 71.1 versus 68.6 on MMLU-Pro, and 73.7 versus 76.8 on MBPP-plus. That is roughly a peer of DeepSeek's flash base, ahead on some rows and behind on others. Tencent adds its own caveat: heavy synthetic instruction data in mid-training means the base model "occasionally fails to follow the expected answer format in few-shot evaluations," which may distort the scores.</p>
+<p>The cost claims rest on WorkIndex, an internal benchmark of eight task sets built around Tencent's WorkBuddy product: slide creation and editing, document editing, spreadsheet repair and similar. Hy4 Flash scores 42.1 against 39.7 for Hy4 preview and 51.4 for Hy4, at 1/13 the per-task cost of Hy4 preview and 1/20 of Hy4. The blind evaluation used 85 internal users on 259 tasks and put Hy4 Flash at 2.79/4 satisfaction against 2.81/4 for Claude Haiku 5.5, at RMB 0.26 per task.</p>
+<p>My reading: these are Tencent's numbers on Tencent's tasks, and the cost comparison against DeepSeek-V4.1-Flash uses that provider's Max tier at peak-hour pricing. They show positioning, not your cost on your hardware. Tencent itself recommends the larger Hy4 for long-horizon software engineering.</p>
+<h2>What I would check before putting it in a fleet</h2>
+<ol>
+<li>Measure host RAM use with Engram offloaded, and confirm whether the tables load as BF16 or FP8.</li>
+<li>Raise <code>--max-model-len</code> in steps and record KV usage per sequence against the 12-sparse-layer estimate above.</li>
+<li>Compare TPOT with DFly on and off at your real batch size; speculative decoding gains usually shrink as batch grows.</li>
+<li>Pin the <code>hy4-flash</code> image tags. Until the model lands in a released vLLM wheel, upgrades of the main image will not include it.</li>
+<li>Read the Tencent Hy License before any production use; it is a custom license, not Apache or MIT.</li>
+<li>Plan for no pipeline or context parallelism. Long-context work has to fit one TP group.</li>
+</ol>
+<h2>Sources</h2>
+<ul>
+<li>Hy4 Flash model card and config: https://huggingface.co/tencent/Hy4-flash</li>
+<li>Hy4 Flash FP8 checkpoint: https://huggingface.co/tencent/Hy4-flash-FP8</li>
+<li>Hy4 Flash base model: https://huggingface.co/tencent/Hy4-flash-base</li>
+<li>vLLM recipe (updated 2026-11-18): https://recipes.vllm.ai/tencent/Hy4-flash</li>
+<li>SGLang cookbook: https://docs.sglang.io/cookbook/autoregressive/Tencent/Hy4-flash</li>
+<li>Tencent Hy research page: https://hy.tencent.ai/research/hy4-flash</li>
+<li>License: https://huggingface.co/tencent/Hy4-flash/blob/main/LICENSE</li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
