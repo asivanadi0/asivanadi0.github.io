@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>A Shared L2 KV Cache Over EFA: Reading AWS's Distributed KV Caching Numbers — Anpoo Sivanadi</title>
+  <meta name="description" content="On November 18 AWS announced general availability of distributed KV caching on ElastiCache for Valkey." />
+  <link rel="canonical" href="https://asivanadi0.github.io/elasticache-distributed-kv-cache-l2-efa.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="A Shared L2 KV Cache Over EFA: Reading AWS's Distributed KV Caching Numbers — Anpoo Sivanadi" />
+  <meta property="og:description" content="On November 18 AWS announced general availability of distributed KV caching on ElastiCache for Valkey." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/elasticache-distributed-kv-cache-l2-efa.html" />
+  <meta property="article:published_time" content="2026-11-19T06:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>A Shared L2 KV Cache Over EFA: Reading AWS's Distributed KV Caching Numbers</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-19T06:00:00-08:00">19 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>On November 18 AWS <a href="https://aws.amazon.com/blogs/database/announcing-distributed-kv-caching-for-self-hosted-llms-with-amazon-elasticache/" target="_blank" rel="noopener noreferrer">announced</a> general availability of distributed KV caching on ElastiCache for Valkey. The idea is not new. LMCache, Mooncake and NIXL-based setups have shown for a while that a KV cache can live outside the GPU server. What is new is a managed tier with published latency, a published failure test and a limits page that is unusually blunt about what the cache will not do. I read the announcement, the <a href="https://docs.aws.amazon.com/AmazonElastiCache/latest/dg/distributed-kv-caching.html" target="_blank" rel="noopener noreferrer">service docs</a>, the <a href="https://docs.aws.amazon.com/AmazonElastiCache/latest/dg/distributed-kv-caching-limits.html" target="_blank" rel="noopener noreferrer">limits page</a> and the <a href="https://docs.lmcache.ai/mp/l2_storage/valkey.html" target="_blank" rel="noopener noreferrer">LMCache Valkey adapter docs</a>. This is what I took away. Arithmetic marked as mine is mine; every other number comes from those pages.</p>
+<h2>1. The tier model</h2>
+<p>AWS describes three tiers. L0 is GPU memory, which it puts at up to 288 GB of HBM3e per GPU, shared between weights and in-flight requests. L1 is host DRAM and local NVMe, reached through an offload library such as LMCache, and private to one server. L2 is the new shared tier: a Valkey cluster in the same Availability Zone that every GPU host can read.</p>
+<p>The lookup order is L0, then L1, then L2 only on a miss. On a write, the connector pushes new KV state to L2 so any server can reuse it later. The engine side does not change. vLLM and SGLang talk to an LMCache server running on each GPU host, and LMCache talks to Valkey.</p>
+<p>One discrepancy worth knowing: the blog lists TensorRT-LLM next to vLLM and SGLang, but the how-it-works page says TensorRT-LLM support is in the LMCache development branch and not in a stable LMCache release yet. If you run TensorRT-LLM, plan on a dev build or wait.</p>
+<h2>2. The hardware underneath</h2>
+<p>Everything runs on one node type, <code>cache.i8ge.48xlarge</code>, an EFA-enabled node based on EC2 I8ge, with Valkey 9.1 or later. The storage engine is the new <a href="https://github.com/valkey-io/valkey-large-object" target="_blank" rel="noopener noreferrer">valkey-large-object</a> module, which adds a <code>BLOB.*</code> data type. Hot blocks sit in DRAM, colder blocks tier down to local NVMe automatically, and transfers go over RDMA on EFA at up to 220 Gbps per node.</p>
+<p>The limits page gives the sizing facts:</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Limit</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Max value size (<code>BLOB.*</code>, <code>SET</code>, <code>GET</code>)</td>
+<td>512 MiB</td>
+</tr>
+<tr>
+<td>Max large object cached in DRAM</td>
+<td>256 MiB</td>
+</tr>
+<tr>
+<td>NVMe instance storage per node</td>
+<td>120 TB</td>
+</tr>
+<tr>
+<td>NVMe allocation granularity</td>
+<td>object length rounded up to 4 KiB</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>For scale, the AWS benchmark baseline gave each GPU server about 150 GB of L0 and 205 GB of L1. My arithmetic: one cache node's 120 TB of NVMe is roughly 340 times that combined local footprint. Capacity is not the constraint here. Bandwidth and hit rate are.</p>
+<h2>3. The latency table, translated</h2>
+<p>AWS published P50 and P99 for one node:</p>
+<div class="table-wrap" role="region" aria-label="Table 2" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Operation</th>
+<th>P50</th>
+<th>P99</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Get one 8 MB object</td>
+<td>477 µs</td>
+<td>950 µs</td>
+</tr>
+<tr>
+<td>Set one 8 MB object</td>
+<td>881 µs</td>
+<td>1,010 µs</td>
+</tr>
+<tr>
+<td>Get 1 GB (128 x 8 MB)</td>
+<td>41.7 ms</td>
+<td>42.1 ms</td>
+</tr>
+<tr>
+<td>Set 1 GB (128 x 8 MB)</td>
+<td>44.6 ms</td>
+<td>49.4 ms</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>My arithmetic: 1 GB in 41.7 ms is about 24 GB/s, or roughly 192 Gbps. That is about 87% of the 220 Gbps line rate, so the batched path is close to wire speed. A single 8 MB get works out to about 17 GB/s at P50, and the P99 roughly doubles it. The tight P50 to P99 gap on the 1 GB batch (41.7 vs 42.1 ms) is the number I like most. Batched KV loads are what a long prefix restore looks like, and a flat tail there is what keeps TTFT predictable.</p>
+<p>What the table does not say: how many clients were reading at once, whether the objects were DRAM-resident or on NVMe, and how the numbers change when several GPU hosts hit the same node. A single node at 220 Gbps is shared by every host that reads from it. If eight servers restore long prefixes at the same moment, they split that pipe.</p>
+<h2>4. Where it pays off and where it does not</h2>
+<p>AWS tested 2 to 6 P6 servers with 8 GPUs each running vLLM, five 2026 models with sparse and hybrid attention from 250B to 1.6T parameters, against coding-agent traces, an agentic assistant trace and long-context Q&amp;A (LooGLE and L-Eval). The comparison runs added one cache node.</p>
+<ul>
+<li><strong>Long-context Q&amp;A:</strong> each server handled 2x the requests per second within an SLO of p90 TTFT under 5 s and p90 TPOT under 50 ms. AWS says that cut cost per million output tokens by 40% after paying for the cache node.</li>
+<li><strong>Coding agents and assistants:</strong> 23% higher peak token throughput per server, and up to 1.98x (coding) and 1.61x (assistant) throughput at the same load under a 30 s p90 TTFT SLO.</li>
+<li><strong>TTFT per cache hit:</strong> 55% to 93% reduction across eight models (two full-attention, three sparse, three hybrid).</li>
+</ul>
+<p>The part I would act on is the cutover point: the prompt length above which loading from L2 is faster than recomputing. Every model they tested cut over below 10K tokens. Sparse models cut over under 512 tokens, because they store little KV per token while prefill stays expensive. Hybrid models cut over between 1,000 and 7,600 tokens, because their fixed-size recurrent state dominates the payload at short lengths; their gain grows to 84% past 100K tokens and up to 93% near 1M. AWS's advice is to find the cutover for your model and only cache prompts above it. I agree, and I would add that the cutover moves with load on the cache node, so measure it at peak, not idle.</p>
+<p>AWS also lists where it helps little: deployments whose KV fits comfortably in HBM, single-shot calls with no reuse (classification, translation, moderation), and long outputs from short prompts.</p>
+<h2>5. The failure test is the real argument</h2>
+<p>Prefix-aware routing already gets you a lot of reuse when the fleet is stable. The shared tier earns its keep when the fleet is not stable. AWS stopped one server in a two-server setup and brought it back:</p>
+<ul>
+<li>With the cache, the surviving server held p90 TTFT to 34.7 s over the first 300 s, 43% lower than without it, while completing 1.48x the requests.</li>
+<li>After the server returned, the system was back to its original throughput and TTFT within 60 s. Without the cache it took up to 600 s, and queued requests still held p90 TTFT at 12.1 s.</li>
+</ul>
+<p>That 60 s vs 600 s recovery is the number I would show to anyone running autoscaled inference. A new or restarted replica that can hydrate from L2 does not start cold.</p>
+<h2>6. The fine print on the limits page</h2>
+<p>This is a cache in the strict sense, and the docs say so plainly:</p>
+<ol>
+<li><strong>No persistence.</strong> No snapshots, backups, restore or replication. A node reboot, replacement, patch or failure removes all objects on that node. Service updates and engine upgrades empty the cache. LMCache treats a failed read as a miss and the engine recomputes.</li>
+<li><strong>Single AZ, no replicas.</strong> Replicas per shard is fixed at 0 and Multi-AZ cannot be turned on. Your GPU fleet and the cache must sit in the same AZ.</li>
+<li><strong>Fixed size.</strong> You cannot add or remove shards, rebalance slots or autoscale, because large-object keys cannot move between shards. To resize, you create a new cluster and reload. AWS says to size shard count on the larger of total object storage and peak read bandwidth.</li>
+<li><strong>Transport matters.</strong> The LMCache <code>transport</code> default is <code>tcp</code>, plain <code>SET</code>/<code>GET</code> over TLS, which the ElastiCache docs describe as for functional tests; those values live in node memory, not NVMe. RDMA (<code>"transport": "rdma"</code>) needs <code>valkey-glide-sync</code> 2.6.0 built with RDMA support and libfabric 2.4 or later on the client. In RDMA mode <code>request_timeout</code> does not bound a transfer, because a posted write cannot be called off, and <code>num_workers</code> is your in-flight transfer count.</li>
+<li><strong>Encryption is mandatory.</strong> Transit encryption is set to required and at-rest encryption is always on.</li>
+<li><strong>Pricing.</strong> Standard per-node-hour pricing for <code>cache.i8ge.48xlarge</code>, no charge for same-AZ data transfer to GPU hosts, reserved nodes available. The announcement does not quote a price, so the 40% cost figure depends on a node price you have to look up yourself.</li>
+</ol>
+<h2>7. What I would do before buying</h2>
+<p>AWS shipped <a href="https://github.com/aws-samples/amazon-elasticache-samples/tree/main/kvtrace" target="_blank" rel="noopener noreferrer">KVTrace</a>, which records the KV cache events vLLM and SGLang already publish (<code>--kv-events-config</code> over ZMQ in vLLM) and simulates hit rate and savings at different cache sizes offline. The limits page notes it models only node DRAM, so its hit rate is a lower bound. My checklist:</p>
+<ol>
+<li>Run KVTrace on every replica for a full traffic cycle, including the hours your users come back after a break.</li>
+<li>Find the cutover length for each model you serve and set a minimum prefix length for L2 writes.</li>
+<li>Load-test RDMA transport with all hosts restoring at once and record per-host bandwidth, not just the single-client table.</li>
+<li>Kill a replica under load and compare time-to-baseline with and without L2. That is the test the announcement leads with, and it should reproduce.</li>
+<li>Decide what happens during cache maintenance windows, since the cache comes back empty.</li>
+<li>Pin LMCache, <code>valkey-glide-sync</code> and libfabric versions together; the RDMA path depends on all three.</li>
+</ol>
+<h2>Sources</h2>
+<ul>
+<li>AWS announcement (Nov 18, 2026): https://aws.amazon.com/blogs/database/announcing-distributed-kv-caching-for-self-hosted-llms-with-amazon-elasticache/</li>
+<li>ElastiCache distributed KV caching overview: https://docs.aws.amazon.com/AmazonElastiCache/latest/dg/distributed-kv-caching.html</li>
+<li>How it works (tiers, transport, resilience): https://docs.aws.amazon.com/AmazonElastiCache/latest/dg/distributed-kv-caching-how-it-works.html</li>
+<li>Requirements and limits: https://docs.aws.amazon.com/AmazonElastiCache/latest/dg/distributed-kv-caching-limits.html</li>
+<li>LMCache Valkey L2 adapter: https://docs.lmcache.ai/mp/l2_storage/valkey.html</li>
+<li>valkey-large-object module: https://github.com/valkey-io/valkey-large-object</li>
+<li>KVTrace: https://github.com/aws-samples/amazon-elasticache-samples/tree/main/kvtrace</li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
