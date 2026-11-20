@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ROCm 10.2 Upgrade Notes: vLLM 0.32 Images, a Breaking amd-smi CLI, and a CRIU Restore Gap on MI350X — Anpoo Sivanadi</title>
+  <meta name="description" content="AMD shipped ROCm 10.2.0 on November 18, 2026, the latest drop on its six-week cadence." />
+  <link rel="canonical" href="https://asivanadi0.github.io/rocm-10-2-upgrade-notes.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="ROCm 10.2 Upgrade Notes: vLLM 0.32 Images, a Breaking amd-smi CLI, and a CRIU Restore Gap on MI350X — Anpoo Sivanadi" />
+  <meta property="og:description" content="AMD shipped ROCm 10.2.0 on November 18, 2026, the latest drop on its six-week cadence." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/rocm-10-2-upgrade-notes.html" />
+  <meta property="article:published_time" content="2026-11-19T18:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>ROCm 10.2 Upgrade Notes: vLLM 0.32 Images, a Breaking amd-smi CLI, and a CRIU Restore Gap on MI350X</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-19T18:00:00-08:00">19 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>AMD shipped <a href="https://rocm.docs.amd.com/en/latest/about/release-notes.html" target="_blank" rel="noopener noreferrer">ROCm 10.2.0</a> on November 18, 2026, the latest drop on its six-week cadence. The <a href="https://rocm.blogs.amd.com/ecosystems-and-partners/rocm-10.2-blog/README.html" target="_blank" rel="noopener noreferrer">launch blog</a> calls it a release that "prioritizes stability," and most of the headline list reads that way: newer framework builds, more RCCL tuning, a smaller library footprint, a unified profiler command. AMD also says 10.3 will land "slightly later" than usual because of the holidays, so 10.2 is probably what most AMD clusters will run into January.</p>
+<p>That makes it worth reading the release notes rather than the blog. A stability release can still change the things your automation depends on, and this one does. Below is what I would look at before rolling it across Instinct nodes. Figures come from AMD's release notes and blog. Anything that is my own reading or arithmetic is labeled that way.</p>
+<h2>1. Framework versions moved, and the serving builds still trail upstream</h2>
+<p>The validated framework set changes like this:</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>ROCm 10.1 support</th>
+<th>ROCm 10.2 support</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PyTorch</td>
+<td>2.12.0</td>
+<td>2.15.0</td>
+</tr>
+<tr>
+<td>JAX</td>
+<td>0.11.0</td>
+<td>0.11.2</td>
+</tr>
+<tr>
+<td>vLLM</td>
+<td>0.29.0</td>
+<td>0.32.0</td>
+</tr>
+<tr>
+<td>SGLang</td>
+<td>not listed</td>
+<td>0.5.21</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>vLLM ships as prebuilt Docker images and Python wheels, SGLang as Docker images, and both now run on Python 3.14. The official vLLM images bundle AITER (AMD's AI Tensor Engine for ROCm). MI300X, MI325X, MI350X and MI355X get prebuilt AITER kernels. On Radeon and Ryzen AI, the kernels compile the first time they are used.</p>
+<p>My reading: vLLM <a href="https://github.com/vllm-project/vllm/releases/tag/v0.34.0" target="_blank" rel="noopener noreferrer">v0.34.0</a> came out on November 16, two days before this release. AMD's validated image is two minor versions behind. That is normal for a vendor-validated stack, but the gap matters this time. 0.34 changed the KV cache sizing default, removed Model Runner V1 and dropped <code>-rocm72</code> image tags, which I covered in my <a href="/vllm-0-34-upgrade-notes.html">0.34 notes</a>. If you run AMD's image, you are on 0.32 behavior. If you run upstream 0.34 on 10.2, that pairing is not on AMD's validated list. Pick one on purpose.</p>
+<h2>2. PyTorch from TheRock no longer bundles ROCm</h2>
+<p>One line in the blog is easy to miss: "PyTorch packages built by TheRock now install ROCm as a separate dependency, instead of bundling it inside the PyTorch package itself."</p>
+<p>My reading: this is good for image size and for keeping one ROCm per container. It also means a lockfile or a Dockerfile that assumed <code>pip install torch</code> brought its own ROCm runtime can now resolve a different ROCm than the one on the base image. I would pin the ROCm dependency explicitly and check <code>torch.version.hip</code> in a startup probe.</p>
+<h2>3. Two CLI changes that break scripts</h2>
+<p>These are the changes I would treat as breaking, and the release notes label them that way.</p>
+<p><strong>amd-smi exit codes and output.</strong> The <code>amd-smi</code> CLI now returns more specific exit codes that match the <code>code</code> field in the error message. <code>amd-smi ras</code> now exits non-zero when a CPER file fails to decode, where it used to exit 0. <code>set</code> and <code>reset</code> keep going past a per-device failure instead of stopping. Errors in <code>--json</code> and <code>--csv</code> output gain an <code>error_type</code> field, and <code>--csv</code> rows gain a third column. Any health check, node-problem detector or exporter that parses two-column CSV or treats any non-zero exit as "GPU bad" needs a look.</p>
+<p><strong>rocprof-compute flags.</strong> In profile mode, <code>-d</code> used to select dispatches. It now sets the output directory, and dispatch selection moves to <code>--kernel-iteration-range</code>. Dispatch IDs now start at 1. A CI profiling job that passes <code>-d 5</code> will quietly write to a directory called <code>5</code> instead of filtering. The analyze mode <code>--gui</code> and <code>--tui</code> options are deprecated.</p>
+<h2>4. Three known issues worth knowing before you schedule the rollout</h2>
+<p><strong>MI300A spontaneous reboots on RHEL 10.3.</strong> On kernels that enable the <code>X86_FEATURE_INVLPGB</code> broadcast TLB flush, including RHEL 10.3, the <code>TLBSYNC</code> instruction can hang on MI300A. That trips a CPU machine-check watchdog that sync-floods the data fabric. The workaround is <code>clearcpuid=419</code> on the kernel command line (<a href="https://github.com/ROCm/TheRock/issues/10102" target="_blank" rel="noopener noreferrer">TheRock #10102</a>). RHEL 10.3 is also new in this release's support list, so a team upgrading the OS and ROCm together could walk straight into this.</p>
+<p><strong>CRIU restore fails on MI350X.</strong> <code>criu dump</code> works, but <code>criu restore</code> fails for any workload that creates a GPU queue. The <code>AMDKFD_IOC_CRIU_OP</code> ioctl returns <code>Invalid argument</code>, and AMD lists no workaround (<a href="https://github.com/ROCm/TheRock/issues/10103" target="_blank" rel="noopener noreferrer">TheRock #10103</a>). My reading: if you were planning GPU checkpoint and restore for cold starts or preemption on MI350X, it does not work on this release. You get checkpoints you cannot restore, which is worse than getting none.</p>
+<p><strong>In-place amdgpu-dkms upgrade.</strong> Upgrading <code>amdgpu-dkms</code> without a reboot can leave the old <code>amdttm</code> and <code>amdkcl</code> modules resident. Loading the new driver then fails with <code>could not insert 'amdgpu': Invalid argument</code>. The workaround is to run <code>modprobe -r amdgpu amdttm</code> and confirm with <code>lsmod</code> that nothing from <code>amdgpu|amdxcp|amddrm|amdttm|amd_sched|amdkcl</code> is still loaded before reinstalling. For node pools that drain and reboot on driver changes, this is a non-issue. For anyone doing live driver swaps, it is a failed node.</p>
+<p>For the MI355X, the firmware and driver matrix lists PLDM bundle 01.26.01.06 or later (01.26.00.02 also listed) and amdgpu driver versions from 30.30.0 through 31.70.0. Your OEM ships the firmware, not AMD, so check that matrix against what is actually flashed.</p>
+<h2>5. Changes that help operators</h2>
+<ul>
+<li><strong>hipBLASLt catalogs are compressed.</strong> Debian and RPM packages now install solution catalogs as zlib-compressed <code>.dat.zlib</code> files, which shrinks them from about 3.8 GB to about 194 MB. By my arithmetic that is roughly a 95% cut, which matters for image pull time on large node pools. The cost is decompression on first use, so the first GEMM after a cold start pays extra. hipSPARSELt does the same and cites more than 90% savings. If you measure TTFT on a freshly started pod, expect that first-call overhead to show up.</li>
+<li><strong>amdsmi on PyPI.</strong> <code>pip install amdsmi</code> (version 27.2.0) bundles the library, so the Python API works without a ROCm install. It needs pip 20.3 or later. Older pip installs an unrelated legacy 7.0.2 package. That is a nice trap for a slim exporter image.</li>
+<li><strong>Fabric faults alongside GPU errors.</strong> <code>amd-smi ras --cper</code> now reports fabric link events in the same CPER output as GPU errors. <code>amdsmi_get_fabric_cper_entries()</code> exposes them through the API. <code>amdsmi_get_link_topology()</code> queries the link between two GPUs on bare metal in one call.</li>
+<li><strong>Power profiles.</strong> <code>amd-smi static --ampp</code> and the matching C API expose the driver's predefined power and performance profiles, enumerated at runtime.</li>
+<li><strong>Profiling.</strong> The Streaming Performance Monitor gains a device-wide counting mode that samples between kernel dispatches, on gfx1200, gfx1201 and gfx1250. <code>rocsys</code> is an experimental single entry point for the Systems Profiler. <code>rocprof-sys-attach</code> can now attach from the host to a process inside a container. Infinity Storage I/O counters show up in the profiler (<code>ROCPROFSYS_USE_HIPFILE</code>) and in AMD-SMI. Experimental memory bandwidth analysis on MI350 Series flags L1, L2 or fabric bottlenecks with <code>--experimental --membw-analysis</code>.</li>
+<li><strong>hipFile on LVM and mdraid.</strong> GPU-direct storage reads now work through logical volumes and software RAID. PyTorch gets <code>load_storage</code> and <code>save_storage</code> APIs on top of hipFile, and fio 3.43 supports it, so you can benchmark it before you trust it.</li>
+<li><strong>rocFFT 64-bit indexing.</strong> Transforms larger than 2^32 elements, or with large strides or batch counts, now switch to 64-bit offsets automatically instead of overflowing.</li>
+</ul>
+<h2>6. The smaller items</h2>
+<p>RCCL gets more tuning for single-node, eight-GPU Radeon PCIe servers, validated with four-way tensor-parallel vLLM. That is relevant if you run R9700-class boxes for inference and irrelevant on Infinity Fabric Instinct nodes. hipBLASLt adds complex GEMM (CGEMM, ZGEMM) on gfx942 and gfx950, with rocBLAS routing those calls to it. SR-IOV support adds the MI350P with GIM 9.4.0.K on Ubuntu 24.04. OS support adds RHEL 10.3, RHEL 9.9 and SLES 16.1. The 18 newly supported Ryzen laptop parts (gfx1103) and the Radeon PRO W7900D matter for local development, not clusters.</p>
+<p>There is also an upcoming change in the compiler. LLVM runtime libraries move from <code>lib/llvm/lib</code> to <code>lib/llvm/lib/x86_64-unknown-linux-gnu</code>. For now, symlinks keep the old paths and <code>-target x86_64-pc-linux-gnu</code> working. If your build scripts hardcode those paths, fix them while the symlinks are still there.</p>
+<h2>My rollout checklist</h2>
+<ol>
+<li>Grep health checks and exporters for <code>amd-smi</code> CSV parsing and exit-code handling. Run them against a 10.2 node before the fleet.</li>
+<li>Grep CI profiling jobs for <code>rocprof-compute ... -d</code>.</li>
+<li>Decide whether you run AMD's vLLM 0.32 image or upstream 0.34, and test that exact pairing.</li>
+<li>Pin the ROCm dependency for TheRock PyTorch wheels.</li>
+<li>On MI300A with RHEL 10.3, add <code>clearcpuid=419</code> before the first boot.</li>
+<li>Do not plan on CRIU restore on MI350X with this release.</li>
+<li>Reboot on driver upgrades, or script the full module unload.</li>
+<li>Measure first-request latency on a cold pod to see what the compressed catalogs cost you.</li>
+</ol>
+<h2>Sources</h2>
+<ul>
+<li>ROCm 10.2.0 release notes: https://rocm.docs.amd.com/en/latest/about/release-notes.html</li>
+<li>ROCm 10.2.0 launch blog (Nov 18, 2026): https://rocm.blogs.amd.com/ecosystems-and-partners/rocm-10.2-blog/README.html</li>
+<li>MI300A RHEL 10.3 reboot issue: https://github.com/ROCm/TheRock/issues/10102</li>
+<li>MI350X CRIU restore issue: https://github.com/ROCm/TheRock/issues/10103</li>
+<li>amdsmi on PyPI: https://pypi.org/project/amdsmi/</li>
+<li>ROCm CLI v0.3.0: https://github.com/ROCm/rocm-cli/releases/tag/v0.3.0</li>
+<li>Phoronix coverage: https://www.phoronix.com/news/AMD-ROCm-10.2</li>
+<li>vLLM v0.34.0 release notes: https://github.com/vllm-project/vllm/releases/tag/v0.34.0</li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
