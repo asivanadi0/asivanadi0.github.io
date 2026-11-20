@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Streaming DiLoCo in MaxText: 65x Less Cross-Slice Traffic and What the Benchmark Does Not Show — Anpoo Sivanadi</title>
+  <meta name="description" content="On November 19, Google published Distributed LLM Training Across Metros: Streaming DiLoCo in MaxText, written by eight people across Google&#x27;s MaxText, Research and DeepMind teams." />
+  <link rel="canonical" href="https://asivanadi0.github.io/streaming-diloco-maxtext-cross-metro-training.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Streaming DiLoCo in MaxText: 65x Less Cross-Slice Traffic and What the Benchmark Does Not Show — Anpoo Sivanadi" />
+  <meta property="og:description" content="On November 19, Google published Distributed LLM Training Across Metros: Streaming DiLoCo in MaxText, written by eight people across Google&#x27;s MaxText, Research and DeepMind teams." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/streaming-diloco-maxtext-cross-metro-training.html" />
+  <meta property="article:published_time" content="2026-11-20T06:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Streaming DiLoCo in MaxText: 65x Less Cross-Slice Traffic and What the Benchmark Does Not Show</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-20T06:00:00-08:00">20 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>On November 19, Google published <a href="https://developers.googleblog.com/distributed-llm-training-across-metros-streaming-diloco-in-maxtext/" target="_blank" rel="noopener noreferrer">Distributed LLM Training Across Metros: Streaming DiLoCo in MaxText</a>, written by eight people across Google's MaxText, Research and DeepMind teams. The short version: MaxText, Google's open-source JAX training framework, now has a built-in way to train one model across TPU slices joined by a slow link. It syncs a small piece of the model at every step instead of all the gradients at every step.</p>
+<p>I care about this because you can usually get accelerators in two buildings long before you get a fat, cheap link between them. Below is what Google shipped, the numbers it reports, and the parts I would want to check before trusting it for a real run. Figures come from the Google post and the MaxText docs. Anything that is my own reading or arithmetic is labeled that way.</p>
+<h2>1. The algorithm, briefly</h2>
+<p>DiLoCo (Distributed Low-Communication) comes from the 2023 DeepMind paper <a href="https://arxiv.org/abs/2311.08105" target="_blank" rel="noopener noreferrer">DiLoCo: Distributed Low-Communication Training of Language Models</a>. Training is split across M independent groups, called learners or islands. Each one is typically a TPU slice or a multi-slice group inside one data center. Each learner runs a normal inner optimizer, usually AdamW, for H steps with no cross-group traffic. Traffic inside a learner (ICI, or intra-learner DCN) continues as usual. Every H steps, the learners compute how far their weights moved from the shared global weights, average those deltas with an all-reduce, and apply an outer optimizer (SGD with Nesterov momentum) to the global copy.</p>
+<p>Vanilla DiLoCo cuts the number of syncs by a factor of H, but each sync still ships the whole model at once. On a thin link that becomes a large stall every H steps. <a href="https://arxiv.org/abs/2501.18512" target="_blank" rel="noopener noreferrer">Streaming DiLoCo</a> splits the parameters into P fragments and syncs one fragment at a time, so each fragment still syncs exactly once per H steps but the traffic is spread out.</p>
+<p>MaxText's version makes concrete choices:</p>
+<ul>
+<li><strong>Fragments are layers.</strong> P = N_layers + 1: one fragment per scanned decoder layer, plus one for the non-scanned parameters (embeddings, final norm, output head). The big embedding and output matrices are split and spread across the layer fragments, so the step that syncs fragment 0 does not spike.</li>
+<li><strong>Interleaved order.</strong> The sync order jumps across depth (fragment 0, then layer k, then layer 2k) rather than walking adjacent layers, so no region of the network stays stale for long.</li>
+<li><strong>Host-side syncers.</strong> Weight deltas for the scheduled fragment are offloaded to sharded syncer workers on the learner host CPUs. They run the all-reduce and the outer Nesterov update, then write the fragment back to the TPU learner. There is no central parameter server.</li>
+<li><strong>Warm inner optimizers.</strong> Only parameters are synced. Each learner keeps its own AdamW moment buffers across syncs.</li>
+</ul>
+<h2>2. The numbers Google reports</h2>
+<p>The headline benchmark is Qwen3-32B (64 decoder layers, so P = H = 65) on two TPU v5p-32 slices, with Linux <code>tc</code> shaping the link between slices to three settings:</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Unthrottled</th>
+<th>30 Gbit/s</th>
+<th>10 Gbit/s</th>
+<th>Speedup vs DP at 30 / 10 Gbit/s</th>
+<th>Cross-slice volume per 65 steps</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Streaming DiLoCo (P = 65, H = 65)</td>
+<td>5.76 s/step</td>
+<td>5.76 s/step</td>
+<td>5.76 s/step</td>
+<td>3.37x / 9.57x</td>
+<td>67.0 GB</td>
+</tr>
+<tr>
+<td>Vanilla DiLoCo (H = 65)</td>
+<td>5.87 s/step</td>
+<td>6.39 s/step</td>
+<td>7.55 s/step</td>
+<td>3.04x / 7.30x</td>
+<td>141 GB</td>
+</tr>
+<tr>
+<td>Data parallel</td>
+<td>5.58 s/step</td>
+<td>19.41 s/step</td>
+<td>55.11 s/step</td>
+<td>1.00x</td>
+<td>4,258.8 GB</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Google's sizing example for the same model in bfloat16 puts data parallel at about 65.5 GB of gradient exchange per step. Hiding that behind a roughly 6.2 s step needs about 85 Gbps sustained. Streaming DiLoCo moves about 1.0 GB per step, which Google says needs about 1.3 Gbps.</p>
+<p>For quality, Google ran 4,000-step pretraining comparisons on two MoE models:</p>
+<div class="table-wrap" role="region" aria-label="Table 2" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>Streaming DiLoCo loss</th>
+<th>Data parallel loss</th>
+<th>Difference</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Qwen3-30B-A3B</td>
+<td>2.287</td>
+<td>2.307</td>
+<td>-0.020</td>
+</tr>
+<tr>
+<td>Gemma4-26B-A4B</td>
+<td>2.298</td>
+<td>2.319</td>
+<td>-0.021</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The post says the Qwen3-30B-A3B run needed "brief early-warmup synchronization adjustments" over roughly the first 800 steps, then tracked the baseline and ended slightly better. It also says the dense Qwen3-32B run matched the data parallel loss.</p>
+<h2>3. What I read in the table</h2>
+<p><strong>The win is all in the throttled columns.</strong> At line rate, Streaming DiLoCo is slightly slower than data parallel: 5.76 s versus 5.58 s, about 3% by my arithmetic. The MaxText tutorial says this plainly: on a fast interconnect DiLoCo "mainly adds outer-state memory without a speedup." This is a tool for a link you cannot widen, not a free speedup.</p>
+<p><strong>The flat 5.76 s line is the real result.</strong> Streaming DiLoCo shows the same step time at all three bandwidths. To me that says 10 Gbit/s is still not the binding limit for this model and slice size, so the benchmark does not tell us where it finally breaks. I would like to see 5 and 1 Gbit/s, and a latency sweep. <code>tc</code> shaping caps bandwidth, but a real metro or cross-region link also brings RTT, jitter and loss. The post's title says "metros," but every reported run is two slices with a shaped link.</p>
+<p><strong>Two numbers do not line up.</strong> The post's prose says vanilla DiLoCo "reduces total traffic by 65x." Its own table shows 141 GB, labeled "30x less." The MaxText theory doc goes further and says vanilla and streaming "move the same total number of bytes," and that if you are choosing between them to save on egress charges, "they are equivalent." The measured 67 GB versus 141 GB contradicts that. My guess is the measurement counts something the model leaves out, such as the broadcast back to learners or retransmits, but that is a guess. If egress cost is your reason to adopt this, measure it on your own link.</p>
+<p><strong>Scale is small.</strong> Two learners (<code>dcn_diloco_parallelism=2</code>), v5p-32 slices, and 4,000 steps for the quality runs. The published recipes use 2x v5p-128. The scaling-law work Google cites (<a href="https://arxiv.org/abs/2503.09799v1" target="_blank" rel="noopener noreferrer">arXiv 2503.09799</a>) is the evidence for larger runs. This release is the plumbing, and the post does not include a long, many-island run.</p>
+<p><strong>The overlap story is narrower than it sounds.</strong> The post describes host-CPU syncers that average deltas "while the TPUs continue running inner-loop training steps." The tutorial says the knobs meant for delayed merging, <code>num_communication_overlapping_steps</code> (V) and <code>communication_overlapping_alpha</code>, do not improve hardware efficiency "in the current SPMD design" because each step compiles into a synchronous XLA graph. True non-blocking overlap is listed as future MPMD work. My reading: today's speedup mostly comes from making each transfer 1/P the size, not from a fully asynchronous pipeline. The tutorial also warns that the launch script defaults V to 2, which delays merging with no throughput benefit, and defaults the outer LR to 0.1 rather than the recommended 0.7. Set both explicitly.</p>
+<h2>4. What it costs</h2>
+<p><strong>Memory.</strong> Each island keeps its own weights and AdamW state as before, but also a full replicated copy of the outer parameters and the outer momentum trace. The doc gives the extra resident bytes per island as roughly 2|Θ| times the outer-state bytes per parameter, and says the overhead scales with model size, not with the number of islands. My arithmetic: if the outer state is fp32, that is about 8 extra bytes per parameter on each island, which you have to budget before you pick a slice size.</p>
+<p><strong>Constraints.</strong> From the MaxText troubleshooting table: streaming requires <code>scan_layers=True</code>. <code>num_diloco_fragments</code> must be at least 2 and has no default, and the decoder layer count must be divisible by P - 1. The global batch must divide evenly across islands. H that is not a multiple of P is silently rounded. The tutorial's example is H = 100 with P = 37, which gives a 111-step period. V and alpha are silently ignored if streaming is off.</p>
+<p><strong>Tuning.</strong> The outer learning rate is the sensitive knob. Google used Nesterov β = 0.9 with outer LR between 0.3 and 0.7, and the tutorial suggests starting at 0.7 with an inverse rule: a higher inner LR needs a lower outer LR.</p>
+<h2>5. How to try it</h2>
+<p>The switches are <code>enable_diloco: true</code> and <code>enable_streaming_diloco: true</code>, with <code>num_diloco_fragments</code> and <code>diloco_sync_period</code> both set to N_layers + 1. Google says the feature is in <a href="https://pypi.org/project/maxtext/0.2.5/" target="_blank" rel="noopener noreferrer">MaxText v0.2.5 on PyPI</a>, the prebuilt Docker images and GitHub main. The implementation is <a href="https://github.com/AI-Hypercomputer/maxtext/blob/main/src/maxtext/trainers/diloco/diloco.py" target="_blank" rel="noopener noreferrer">diloco.py</a>. Recipes for Qwen3-8B (dense, H = P = 37) and Qwen3-30B-A3B (MoE, with the OLMo Grain pipeline) are in the <a href="https://github.com/AI-Hypercomputer/maxtext/blob/main/docs/tutorials/diloco_pretraining.md" target="_blank" rel="noopener noreferrer">tutorial</a>.</p>
+<p>The most useful thing in the release may be the built-in network emulation. <code>dcn_bandwidth_limit</code> (for example <code>10gbit</code>), <code>dcn_bandwidth_latency</code> (default 50ms) and <code>dcn_bandwidth_interface</code> apply <code>tc</code> shaping from the config. That lets you rerun Google's comparison on your own slices before committing to a cross-site job.</p>
+<h2>My take</h2>
+<p>This is the most practical low-communication training release I have seen in a mainstream framework: config flags, startup validation, a link-sizing formula and a shaping tool. It is TPU and JAX only. If your second site is a GPU cluster, this is a design to study, not something you can run, and the closest GPU-side work I have covered is about making collectives cheaper inside a node (<a href="/zero-sm-nccl-copy-engine-collectives-gb200-b200.html">Zero-SM NCCL</a>), which is a different problem. Before I trusted it across two real sites, I would want three things: a run on a real WAN with real latency, a reconciliation of the 67 GB versus 141 GB volume figures, and a quality comparison longer than 4,000 steps with more than two islands.</p>
+<h2>Sources</h2>
+<ul>
+<li>Google Developers Blog, Streaming DiLoCo in MaxText (Nov 19, 2026): https://developers.googleblog.com/distributed-llm-training-across-metros-streaming-diloco-in-maxtext/</li>
+<li>MaxText DiLoCo theory reference: https://github.com/AI-Hypercomputer/maxtext/blob/main/docs/reference/core_concepts/diloco.md</li>
+<li>MaxText DiLoCo pretraining tutorial: https://github.com/AI-Hypercomputer/maxtext/blob/main/docs/tutorials/diloco_pretraining.md</li>
+<li>MaxText diloco.py: https://github.com/AI-Hypercomputer/maxtext/blob/main/src/maxtext/trainers/diloco/diloco.py</li>
+<li>MaxText on PyPI: https://pypi.org/project/maxtext/0.2.5/</li>
+<li>DiLoCo paper: https://arxiv.org/abs/2311.08105</li>
+<li>Streaming DiLoCo paper: https://arxiv.org/abs/2501.18512</li>
+<li>DiLoCo scaling laws: https://arxiv.org/abs/2503.09799v1</li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
