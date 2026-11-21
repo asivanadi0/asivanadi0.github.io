@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Inkling 2 Mini: Serving a Looped 26B MoE Where Every Pass Keeps Its Own KV Cache — Anpoo Sivanadi</title>
+  <meta name="description" content="On November 20, Thinking Machines released Inkling 2 Mini, an open-weights (Apache 2.0) Mixture-of-Experts model with 26.4B total parameters." />
+  <link rel="canonical" href="https://asivanadi0.github.io/inkling-2-mini-looped-moe-per-pass-kv-cache.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Inkling 2 Mini: Serving a Looped 26B MoE Where Every Pass Keeps Its Own KV Cache — Anpoo Sivanadi" />
+  <meta property="og:description" content="On November 20, Thinking Machines released Inkling 2 Mini, an open-weights (Apache 2.0) Mixture-of-Experts model with 26.4B total parameters." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/inkling-2-mini-looped-moe-per-pass-kv-cache.html" />
+  <meta property="article:published_time" content="2026-11-20T18:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Inkling 2 Mini: Serving a Looped 26B MoE Where Every Pass Keeps Its Own KV Cache</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-20T18:00:00-08:00">20 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>On November 20, Thinking Machines <a href="https://thinkingmachines.ai/news/inkling-2-mini/" target="_blank" rel="noopener noreferrer">released Inkling 2 Mini</a>, an open-weights (Apache 2.0) Mixture-of-Experts model with 26.4B total parameters. The headline is that it runs on a 32 GB laptop. The part that matters if you serve models is that it is a looped transformer: the middle 12 of its 24 layers run three times for every token. That changes the memory and latency math. The weights are small, but the KV cache and the decode time do not shrink with them.</p>
+<p>vLLM and SGLang both shipped day-0 support with detailed serving notes. Below is the model, what the engines measured, and where the numbers disagree. Figures come from the Thinking Machines post and model card, the Hugging Face config, the <a href="https://vllm.ai/blog/2026-11-20-inkling2-mini" target="_blank" rel="noopener noreferrer">vLLM blog</a> and <a href="https://recipes.vllm.ai/thinkingmachines/Inkling-2-Mini" target="_blank" rel="noopener noreferrer">recipe</a>, and the <a href="https://docs.sglang.io/cookbook/autoregressive/ThinkingMachines/Inkling-2-Mini" target="_blank" rel="noopener noreferrer">SGLang cookbook</a>. Anything that is my own arithmetic or opinion is labeled that way.</p>
+<h2>1. The shape of the model</h2>
+<p>The <a href="https://huggingface.co/thinkingmachines/Inkling-2-Mini/blob/main/config.json" target="_blank" rel="noopener noreferrer">config.json</a> gives the basics: hidden size 2,304, 24 layers, 24 query heads and 8 KV heads at head dim 128, 128 routed experts with top-8 routing, no shared expert, expert intermediate size 1,152, and a maximum length of 1,048,576 tokens. Twenty of the 24 layers use a 1,024-token sliding window. The other four (layers 5, 11, 17 and 23, by my reading of <code>local_layer_ids</code>) use full attention. There is also a 23-layer ViT image encoder and a 3-layer MTP head used as a speculative draft.</p>
+<p>The layers are grouped into four blocks of six. Per vLLM, layers 0 to 5 are the prelude, 6 to 17 are the loop core, and 18 to 23 are the coda. The core runs three passes with shared weights, so each token makes 6 + 3 × 12 + 6 = 48 layer visits from 24 stored layers. Thinking Machines counts this as 3.4B active parameters but 5.4B weight activations per token. The vLLM blog and recipe say 3.5B active. Small, but check which one a capacity sheet used.</p>
+<p>Two design details matter for serving:</p>
+<ul>
+<li><strong>Every pass starts from the prelude's output,</strong> not from the previous pass's output. Later passes see the earlier pass only through "messages," gated reads of the previous pass's two blocks. vLLM says each core sublayer input (query, key, value and MLP input) gets its own message, which is 48 message reads per token for every later pass.</li>
+<li><strong>Each pass keeps its own memory.</strong> Every core layer has a KV cache and a conv-state cache per pass. The model has 24 layers but 48 KV caches and 48 conv-state caches.</li>
+</ul>
+<h2>2. Why loop at all</h2>
+<p>Thinking Machines gives two training-side numbers. Looping the middle 12 layers beat looping the last 12 on 27 of 28 evaluations. At training step 2,000, a no-loop baseline was estimated to need 1.51 to 1.91 times the compute to match the middle-loop loss, against 1.24 to 1.36 times for a last-layers loop. On their scaling ladder, an unpruned non-looping model cost 7.5% less to train but needed 140% more inference compute to match the looped model's loss on 512K-token agentic traces.</p>
+<p>The rest of the recipe: the model started at 384 experts with 8 active and had two-thirds pruned at one point in midtraining, keeping the 128 most-used experts per layer. It was then healed with 1T tokens distilled from a larger internal Inkling model, followed by SFT and an RL phase of 2.2T tokens over 2,000 steps.</p>
+<p>Precision is native. Expert layers ran NVFP4 forward passes from pretraining through RL on GB300, with the last four layers in MXFP8. The released weights are in the same formats (20 layers NVFP4, 4 MXFP8), which the post says means no conversion loss. The checkpoint is about 20 GB including the 0.6 GB DSpark draft, per the vLLM recipe. If you read the earlier <a href="/inkling-2-small-nvfp4-native-594b-moe-serving.html">Inkling 2 Small notes</a>, this is the same "deploy at training precision" idea, scaled down.</p>
+<h2>3. What the loop costs at serving time</h2>
+<p>The most useful table of the day is in the vLLM blog. It was measured on the variable-loop research checkpoint (TML-d24-varloop-research) on one GB200, TP1, 4K context, forward pass only:</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Passes</th>
+<th>Decode step, batch 1</th>
+<th>Decode step, batch 32</th>
+<th>KV cache capacity</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>1.51 ms</td>
+<td>3.81 ms</td>
+<td>352K tokens</td>
+</tr>
+<tr>
+<td>2</td>
+<td>2.67 ms</td>
+<td>5.92 ms</td>
+<td>233K tokens</td>
+</tr>
+<tr>
+<td>3</td>
+<td>3.85 ms</td>
+<td>8.11 ms</td>
+<td>175K tokens</td>
+</tr>
+<tr>
+<td>3, shared KV cache</td>
+<td>3.86 ms</td>
+<td>8.10 ms</td>
+<td>194K tokens</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>My arithmetic on that table: going from one pass to three makes a batch-1 decode step 2.55 times slower and a batch-32 step 2.13 times slower, and it cuts KV capacity to almost exactly half (352K to 175K). The halving matches the config if you count full-attention caches. With one pass there are four full-attention layer instances. With three passes, layers 11 and 17 sit in the core and each gets three caches, so there are eight. That is my reading.</p>
+<p>SGLang states the latency point directly: decode at batch size 1 takes about as long per token as Inkling 2 Small, because both make 48 layer visits. In other words, the smaller model gets you a smaller memory footprint, not a faster token at low batch.</p>
+<p>vLLM's production numbers for the fixed three-pass model, on one GB200 at TP1 with DSpark speculation:</p>
+<ul>
+<li>About 4,400 output tokens/s per GPU at 100 tokens/s per user, with 32K-context agentic sessions.</li>
+<li>At 100 tokens/s per user, about 45, 32 and 20 concurrent sessions at 32K, 64K and 128K context.</li>
+<li>Full 1,048,576-token context fits, with room for about 1.8 concurrent 1M-token requests.</li>
+<li>On H100 and DGX Spark, the recipe caps context at 262,144 tokens to fit in memory.</li>
+</ul>
+<p>vLLM also says TP1 is the most efficient way to serve it, and that TP4 gives lower output throughput per GPU. SGLang's data-center recipes run TP4 with EP4 on GB300, H200 and MI350X or MI355X. SGLang adds a hard rule: keep EP equal to TP, because the NVFP4 experts cannot be TP-sharded. Their activation scales must cover each expert's full input width.</p>
+<h2>4. Where the numbers disagree</h2>
+<p><strong>Shared KV cache.</strong> Both stacks expose an option on the variable-loop checkpoint that makes all passes of a core layer share one KV cache, with each pass overwriting the previous one. SGLang says this "about doubles the KV pool." vLLM's table shows 175K to 194K tokens, which is about 11% by my arithmetic, and explains that the per-pass conv-state caches remain. Those two claims cannot both describe the same setup. I would trust the measured table over the prose until someone reconciles them. On quality, SGLang reports GSM8K at 88.5% with three passes, 84.0% with one, and 90.0% with a shared cache. That is one easy benchmark on the research checkpoint, so I would not read much into the shared-cache result.</p>
+<p><strong>Active parameters.</strong> As noted above, 3.4B (Thinking Machines) versus 3.5B (vLLM).</p>
+<p><strong>The speed chart.</strong> Thinking Machines plots benchmark score against a theoretical decode ceiling at 614 GB/s, using BF16 weights and batch size one, including repeated reads across loops. The model ships mostly in NVFP4, so the chart is a relative comparison, not a forecast of what you will see. The energy result has a similar caveat. Stanford's intelligence-per-joule score of 0.703 on DGX Spark (against 0.430 for Qwen3.6-35B-A3B) was run with Inkling 2 Mini at MXFP8 and low reasoning effort, while the comparison models ran at NVFP4 or INT4.</p>
+<h2>5. Capability and limits</h2>
+<p>The vendor numbers are strong for its size. DeepSWE v1.1 is 48.2% against 42.2% for Qwen3.8-27B, SWE-bench Verified (bash only) is 79.2% against 77.8%, and the Artificial Analysis Index v5.0 is tied with Qwen3.8-27B at 20.1. It trails Qwen3.8-27B on Terminal Bench v2.1 (71.6% against 73.0%), and Thinking Machines lists its weak spots plainly: 50.0% on MultiChallenge and 33.4% on ComplexConstraints v1.1. The post also says looping does not add stored knowledge. Factuality scores track total parameter count, so the model leans on search and tools. All of these are self-reported, with harnesses that vary by model.</p>
+<h2>6. How to try it</h2>
+<p>vLLM needs the <code>vllm/vllm-openai:inkling-2-mini</code> image until support lands in a release. The recipe runs TP1 with <code>--reasoning-parser inkling</code> and a DSpark speculative config of 7 tokens. SGLang support is in pull request <a href="https://github.com/sgl-project/sglang/pull/51926" target="_blank" rel="noopener noreferrer">#51926</a> or the <code>inkling-2-mini</code> images. SGLang also documents a validated 1P1D prefill/decode split on one 4-GPU GB300 tray. If you benchmark DSpark, vLLM's note matters: random-token prompts accept almost nothing, so use realistic text.</p>
+<h2>My take</h2>
+<p>Inkling 2 Mini is the first looped model I have seen arrive with day-0 support and measured serving tables in both major engines. That alone makes it worth studying. The lesson for capacity planning is that parameter count is the wrong unit here. The model is a 20 GB download, but per token it behaves like a 48-layer model for latency and, at long context, carries twice the full-attention KV of a non-looped model with the same shape. My estimate is that it suits single-GPU, long-session agent serving where TP1 keeps things simple, and suits latency-bound chat less well. Before I put it in a fleet, I would want three things: the shared-KV discrepancy resolved, the three-pass table rerun on the shipped checkpoint at long context rather than 4K, and independent agentic results instead of vendor tables.</p>
+<h2>Sources</h2>
+<ul>
+<li>Thinking Machines, Introducing Inkling 2 Mini (Nov 20, 2026): https://thinkingmachines.ai/news/inkling-2-mini/</li>
+<li>Inkling 2 Mini model card: https://thinkingmachines.ai/model-card/inkling-2-mini/</li>
+<li>Hugging Face model and config.json: https://huggingface.co/thinkingmachines/Inkling-2-Mini</li>
+<li>vLLM blog, Inkling 2 Mini on vLLM: Day-0 Support for a Looped Model (Nov 20, 2026): https://vllm.ai/blog/2026-11-20-inkling2-mini</li>
+<li>vLLM recipe for Inkling 2 Mini: https://recipes.vllm.ai/thinkingmachines/Inkling-2-Mini</li>
+<li>SGLang cookbook for Inkling 2 Mini: https://docs.sglang.io/cookbook/autoregressive/ThinkingMachines/Inkling-2-Mini</li>
+<li>SGLang support PR #51926: https://github.com/sgl-project/sglang/pull/51926</li>
+<li>Variable-loop research checkpoint: https://huggingface.co/thinkingmachines/TML-d24-varloop-research</li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
