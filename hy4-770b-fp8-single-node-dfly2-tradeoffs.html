@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hy4 Serving Notes: A 770B MoE on One 8-GPU Node, and What DFly2 Rules Out — Anpoo Sivanadi</title>
+  <meta name="description" content="Tencent first announced Hy4 as an API model on November 4." />
+  <link rel="canonical" href="https://asivanadi0.github.io/hy4-770b-fp8-single-node-dfly2-tradeoffs.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Hy4 Serving Notes: A 770B MoE on One 8-GPU Node, and What DFly2 Rules Out — Anpoo Sivanadi" />
+  <meta property="og:description" content="Tencent first announced Hy4 as an API model on November 4." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/hy4-770b-fp8-single-node-dfly2-tradeoffs.html" />
+  <meta property="article:published_time" content="2026-11-21T06:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Hy4 Serving Notes: A 770B MoE on One 8-GPU Node, and What DFly2 Rules Out</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-21T06:00:00-08:00">21 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>Tencent first announced <a href="https://hy.tencent.ai/research/hy4" target="_blank" rel="noopener noreferrer">Hy4</a> as an API model on November 4. This week the weights followed: the instruct model in BF16, an <a href="https://huggingface.co/tencent/Hy4-FP8" target="_blank" rel="noopener noreferrer">FP8 checkpoint</a> and a base model, with the <a href="https://huggingface.co/tencent/Hy4" target="_blank" rel="noopener noreferrer">Hugging Face model card</a> last edited on the evening of November 19 PT. vLLM published a <a href="https://recipes.vllm.ai/tencent/Hy4" target="_blank" rel="noopener noreferrer">recipe</a> on November 20 and SGLang has a <a href="https://docs.sglang.io/cookbook/autoregressive/Tencent/Hy4" target="_blank" rel="noopener noreferrer">cookbook entry</a> with measured numbers.</p>
+<p>I wrote about the smaller <a href="/hy4-flash-220b-12b-active-engram-serving.html">Hy4 Flash</a> earlier this week. The flagship is a different problem. Hy4 Flash is about what you can push off the GPU. Hy4 is about whether a 770B model fits on one node at all, and what you give up to make it fast. Figures below come from the model card, <code>config.json</code>, the Hugging Face API, the vLLM recipe and the SGLang cookbook. Where the arithmetic or the opinion is mine, I say so.</p>
+<h2>1. The shape of the model</h2>
+<p>The language backbone has 770B parameters with 49B active per token. It has 78 layers: the first uses a dense FFN (intermediate size 18,432), and the other 77 are MoE layers with 256 routed experts, top-8 routing, one shared expert and an expert intermediate size of 2,048. Hidden size is 6,144 and the context window is 1,048,576 tokens. On top of that sit a 40-layer, 1.23B vision encoder and a five-layer, 3.3B DFly2 drafter. The vLLM recipe counts the stored total as about 774B, which matches the Hugging Face API.</p>
+<p>Attention is where it gets interesting. Hy4 uses Multi-head Latent Attention (q_lora_rank 2,048, kv_lora_rank 512, 64 heads) combined with what Tencent calls Gated DeepSeek Sparse Attention: an indexer with 32 heads of dimension 128 picks the top 2,048 tokens each query attends to. It adds IndexCache, which reuses those sparse indices across layers. By my reading of <code>indexer_types</code> in the config, 21 of the 78 layers compute their own top-2,048 selection (layers 0 and 1, then every fourth layer from 5 through 77), and the other 57 reuse an earlier layer's selection. The residual path uses iHC (identity Hyper-Connections) with four residual streams.</p>
+<h2>2. Will it fit on one node?</h2>
+<p>The FP8 checkpoint is what makes single-node serving possible. Per the Hugging Face API, 762.8B parameters are stored as FP8 E4M3 and 11.6B in BF16, so about 98.5% of the weights are FP8 by my arithmetic. The config shows block FP8: 128 by 128 weight blocks with dynamically quantized, group-128 activations. SGLang lists what stays in BF16: the remaining attention projections, the DSA indexer, the first layer's attention and dense MLP, the shared experts, <code>lm_head</code> and the vision tower. vLLM notes this is not the MXFP8 format of Hy4-preview-FP8.</p>
+<p>The sizes, as each project states them:</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Checkpoint</th>
+<th>On disk</th>
+<th>vLLM aggregate GPU memory</th>
+<th>SGLang recipe</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Hy4-FP8</td>
+<td>~786 GB, 245 shards</td>
+<td>~944 GB</td>
+<td>8x H200 or B200 at TP8, 4x B300 or GB300 at TP4</td>
+</tr>
+<tr>
+<td>Hy4 (BF16)</td>
+<td>~1.55 TB (vLLM: 1,549 GB)</td>
+<td>~1,859 GB (8x B300)</td>
+<td>None; exceeds those configurations</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>vLLM wants one 8-GPU NVIDIA node and host RAM large enough to load the checkpoint. Neither project supports AMD Instinct for this model. vLLM says its ROCm port has neither the vision encoder nor the DFly2 drafter, even though it lists MI300X through MI355X in its hardware picker.</p>
+<p>My arithmetic on headroom: at TP8 on H200, the FP8 weights take about 98 GB of each GPU's 141 GB, leaving roughly 43 GB per GPU for KV cache, activations and CUDA graphs. At TP4 on B300, weights take about 197 GB of 288 GB, leaving about 91 GB. Neither leaves much room.</p>
+<h2>3. The KV budget</h2>
+<p>MLA keeps a compressed latent per token per layer instead of full keys and values. With kv_lora_rank 512 plus a 64-dimension RoPE part, that is 576 values per layer. SGLang says the KV cache is BF16 by default, so my estimate is 576 x 2 bytes x 78 layers, about 88 KiB per token, before the indexer keys. That works out to about 11.8 GB for a 128K-token sequence and about 94 GB for a full 1M-token sequence.</p>
+<p>The catch is tensor parallelism. MLA's latent is one shared vector, not per-head state, so TP replicates it rather than splitting it. SGLang's description of decode context parallelism implies the same: <code>--dcp-size 2</code> "stripes the MLA latent KV across each rank pair", which only raises capacity if each rank held a full copy to begin with. Put my numbers together and each H200 at TP8 holds at most three or so full 128K sequences, and a full 1M-token sequence does not fit. On B300 at TP4 it is about seven 128K sequences, and 1M is still just over the line. These are rough upper bounds that ignore activations and indexer keys. That squares with the vLLM recipe, which starts from 131,072 tokens and 32 sequences and says plainly that "a full 1M-token request has not been validated for this recipe." For comparison, Tencent's own Hy4 Flash card claims Hy4 Flash's KV cache is one sixth the size of Hy4's.</p>
+<p>SGLang offers two ways to stretch this on Blackwell (SM100, SM103, SM107): decode context parallelism and an FP8 KV cache (<code>--kv-cache-dtype fp8_e4m3</code>), which both switch the DSA backends to <code>trtllm</code>. On H200 the server refuses both at startup. A hierarchical KV cache can also write through to a host pool twice the size of each rank's device pool.</p>
+<h2>4. What DFly2 rules out</h2>
+<p>DFly2 is the reason to run the low-latency recipe. The five draft layers ship inside both checkpoints. Each draft layer reuses the KV cache and the top-2,048 selection of a matching target layer (the config pairs them with layers 61, 65, 69, 73 and 77), so the drafter has no KV pool or indexer of its own. One draft forward pass produces a seven-token block that one target pass verifies. The model card claims constant draft cost (about 2K keys per token at any context), zero extra KV memory, and "PD-disaggregation ready", since the drafter skips prefill.</p>
+<p>The engines are stricter than the card. SGLang validates DFly2 before loading weights and refuses to start with any of these: DP-Attention, pipeline parallelism, prefill or decode context parallelism, PD disaggregation, an FP8 KV cache, LoRA, two-batch overlap or mixed chunked prefill. vLLM requires data, pipeline, prefill-context and decode-context parallel sizes of 1, which is why its recipe offers single-node TP only. So the design is ready for disaggregation, but no shipped recipe runs it that way yet. More to the point, every capacity knob in section 3 is mutually exclusive with the drafter. You pick latency or KV capacity per deployment.</p>
+<p>There is a sampling trap too. SGLang verifies DFly2 drafts greedily. A request that sets no sampling fields decodes at temperature 0. But Tencent recommends <code>temperature=0.9, top_p=1.0</code>, and the checkpoint's <code>generation_config.json</code> carries temperature 0.9. In SGLang, a request that sets only <code>top_p: 1</code> inherits that 0.9 and gets rejected. Grammar-constrained tool calls (<code>tool_choice: "required"</code>, named functions, strict tools) are also rejected under DFly2. The vLLM recipe's examples send <code>temperature=0.9</code> with DFly2 enabled and do not say how it verifies. If you run both engines, test this explicitly.</p>
+<h2>5. The measured numbers</h2>
+<p>SGLang publishes one verified benchmark, on its default cell (the playground names it H200, FP8, low-latency, TP8 with DFly2), with random 8,192-token inputs and 1,024-token outputs:</p>
+<div class="table-wrap" role="region" aria-label="Table 2" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Concurrency</th>
+<th>TTFT p50</th>
+<th>TPOT p50</th>
+<th>Tokens/s per user</th>
+<th>Throughput per GPU</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>847 ms</td>
+<td>5.78 ms</td>
+<td>173.2</td>
+<td>175.7 tok/s</td>
+</tr>
+<tr>
+<td>64</td>
+<td>66,692 ms</td>
+<td>30.58 ms</td>
+<td>32.7</td>
+<td>708.3 tok/s</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>GSM8K on the same cell is 95.53%. Two readings of my own. First, 173 tokens/s per user at batch one on Hopper for a 49B-active model is good, and that is the drafter doing its job. Second, the 66.7 s TTFT at concurrency 64 is mostly queueing. The page warns that with DFly2 on, SGLang resets <code>--max-running-requests</code> to 48 when it is unset, so a 64-way benchmark leaves 16 requests waiting. Random-token inputs are also a poor test of draft acceptance.</p>
+<h2>6. Capability and limits</h2>
+<p>Tencent's base-model table puts Hy4 Base slightly ahead of DeepSeek-V4-Pro-Base on knowledge: MMLU-Pro 73.9 against 73.4, SimpleQA 57.2 against 52.1, SuperGPQA 62.7 against 54.8. It trails on code (MBPP-plus 74.0 against 79.1). On 579 finance tasks graded by 213 professionals, Hy4 scored 3.04 out of 4 against 2.97 for DeepSeek-V4.1-Flash-1017 and 2.68 for both Kimi K3.1 Pro and GLM-5.3. Tencent says plainly that a "notable gap remains" to top proprietary models on research math, long-horizon coding and advanced visual QA. All of this is self-reported, partly on internal benchmarks, and the license is the Tencent Hy License, not Apache or MIT.</p>
+<h2>My take</h2>
+<p>Hy4 is the largest open model I have seen ship with a single-node FP8 path in both major engines on day one, and the tight integration of the drafter with sparse attention is clever. For capacity planning, though, two numbers matter more than 770B. The first is about 88 KiB of replicated latent KV per token, which caps long-context concurrency hard on H200. The second is the list of features DFly2 switches off. If I were deploying it, I would run two pools: DFly2 at TP8 for interactive and agent traffic, with clients sending greedy requests, and a high-throughput pool on Blackwell with FP8 KV and decode context parallelism for long documents and batch work. Before committing hardware, I would want a validated long-context run, acceptance rates on real traffic instead of random tokens, and a disaggregated DFly2 configuration that actually starts.</p>
+<h2>Sources</h2>
+<ul>
+<li>Tencent Hy, Introducing Hy4 (research page): https://hy.tencent.ai/research/hy4</li>
+<li>Hy4 model card and config.json: https://huggingface.co/tencent/Hy4</li>
+<li>Hy4-FP8 checkpoint and quantization config: https://huggingface.co/tencent/Hy4-FP8</li>
+<li>Hy4 GitHub: https://github.com/Tencent-Hunyuan/Hy4</li>
+<li>vLLM recipe for Hy4 (updated Nov 20, 2026): https://recipes.vllm.ai/tencent/Hy4</li>
+<li>SGLang cookbook for Hy4: https://docs.sglang.io/cookbook/autoregressive/Tencent/Hy4</li>
+<li>Hy4 System Card: https://hy.tencent.ai/Hy4_system_card.pdf</li>
+<li>AngelSpec (DFly2 training toolkit): https://github.com/Tencent/AngelSpec</li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
