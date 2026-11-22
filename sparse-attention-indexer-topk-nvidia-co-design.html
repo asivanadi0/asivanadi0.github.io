@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sparse Attention Moved the Cost Into the Indexer: NVIDIA's Measurements, Read Against Hy4 — Anpoo Sivanadi</title>
+  <meta name="description" content="This morning I wrote about Hy4, Tencent&#x27;s 770B open model, which picks the top 2,048 tokens for every query with a DeepSeek-style indexer." />
+  <link rel="canonical" href="https://asivanadi0.github.io/sparse-attention-indexer-topk-nvidia-co-design.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Sparse Attention Moved the Cost Into the Indexer: NVIDIA's Measurements, Read Against Hy4 — Anpoo Sivanadi" />
+  <meta property="og:description" content="This morning I wrote about Hy4, Tencent&#x27;s 770B open model, which picks the top 2,048 tokens for every query with a DeepSeek-style indexer." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/sparse-attention-indexer-topk-nvidia-co-design.html" />
+  <meta property="article:published_time" content="2026-11-21T18:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Sparse Attention Moved the Cost Into the Indexer: NVIDIA's Measurements, Read Against Hy4</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-21T18:00:00-08:00">21 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>This morning I wrote about <a href="/hy4-770b-fp8-single-node-dfly2-tradeoffs.html">Hy4</a>, Tencent's 770B open model, which picks the top 2,048 tokens for every query with a DeepSeek-style indexer. That raised a question I could not answer from the model card: what does the indexer itself cost, and which of its design choices matter on a GPU? NVIDIA published a good answer on November 17. <a href="https://developer.nvidia.com/blog/co-designing-sparse-attention-for-efficient-long-context-inference/" target="_blank" rel="noopener noreferrer">Co-Designing Sparse Attention for Efficient Long-Context Inference</a>, by Timmy Liu, Nidhi Bhatia, Samkit Jain, Makesh Tarun Chandran and Bita Darvish Rouhani, sweeps a production FP8 indexer kernel across every design knob and ends with eight guidelines.</p>
+<p>Earlier this month I covered <a href="/leansparse-indexer-keys-sparse-attention-serving.html">LeanSparse</a>, which treated indexer keys as a memory capacity problem. This post is the compute side. The figures below come from NVIDIA's post, the <a href="https://arxiv.org/abs/2604.22312" target="_blank" rel="noopener noreferrer">Guess-Verify-Refine paper</a> and FlashInfer pull requests. Where I apply them to Hy4 or DSA, the arithmetic is mine and I say so.</p>
+<h2>1. Where the time went</h2>
+<p>Sparse attention has three stages. An indexer scores every key in the context, Top-k keeps the highest scores, and core attention runs softmax over only those keys. Core attention scales with k, a few thousand keys; the indexer still scales with the full context length N.</p>
+<p>NVIDIA's Figure 1 makes that concrete at a 128K-token prefill. In DeepSeek-R1, with dense MLA, attention is 91% of per-layer time. In DeepSeek V3.2, with DeepSeek Sparse Attention (DSA), the indexer and Top-k together take 47%, core attention 24% and the FFN 25%.</p>
+<p>NVIDIA's design table shows how much the field agrees on the indexer's shape:</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Model or method</th>
+<th>Indexer Q heads</th>
+<th>Indexer K heads</th>
+<th>Head dim</th>
+<th>Compression</th>
+<th>Selection</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>DeepSeek DSA</td>
+<td>64</td>
+<td>1</td>
+<td>128</td>
+<td>1</td>
+<td>Token</td>
+</tr>
+<tr>
+<td>GLM 5.2</td>
+<td>32</td>
+<td>1</td>
+<td>128</td>
+<td>1</td>
+<td>Token, index shared across layers</td>
+</tr>
+<tr>
+<td>GLM 5.3 Flash</td>
+<td>32</td>
+<td>1</td>
+<td>128</td>
+<td>4</td>
+<td>Block of 4 plus tail</td>
+</tr>
+<tr>
+<td>LongCat LSA-Flash</td>
+<td>32</td>
+<td>1</td>
+<td>128</td>
+<td>1</td>
+<td>Token, hierarchical, index shared</td>
+</tr>
+<tr>
+<td>Qwen QSA</td>
+<td>4</td>
+<td>1</td>
+<td>128</td>
+<td>4</td>
+<td>Block of 4 plus tail</td>
+</tr>
+<tr>
+<td>MiniMax MSA</td>
+<td>4 (1 per group)</td>
+<td>1</td>
+<td>128</td>
+<td>1</td>
+<td>Block of 128, max-pooled scores</td>
+</tr>
+<tr>
+<td>NSA</td>
+<td>64</td>
+<td>4</td>
+<td>192</td>
+<td>16</td>
+<td>Block of 16</td>
+</tr>
+<tr>
+<td>MoBA</td>
+<td>32</td>
+<td>8</td>
+<td>128</td>
+<td>4,096</td>
+<td>Block of 4,096, mean-pooled keys</td>
+</tr>
+</tbody>
+</table>
+</div>
+<h2>2. The indexer is a matmul with an awkward epilogue</h2>
+<p>The useful framing in the post is that the indexer is one batched matmul followed by a fused epilogue: ReLU, a weighted sum across the query heads in a group, and an FP32 logit written to HBM for every key. Prefill is compute-bound. Decode scores a handful of query rows per step but streams the whole indexer key cache from HBM, so it is memory-bound.</p>
+<p>From that, NVIDIA derives that arithmetic intensity scales with the group size G (query heads per key head) and, in decode, with D + 1, the number of query tokens scored per step when speculative decoding drafts D tokens. Context length and compression ratio change the total work but not the ratio of FLOPs to bytes. The default measurement setup is an FP8 kernel, 64K indexer keys at compression ratio 4, head dimension 128, one key head, prefill batch 1 and decode batch 128. The text does not name the GPU.</p>
+<p>The measured consequences, knob by knob:</p>
+<ul>
+<li><strong>Group size.</strong> Growing G 16 times moves decode runtime by only 2%, because one pass over the key cache sets the time. In prefill, doubling G from 8 to 16 costs 1.66x, since the FP32 logit write dominates at small G.</li>
+<li><strong>Key heads.</strong> Going from one to eight key heads at fixed query heads costs 7.6x in decode, one more full read of the key cache per head. Prefill only pays 1.3x to 1.6x.</li>
+<li><strong>Head dimension.</strong> In prefill, 64 to 128 costs only 1.1x to 1.2x, because at 64 the Tensor Cores sit idle waiting on the CUDA-core epilogue. Decode grows with every extra byte.</li>
+<li><strong>Compression.</strong> Every halving of the compression ratio doubles runtime in both phases.</li>
+</ul>
+<h2>3. The tile limit, and why drafters care</h2>
+<p>This is the section I would hand to anyone pairing sparse attention with speculative decoding. Extra draft tokens add FLOPs but no new bytes, so they are nearly free while all G x (D + 1) query rows fit in one Tensor Core tile. A tile holds up to 256 rows, but with an FP32 epilogue register pressure limits it to about 200. NVIDIA measured that at G = 32 the tile fills after six query tokens, and at G = 8 after 26. Up to that point, runtime rises only 1.37x and 1.87x while the work grows 6x and 26x. Past it, the kernel launches more CTAs and runtime steps up by about one pass. Running the epilogue in FP16 widens the tile to 256 rows and gave 1.31x at G = 64 and D + 1 = 4; accumulating the matmul in FP16 too reached 1.45x, provided the indexer's QK scaling keeps outputs within FP16 range.</p>
+<p>Now my arithmetic against real models. Hy4's <code>config.json</code> lists 32 indexer heads of dimension 128. The config does not state a key head count; DSA and every 32-head design in the table use one, so I assume G = 32. Hy4's DFly2 drafter has a <code>dfly_block_size</code> of 7, and the target model verifies the block in one pass. That puts 7 query rows per step through the indexer, or 8 if the engine also scores the bonus position, which is 224 or 256 rows. Either way that is past the six-token point NVIDIA measured at G = 32 with an FP32 epilogue. With an FP16 epilogue, eight rows would fill the 256-row tile exactly. DSA's 64 indexer heads are tighter still: by my arithmetic, about three query rows (192) fit an FP32 tile, which leaves room for at most two draft tokens per step before the next pass. That does not make DFly2 slow; a second pass can still be cheap next to the decode it saves. It means draft block size and indexer head count share one budget, and epilogue precision sets its size.</p>
+<h2>4. Top-k is part of the indexer budget</h2>
+<p>Top-k runs on CUDA cores over one logit per indexer key. Its cost follows how many keys are scored, not how many are kept: each doubling of keys scored costs about 1.7x in prefill and 1.5x in decode, while 64 times more k raises Top-k time by under 2x in prefill and 1.7x in decode. So the same lever, scoring fewer keys, helps both stages. The post lists three ways to do that: compressed indexer keys, hierarchical indexing, and sharing an index across layers. Hy4 uses the third. By my reading of its <code>indexer_types</code>, only 21 of its 78 layers compute their own selection, and DFly2 reuses the selections of five target layers.</p>
+<p>Two kernel techniques cut Top-k further. Guess-Verify-Refine uses the previous decode step's selection as a guess, since it changes little between steps. NVIDIA reports 2.1x to 2.4x over radix select on DeepSeek V3.2 and V4 decode. The <a href="https://arxiv.org/abs/2604.22312" target="_blank" rel="noopener noreferrer">GVR paper</a>, implemented in TensorRT-LLM on Blackwell, gives an average 1.88x single-operator speedup with bit-exact output and up to 7.52% lower end-to-end TPOT at 100K context in a TEP8 min-latency deployment, with smaller gains under speculative decoding.</p>
+<p>The second technique is fusing Top-k into the indexer so the full logits matrix is never written. The open example NVIDIA links is <a href="https://github.com/flashinfer-ai/flashinfer/pull/7325" target="_blank" rel="noopener noreferrer">FlashInfer #7325</a>, merged November 5. Read the PR before you plan around it: it supports single-request prefill only, through <code>FP8MQATopKWrapper</code> with the CuTe DSL backend, with FP8, MXFP8 or MXFP4 queries and keys. A fused multi-request paged version for SM103 (four MQA heads, head dimension 128, top 512 blocks of four tokens) is open as <a href="https://github.com/flashinfer-ai/flashinfer/pull/9587" target="_blank" rel="noopener noreferrer">#9587</a>. <a href="https://github.com/flashinfer-ai/flashinfer/pull/9797" target="_blank" rel="noopener noreferrer">#9797</a>, opened November 20, addresses a potential race in the selective Top-k filter kernels, where tensor memory could be freed while another warp's last <code>tcgen05.ld</code> is still in flight. It is still open as I write this.</p>
+<h2>5. Tokens or blocks</h2>
+<p>Selection granularity matters most to core attention. Token-level selection (DSA, GLM 5.2, LSA, and Hy4) scatters the chosen keys across the KV cache, so every token is a separate fetch and two queries rarely share one. Block-level selection fetches contiguous blocks once and computes for every query that picked them. At a fixed 2,048 selected keys, NVIDIA measured that blocks of 64 cost 1.9x and blocks of 32 cost 3.7x compared with blocks of 128 in prefill, and 1.8x and 3.5x in decode, because each block adds a query load, a partial result and a merge.</p>
+<h2>My take</h2>
+<p>The two findings I would act on are the tile budget and the Top-k scaling. If you serve a DSA-family model with a drafter, measure indexer time per decode step as a function of draft length on your engine, and check which epilogue precision it uses, because that is where a long draft block turns into two passes over the key cache. If you are budgeting long-context capacity, remember that Top-k cost tracks context length, not k, so a bigger selection budget is cheap and a longer context is not. Before relying on fused indexer and Top-k kernels in an open stack, I would wait for #9797 to land and for the multi-request path to merge. And I would like NVIDIA to name the GPU behind these sweeps; the ratios travel, but the tile and bandwidth limits are hardware-specific.</p>
+<h2>Sources</h2>
+<ul>
+<li>NVIDIA Technical Blog, Co-Designing Sparse Attention for Efficient Long-Context Inference (Nov 17, 2026): https://developer.nvidia.com/blog/co-designing-sparse-attention-for-efficient-long-context-inference/</li>
+<li>Guess-Verify-Refine: Data-Aware Top-K for Sparse-Attention Decoding on Blackwell via Temporal Correlation (arXiv 2604.22312): https://arxiv.org/abs/2604.22312</li>
+<li>FlashInfer PR #7325, selective MQA Top-k for prefill (merged Nov 5, 2026): https://github.com/flashinfer-ai/flashinfer/pull/7325</li>
+<li>FlashInfer PR #9587, fused FP8 paged-MQA Top-k sparse-prefill indexer for SM103 (open): https://github.com/flashinfer-ai/flashinfer/pull/9587</li>
+<li>FlashInfer PR #9797, TMEM free ordering in the selective Top-k filters (open): https://github.com/flashinfer-ai/flashinfer/pull/9797</li>
+<li>Hy4 model card and config.json: https://huggingface.co/tencent/Hy4</li>
+<li>TensorRT-LLM: https://github.com/NVIDIA/TensorRT-LLM</li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
