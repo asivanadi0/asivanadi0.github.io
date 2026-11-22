@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Gemma 4 Stores Its Global KV Cache Twice: Measuring the 37.5% That Serving Engines Leave Behind — Anpoo Sivanadi</title>
+  <meta name="description" content="The Gemma 4 technical report makes a specific memory claim." />
+  <link rel="canonical" href="https://asivanadi0.github.io/gemma-4-k-eq-v-global-kv-cache-once.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Gemma 4 Stores Its Global KV Cache Twice: Measuring the 37.5% That Serving Engines Leave Behind — Anpoo Sivanadi" />
+  <meta property="og:description" content="The Gemma 4 technical report makes a specific memory claim." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/gemma-4-k-eq-v-global-kv-cache-once.html" />
+  <meta property="article:published_time" content="2026-11-22T06:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Gemma 4 Stores Its Global KV Cache Twice: Measuring the 37.5% That Serving Engines Leave Behind</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-22T06:00:00-08:00">22 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>The <a href="https://arxiv.org/abs/2607.02770" target="_blank" rel="noopener noreferrer">Gemma 4 technical report</a> makes a specific memory claim. In the global attention layers of every model except E2B and E4B, keys are reused as values, and with p-RoPE at p = 0.25 that "effectively" reduces the global KV cache by 37.5%. I assumed the open engines collected that saving. They do not. A preprint posted this week, <a href="https://arxiv.org/abs/2611.23035" target="_blank" rel="noopener noreferrer">Storing the Gemma 4 K=V Cache Once</a> by Kushagra Bainsla of San José State University, reads the KV code of vLLM, SGLang, TensorRT-LLM and Hugging Face transformers and reports that each one writes a full key and a full value for these layers: 1,024 values per KV head and token where 640 would do.</p>
+<p>The paper then builds the 640-value layout in vLLM without touching an attention kernel, and measures it on A100s. The author also opened <a href="https://github.com/vllm-project/vllm/issues/68778" target="_blank" rel="noopener noreferrer">vLLM RFC #68778</a> on November 19 to propose it upstream. Figures below come from the paper, the RFC, the Gemma 4 report and <code>config.json</code>; where I extend them, I say so.</p>
+<h2>1. What the config actually says</h2>
+<p>The <a href="https://huggingface.co/google/gemma-4-31B-it" target="_blank" rel="noopener noreferrer">config.json for gemma-4-31B-it</a> has 60 layers: 50 <code>sliding_attention</code> and 10 <code>full_attention</code>. Sliding layers have 16 KV heads of dimension 256 and a 1,024-token window. Global layers have 4 KV heads (<code>num_global_key_value_heads</code>) of dimension 512 (<code>global_head_dim</code>), <code>partial_rotary_factor</code> 0.25, and <code>attention_k_eq_v: true</code>. Max position embeddings are 262,144. The same flag is set in the 26B-A4B config (2 global KV heads) and the 12B config (1 global KV head), and is false for E4B.</p>
+<p>The paper spells out what the flag means. A global layer has no value projection. The value is the RMS-normalized key projection, with no learned scale. The key is that value multiplied elementwise by the key-norm weight, then rotated by RoPE on 128 of the 512 dimensions (dimensions 0 to 63 and 256 to 319). On the other 384 dimensions RoPE is the identity, so the key there is just a fixed weight times the value.</p>
+<p>The RFC describes vLLM main today: <code>gemma4.py</code> loads <code>k_proj</code> into both the K and V shards of <code>qkv_proj</code>, computes V from the duplicate, and passes separate K and V tensors to attention, so the cache holds both. A separate open PR, <a href="https://github.com/vllm-project/vllm/pull/41944" target="_blank" rel="noopener noreferrer">#41944</a>, removes the duplicate V projection weights, but the cache still stores two tensors.</p>
+<h2>2. The 640-value row</h2>
+<p>The trick is to store, per KV head and token, the 128 rotated key values, then the 384 unrotated value dimensions, then the 128 rotated value dimensions. That is 640 values. The first 512 are read as the key cache and the last 512 (starting at offset 128) as the value cache, as two strided views of the same buffer. Any kernel that accepts separate key and value tensors with explicit strides reads them unchanged.</p>
+<p>Two small transforms make the math work. The fixed key-norm weight on the unrotated dimensions is folded into the query, so the score against the stored value equals the score against the real key. The value view comes out in a permuted dimension order, and a fixed permutation restores it before the output projection. In real arithmetic this is exact. In 16-bit arithmetic it is not bit-exact against stock, because the roundings and summation order change.</p>
+<p>Why not 512 values and a 50% saving? Because the rotation angle differs per cached token, the rotated key cannot be folded into the query once. A 512-value row needs a new kernel that rotates while it reads. The author kept 128 extra values to avoid writing one.</p>
+<p>The page allocator takes a cut. vLLM requires one page size in bytes across layer groups. A stock global page and a sliding page are both 262,144 bytes. The largest compact global page that fits is a 48-token block of 245,760 bytes, padded to 262,144, so 6.25% is unused. Global bytes per token per layer drop from 8,192 to 5,461: a factor of 1.5 instead of the ideal 1.6. An open vLLM proposal for unequal page sizes (<a href="https://github.com/vllm-project/vllm/issues/64307" target="_blank" rel="noopener noreferrer">#64307</a>) could remove the padding.</p>
+<h2>3. What it measured</h2>
+<p>The prototype runs on vLLM 0.33.0rc1.dev229 with the Triton attention backend, which vLLM forces for Gemma 4 on A100 because FlashAttention-4 is not available there. The model is the 16-bit 31B checkpoint with a 16-bit KV cache and a fixed 15 GiB pool (6,144 blocks) on one A100 SXM 80GB, since the 62.6 GB of weights leave about that much. Kernels are unchanged; the patches are Python wrappers and module hooks on the 10 global layers.</p>
+<p>Correctness: the compact engine and an emulation of the same arithmetic on the stock cache gave bit-identical outputs on all 432 prompts (400 GSM8K problems and 32 needle prompts of 7.7K tokens). Against the stock engine, 2 of 432 final answers changed, both toward correct, and generated text differed in 88 items. The author calls that "no break found", not proof of equal quality; no accuracy test reaches the lengths where the saving matters.</p>
+<p>Memory: steady decode KV per request fell from 1,349 to 1,008 blocks at 32K tokens (3.29 to 2.46 GiB, 1.338x) and from 2,373 to 1,690 blocks at 64K (5.79 to 4.13 GiB, 1.404x). Prefill peaks fell less, 1.15x and 1.23x, because the prefill reservation still includes up to 321 blocks per sliding group.</p>
+<p>At 32K the pool held 4 compact requests instead of 3, and decode rose from 56.0 to 69.7 tokens/s (1.24x). At 64K both layouts held 2 requests and the compact build was 4% slower; the third request was short 181 blocks. In eager mode the compact step was 8.7% slower at 32K and 4.3% slower at 64K at equal batch, mostly from about 110 extra small kernels per step. In an exploratory full-CUDA-graph run the step costs were 50.52 ms versus 50.73 ms, but that run failed its own output check on one of three prompts, so the paper marks it invalid.</p>
+<p>The per-step speed bound is worth remembering. At 3 requests of 32K, a decode step reads about 62 GB of weights and 10.6 GB of KV; the compact cache removes about 2.7 GB of 73 GB, so even a perfectly bandwidth-bound step gains about 4%. Any real gain comes from fitting more requests.</p>
+<h2>4. In a disaggregated decode node</h2>
+<p>The section most useful for prefill/decode splits uses two A100s: prefill on one, decode on the other with NIXL transfer and a 64 GiB CPU offload tier, and a backlog that kept the decode pool full in at least 99.6% of work steps. The pinned NIXL connector could not register the compact cache until a small byte-view patch; the author believes vLLM main later fixed this generally.</p>
+<p>With 16K-token median prompts and 2,048-token outputs, the compact decode engine ran 1.376x the stock decode tokens per step, repeated to 0.06% on another host. With 8K prompts it was 1.237x. A discrete-step model of the vLLM block pool, frozen before each run, predicted 1.364x and 1.229x. Eager decode throughput rose 1.30x and 1.11x. The gain shrinks with prompt length because sliding-layer memory is fixed by the 1,024-token window.</p>
+<h2>5. The limits</h2>
+<p>One model, one vLLM build, Triton on A100, 16-bit cache only. At the default FP8 KV scale of 1.0 the compact row fails the author's attention-error bound, so the 1.34x to 1.40x does not yet stack with an FP8 cache. Tied per-row FP8 scales came in at 1.06x the attention error of vLLM's per-token-head FP8 cache, with no engine-level test. Prefix caching, tensor parallelism, speculative decoding and more than 16 concurrent sequences were not tested. The decode-node bands passed only after being widened by 1%, and throughput ratios are single runs against a 2.7% stock A/A spread.</p>
+<h2>My take</h2>
+<p>By my arithmetic from the config, a stock 31B request holds 81,920 bytes of global KV per token (10 layers x 4 heads x 1,024 values x 2 bytes), plus a fixed 800 MiB of sliding-window KV. At the full 262,144-token context that is 20 GiB of global KV per request; the padded 640-value layout brings it to about 13.3 GiB. That matches the RFC's own table at 128K (10.78 GiB today versus 7.03 GiB ideal). On paper, before activations and runtime overhead, that is the difference between one full-length request fitting next to 62.6 GB of 16-bit weights on an 80 GB card or not.</p>
+<p>I would not flip anything in production yet. The RFC has no maintainer response so far, the prototype is eager-mode Triton on Ampere, and FP8 KV caches, the common setting on Hopper and Blackwell, are exactly where this has not been shown to stack. What I would do now is count. If you serve Gemma 4 31B or 26B-A4B at long context, compute your global KV share per request; if it dominates, follow #68778 and #64307. I wrote about trading KV bits for capacity in <a href="/bitdecoding-fp4-native-fp4-kv-cache-b300.html">BitDecoding-FP4</a>; this is the rarer case where the bytes were redundant all along and the only cost is a layout.</p>
+<h2>Sources</h2>
+<ul>
+<li>Kushagra Bainsla, Storing the Gemma 4 K=V Cache Once: Exact Global-KV Memory Savings in a Paged Serving Engine with Unchanged Attention Kernels (arXiv 2611.23035, v2 Nov 19, 2026): https://arxiv.org/abs/2611.23035</li>
+<li>Prototype code and experiment records: https://github.com/Kushagrabainsla/gemma4-compact-kv</li>
+<li>vLLM RFC #68778, Store the Gemma 4 global-layer KV cache once (opened Nov 19, 2026, open): https://github.com/vllm-project/vllm/issues/68778</li>
+<li>vLLM PR #41944, remove redundant V projection on k_eq_v layers (open): https://github.com/vllm-project/vllm/pull/41944</li>
+<li>vLLM issue #64307, packed KV-cache block stride for unequal per-group page sizes (open): https://github.com/vllm-project/vllm/issues/64307</li>
+<li>Gemma 4 Technical Report (arXiv 2607.02770): https://arxiv.org/abs/2607.02770</li>
+<li>gemma-4-31B-it config.json: https://huggingface.co/google/gemma-4-31B-it</li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
