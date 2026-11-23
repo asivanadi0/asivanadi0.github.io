@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GLM-5.4's Loop Transformer: A Second Pass Over 28 Layers for One 128-Token Window of KV — Anpoo Sivanadi</title>
+  <meta name="description" content="Z.ai published GLM-5.4: Toward Generalized Coding with Our First Loop Transformer today." />
+  <link rel="canonical" href="https://asivanadi0.github.io/glm-5-4-loop-transformer-shared-kv-sliding-window.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="GLM-5.4's Loop Transformer: A Second Pass Over 28 Layers for One 128-Token Window of KV — Anpoo Sivanadi" />
+  <meta property="og:description" content="Z.ai published GLM-5.4: Toward Generalized Coding with Our First Loop Transformer today." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/glm-5-4-loop-transformer-shared-kv-sliding-window.html" />
+  <meta property="article:published_time" content="2026-11-23T06:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>GLM-5.4's Loop Transformer: A Second Pass Over 28 Layers for One 128-Token Window of KV</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-23T06:00:00-08:00">23 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>Z.ai published <a href="https://z.ai/blog/glm-5.4" target="_blank" rel="noopener noreferrer">GLM-5.4: Toward Generalized Coding with Our First Loop Transformer</a> today. Most coverage will lead with the claim that a 750B-scale model reaches "intelligence levels comparable to 2T-3T parameter models." I read it for the architecture section. It shows how to loop a 1M-context sparse-attention model without multiplying its KV cache, and the diagram can be checked against a config Z.ai already published.</p>
+<p>The model is available on the GLM Coding Plan and Z.ai Chat. The API is listed as coming soon, and Z.ai says it will release the weights "after completing necessary safety hardening." So there is no GLM-5.4 config.json yet. Everything below comes from the blog post and its architecture figure, read against the open <a href="https://huggingface.co/zai-org/GLM-5.3/blob/main/config.json" target="_blank" rel="noopener noreferrer">GLM-5.3 config</a>. Where I do arithmetic or infer something, I say so.</p>
+<h2>1. What gets looped</h2>
+<p>The post says GLM-5.4 "loops 28 layers of the GLM-5 base model for two iterations." The figure gives the layout: a 26-layer prelude (L1 to L26), a 28-layer loop block (L27 to L54) that runs twice with shared weights, and a 24-layer coda (L55 to L78) before the LM head. Vision enters through projected features from a 24-layer ViT.</p>
+<p>That is 78 stored layers, the same count as GLM-5.3. The GLM-5.3 config has 78 layers, MLA with <code>kv_lora_rank</code> 512 and a 64-dimension RoPE part, 64 heads, 256 routed experts with top-8 and one shared expert, an indexer with 32 heads of dimension 128 picking the top 2,048 tokens, and <code>max_position_embeddings</code> of 1,048,576. Hugging Face lists the checkpoint at 753.3B parameters.</p>
+<p>The indexer layout matches too. GLM-5.3's <code>indexer_types</code> gives layers 1 to 3 their own indexer and then one full indexer every fourth layer, with the three layers after it reusing its top-k (<code>index_topk_freq</code> 4). In Z.ai's figure, L1 and L2 have their own indexer, and every group of four after that starts with a "DSA Block w/ Indexer" and three blocks without one. The loop block is seven such groups. My take: the loop boundary at L27 falls exactly on an indexer group boundary in the GLM-5.3 layout, so the looped span is a clean set of seven indexer groups. I am treating GLM-5.4's base as having GLM-5.3's attention shape, but that is my inference.</p>
+<h2>2. Three changes Z.ai made to loop it</h2>
+<p><strong>Gated updates.</strong> Z.ai says that overwriting hidden states in a looped middle section makes activation norms blow up across iterations, so downstream layers see inputs outside their trained range. Each pass ends in a "damp gate": the figure shows x1 = x0 + β1(h1 minus x0), with β computed per token from an RMSNorm, a linear layer and a sigmoid. After training, the first pass writes small updates and the second pass opens the gate.</p>
+<p><strong>Hybrid KV cache.</strong> This is the serving change. A naive looped model keeps a full KV cache per pass, as <a href="/inkling-2-mini-looped-moe-per-pass-kv-cache.html">Inkling 2 Mini</a> does. GLM-5.4's second pass instead reads two banks: the first pass's KV latents at the first pass's top-k positions, and its own fresh KV for the last 128 tokens only. The figure labels this "Two-Bank Sparse MLA" with "single softmax over sparse prefix + local window." The post notes that the banks can overlap at the same positions, so a recent token can be seen both as its first-pass and its second-pass representation. Z.ai's summary: an extra loop "only costs one sliding window of KV cache rather than a full context cache."</p>
+<p><strong>Index reuse.</strong> The second pass runs no indexer. It reuses the top-k indices the first pass computed, which Z.ai says "performs nearly identically to recomputing indices on every pass."</p>
+<h2>3. The KV arithmetic</h2>
+<p>The vLLM team published GLM-5.3's per-token KV budget in its <a href="https://vllm.ai/blog/2026-10-23-glm53-part2-pcp-dcp-hisparse" target="_blank" rel="noopener noreferrer">PCP and DCP post</a>: 78 layers at 656 bytes of FP8 MLA KV, 21 indexer layers at 132 bytes, and 788 bytes for the MTP layer, for 54,728 bytes per token, or 53.4 GiB for one 1,048,576-token request. I went through that budget in my <a href="/glm-5-3-pcp-dcp-long-context-h200.html">GLM-5.3 long-context notes</a>.</p>
+<p>My take, assuming GLM-5.4 keeps the same FP8 format (Z.ai does not say):</p>
+<ul>
+<li>A naive second pass with its own full cache over 28 layers adds 18,368 bytes per token, or 19,292 if it also kept seven indexer caches. That is 34 to 35% more KV, about 18 to 19 GiB extra at 1M tokens.</li>
+<li>GLM-5.4's design adds 28 layers x 128 tokens x 656 bytes = 2,351,104 bytes, about 2.24 MiB per request, whatever the context length.</li>
+</ul>
+<p>So at long context the loop is nearly free in KV capacity, which is what Z.ai means when it says the deployment cost increase over GLM-5.3 stays "well under control" at 1M. Compare Inkling 2 Mini, where the vLLM measurement showed three passes cutting KV capacity from 352K to 175K tokens.</p>
+<h2>4. What it does not save</h2>
+<p>Capacity and bandwidth are different budgets. The vLLM post says each sparse MLA query reads 2,048 selected rows of 660 bytes, about 1.35 MB per layer. My take: in GLM-5.4's second pass, each of the 28 looped layers reads the same 2,048 first-pass rows again plus up to 128 window rows, so about 6% more rows than a first-pass layer. Per decoded token, that is 106 sparse-attention layer reads instead of 78, about 36% more attention traffic. The same ratio applies to the MoE and projection work in those 28 layers. With 27 other layers between a layer's two passes, I would not count on those rows still being in L2.</p>
+<p>Inkling's numbers are a warning against using the layer-visit ratio as the cost. Its three-pass setting doubles layer visits, but vLLM measured a batch-1 decode step 2.55 times slower than one pass. Z.ai says it "fused core kernels at the systems level" to cut intermediate memory traffic and the "fragmented overhead amplified by looping," and reports up to 200 tokens/s off-peak and 70 to 80 tokens/s at peak. The post gives no hardware, batch size or context length for those figures.</p>
+<p>The index reuse matters more at prefill. In NVIDIA's <a href="/sparse-attention-indexer-topk-nvidia-co-design.html">sparse attention measurements</a>, the indexer and Top-k took 47% of a DeepSeek V3.2 prefill layer at 128K, because the indexer scores every key while core attention reads only k of them. My take: if the second pass had its own indexers, seven more of those full-context scoring passes would run per token, and their cost grows with context length. Reusing indices removes that work and the extra indexer key cache.</p>
+<h2>5. What a serving engine needs</h2>
+<p>My take, from the figure. No vLLM or SGLang support exists yet because there are no weights. A port would need:</p>
+<ul>
+<li>A per-layer cache that keeps the first pass's KV latents and top-k indices for L27 to L54 alive until the second pass reads them.</li>
+<li>A second KV group per looped layer for the 128-token window, which looks like the sliding-window groups that hybrid KV managers already handle, but attached to the same layers as a full-context group.</li>
+<li>An attention kernel that runs one softmax over two caches with different index sources. Current sparse MLA kernels take one index list into one cache, so this means either a merged index list across two caches or two partial softmaxes combined at the end.</li>
+<li>Expert routing for the second pass, which the post does not describe.</li>
+</ul>
+<h2>6. Limits</h2>
+<ul>
+<li>No GLM-5.4 weights, config or API are available. The layer mapping onto GLM-5.3's config is my reading of a figure, not a published spec.</li>
+<li>Z.ai does not state the KV format of the second-pass window or whether GLM-5.4 keeps an MTP layer. My byte counts assume GLM-5.3's FP8 layout.</li>
+<li>The only controlled results are for a 30B model "with the exact same architecture as our 750B base," after 200K long-context SFT with thinking on, at about 10% more training compute: AIME25 19.17 to 30.42, GPQA-Diamond 47.58 to 56.26, AA-LCR 40.33 to 47.67, MMLU-Pro 71.65 to 75.05, IFBench 50.20 to 53.47. Average output length fell 2% to 14.9%. No flagship scores are published, so the 2T-3T claim is not backed by numbers yet.</li>
+<li>The throughput figures have no setup attached.</li>
+<li>Z.ai says the model "tends to get caught in overly long 'marathon thinking' loops." For serving cost, generated tokens matter more than the loop. One early-access outside run <a href="https://kingy.ai/blog/glm-5-4-launch/" target="_blank" rel="noopener noreferrer">reported by Kingy AI</a> logged about 1.04 million reasoning tokens for GLM-5.4 against roughly 70,000 for Gemini 4 Neon on the same coding suite. One run, one harness.</li>
+</ul>
+<h2>My take</h2>
+<p>The design idea worth copying is narrow and practical: if you loop a sparse-attention model, let the later pass inherit the earlier pass's selection and cache, and give it only a short window of fresh KV. That turns a 34% KV increase into a constant 2 MiB per request at 1M context. It does not make the extra pass cheap in compute or bandwidth, and the published numbers do not yet show what decode really costs. When the weights land, the first thing I would measure is decode step time at batch 1 and at production batch against GLM-5.3 on the same hardware, at 128K and 1M. That ratio belongs in a capacity plan, not the parameter count.</p>
+<h2>Sources</h2>
+<ul>
+<li>Z.ai, GLM-5.4: Toward Generalized Coding with Our First Loop Transformer (Nov 23, 2026), including the architecture and ablation figures: https://z.ai/blog/glm-5.4</li>
+<li>zai-org/GLM-5.3 model and config.json: https://huggingface.co/zai-org/GLM-5.3</li>
+<li>vLLM blog, GLM-5.3 Optimizations, Part 2: PCP, DCP, and Hybrid HiSparse on 16 H200s (Oct 23, 2026): https://vllm.ai/blog/2026-10-23-glm53-part2-pcp-dcp-hisparse</li>
+<li>vLLM blog, Inkling 2 Mini on vLLM: Day-0 Support for a Looped Model (Nov 20, 2026): https://vllm.ai/blog/2026-11-20-inkling2-mini</li>
+<li>NVIDIA Technical Blog, Co-Designing Sparse Attention for Efficient Long-Context Inference (Nov 17, 2026): https://developer.nvidia.com/blog/co-designing-sparse-attention-for-efficient-long-context-inference/</li>
+<li>TechNode, Zhipu rolls out GLM-5.4 with vision and million-token context (Nov 23, 2026): https://technode.com/2026/11/23/zhipu-rolls-out-glm-5-4-with-vision-and-million-token-context/</li>
+<li>Kingy AI, GLM-5.4 launch (availability and early-access run notes, Nov 22-23, 2026): https://kingy.ai/blog/glm-5-4-launch/</li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
