@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sarvam-105B-1711 on One GPU: What NVFP4 Experts, MXFP8 Attention and a DSpark Drafter Actually Buy — Anpoo Sivanadi</title>
+  <meta name="description" content="Sarvam AI released Sarvam-105B-1711 today, a new post-trained checkpoint of the Sarvam 105B mixture-of-experts model it first shipped in February." />
+  <link rel="canonical" href="https://asivanadi0.github.io/sarvam-105b-1711-nvfp4-one-gpu-dspark.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Sarvam-105B-1711 on One GPU: What NVFP4 Experts, MXFP8 Attention and a DSpark Drafter Actually Buy — Anpoo Sivanadi" />
+  <meta property="og:description" content="Sarvam AI released Sarvam-105B-1711 today, a new post-trained checkpoint of the Sarvam 105B mixture-of-experts model it first shipped in February." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/sarvam-105b-1711-nvfp4-one-gpu-dspark.html" />
+  <meta property="article:published_time" content="2026-11-22T18:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Sarvam-105B-1711 on One GPU: What NVFP4 Experts, MXFP8 Attention and a DSpark Drafter Actually Buy</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-22T18:00:00-08:00">22 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>Sarvam AI released <a href="https://www.sarvam.ai/blogs/sarvam-105b-1711" target="_blank" rel="noopener noreferrer">Sarvam-105B-1711</a> today, a new post-trained checkpoint of the Sarvam 105B mixture-of-experts model it first shipped in February. Most coverage will lead with the benchmark table. I read it for a different reason. The release post is one of the more complete public write-ups I have seen of taking a 100B-class MoE from BF16 to a mixed MXFP8 and NVFP4 checkpoint, serving it with a trained drafter on vLLM, and saying where that breaks. The <a href="https://huggingface.co/sarvamai/sarvam-105b-1711" target="_blank" rel="noopener noreferrer">NVFP4 weights</a> and <a href="https://huggingface.co/sarvamai/sarvam-105b-1711-bf16" target="_blank" rel="noopener noreferrer">BF16 weights</a> are on Hugging Face under Apache 2.0.</p>
+<p>All measured numbers below are Sarvam's, from the release post and the model card. Where I do my own arithmetic, I say so.</p>
+<h2>1. The model, from config.json</h2>
+<p>The <a href="https://huggingface.co/sarvamai/sarvam-105b-1711/blob/main/config.json" target="_blank" rel="noopener noreferrer">config.json</a> describes a <code>SarvamMLAForCausalLM</code> with 32 layers, hidden size 4,096 and 64 attention heads. Attention is multi-head latent attention in the DeepSeek style: <code>kv_lora_rank</code> 512 plus a 64-dimension RoPE part, so each cached token per layer is 576 values (<code>head_dim</code> 576). The first layer is dense; the other 31 are MoE layers with 128 routed experts, 8 active per token, one shared expert, and an expert width of 2,048. The vocabulary is 262,144. The model card puts the total at 105B parameters with 10.3B active.</p>
+<p>One field changed from the <a href="https://huggingface.co/sarvamai/sarvam-105b/blob/main/config.json" target="_blank" rel="noopener noreferrer">original Sarvam-105B config</a>: <code>max_position_embeddings</code> went from 131,072 to 163,840. That matches the post, which says Sarvam extended the context to 160K with continued pretraining on 330B tokens over a little more than seven days on 512 B200s. The serving recipes on the model card still set <code>--max-model-len 131072</code>.</p>
+<h2>2. What is quantized, and to what</h2>
+<p>The quantization map is in the config, produced with llm-compressor. Routed expert weights are NVFP4: 4-bit values, an FP8 E4M3 scale per 16 values and an FP32 scale per tensor, with input activations quantized the same way at runtime against fixed per-layer scales. Attention projections, the dense first-layer MLP and the shared experts are MXFP8 with 32-value groups. The 31 routers and the output head stay BF16. The post says the activation scales were calibrated on conversations the model generated itself, with thinking on and off, and that every routed expert received calibration tokens.</p>
+<p>The result, per the post: 65 GB in NVFP4, against 111 GB in MXFP8 and 198 GB in BF16. The safetensors index reports a total size of 64,633,328,128 bytes for the main model, and the DSpark drafter adds a 5.5 GB file in the same repo.</p>
+<p>The detail I would underline is the activation precision. Sarvam quantizes both weights and activations to 4 bits (W4A4) because vLLM runs that format on FlashInfer's TRT-LLM NVFP4 MoE kernels. With 4-bit weights and 16-bit activations, vLLM falls back to Marlin kernels and B200 throughput at 64 concurrent requests drops to 3,043 tokens/s per GPU, which is below the MXFP8 build. So "NVFP4 checkpoint" is not one thing; the activation format decides which kernel you land on. The post also notes that NVFP4 needs Blackwell's FP4 tensor cores.</p>
+<p>Accuracy cost on Sarvam's own eight conversational benchmarks is small: IFBench 82.5 to 81.8, Tau2 85.5 to 84.1, Arena-Hard v2 76.6 to 75.3, with BFCL v4 and MultiChallenge slightly up. The model card's wider table shows bigger drops on harder items, for example GPQA Diamond 80.4 to 78.2 and BrowseComp 41.4 to 35.0.</p>
+<h2>3. B200 serving numbers</h2>
+<p>The drafter is DSpark. Its <a href="https://huggingface.co/sarvamai/sarvam-105b-1711/blob/main/dspark/config.json" target="_blank" rel="noopener noreferrer">config</a> shows a 5-layer model with 2,048-token sliding-window attention, fed hidden states from target layers 2, 9, 16, 23 and 30, with a confidence head, in MXFP8. On one B200 with the NVFP4 checkpoint and 7 proposed tokens, the post reports per-user decode of 642 tokens/s with DSpark against 245 without at one request (2.6x), and 85 against 42 at 128 requests (2.0x).</p>
+<p>The headline comparison is at 64 concurrent requests, greedy decoding, 1,100 held-out prompts, 5 draft tokens:</p>
+<ul>
+<li>NVFP4 + DSpark: 6,067 decode tokens/s per GPU (121 per user)</li>
+<li>MXFP8 + DSpark: 5,073</li>
+<li>Gemma 4 31B, MXFP8 + MTP: 2,994</li>
+<li>BF16 + DSpark: 2,888</li>
+<li>Gemma 4 31B, BF16 + MTP: 1,809</li>
+</ul>
+<p>The memory line explains part of that. The post says the 65 GB checkpoint leaves room on one B200 for 3.04M tokens of FP8 KV cache, or 23 requests at the full 128K context. My take: at 576 values per token per layer across 32 layers, an FP8 MLA cache is 18,432 bytes per token, so 3.04M tokens is about 56 GB of KV. That is what makes 64 concurrent long requests on one GPU realistic for this model.</p>
+<h2>4. One RTX PRO 6000, and the kernel that did not fit</h2>
+<p>This is the part I found most useful. The post says the NVFP4 checkpoint is the only one that fits on a single 96 GB RTX PRO 6000 Blackwell. With 500-token replies, Sarvam reports 99 tokens/s per user at a 10K prompt and one request, 37 per user at four requests, 62 per user at a 50K prompt, and 14 per user at 50K with four requests. The model card's own table shows 8.1 seconds to first token for a single user at 50K context.</p>
+<p>The FP8 KV cache is not optional on this card. The post says FP8 fits 1.9x as many tokens as BF16; at 50K a BF16 cache holds only two or three requests, so a fourth user waited 46 seconds for a first token, against 6.5 seconds with FP8. My take: a 50K request is about 0.92 GB of FP8 KV by the count above, so a BF16 pool that holds only two or three of them implies only a few GB of KV space left after the 65 GB of weights, the 5.5 GB drafter and runtime reservations at 0.92 memory utilization. That is an inference, not a figure from Sarvam.</p>
+<p>Then there is the bug. vLLM's only MLA decode backend on SM120 is Triton, and with an FP8 KV cache it requests 102,400 bytes of shared memory against the card's 101,376-byte limit. Sarvam's fix runs the kernel with one pipeline stage instead of two, which needs 83,968 bytes, with decode within 1 to 3% of a BF16 cache. The post links that change as <a href="https://github.com/vllm-project/vllm/pull/54013" target="_blank" rel="noopener noreferrer">vLLM PR #54013</a>. A separate report of the same failure on two RTX PRO 6000s, <a href="https://github.com/vllm-project/vllm/issues/60172" target="_blank" rel="noopener noreferrer">issue #60172</a>, has its own fix in <a href="https://github.com/vllm-project/vllm/pull/60173" target="_blank" rel="noopener noreferrer">PR #60173</a>. Both PRs were open when I checked this evening. If you run any MLA model on RTX PRO 6000 or RTX 5090 with an FP8 cache, you need one of those patches today.</p>
+<h2>5. The training side, briefly</h2>
+<p>Two numbers from the training sections matter to people who run clusters. MXFP8 pretraining on 64 B200s at 8K context reached 857 TFLOP/s per GPU (38.1% MFU) against 428 TFLOP/s (19.0%) for the BF16 baseline, and the post says MXFP8 was slower than BF16 at first, because quantization and layout kernels cost as much as the GEMMs saved at small microbatches. The gains came from CUDA graphs over routing, fused permutation, cutting tensor parallelism from 8 to 1, and overlapping expert all-to-all with deferred weight-gradient GEMMs.</p>
+<p>In asynchronous GRPO on 32 B200s, MXFP8 let one engine fit per GPU instead of two GPUs per engine, cutting the step from 758 to 561 seconds. DSpark with 3 draft tokens and 67% acceptance took it to 420 to 440 seconds. Generation got 2.65x faster but the step only 1.79x, because training time did not change. Generator-trainer KL rose from 0.030 to 0.041 with MXFP8, and mean reward was 0.759 in BF16 and 0.759 with both changes. Sarvam says drafter acceptance held over more than 1,000 RL steps, which is the opposite of what I would have guessed.</p>
+<h2>6. Limits</h2>
+<ul>
+<li>Every number is self-reported by Sarvam, on its own harness. Nothing here is independently reproduced.</li>
+<li>Settings move the serving numbers. The 6,067 tokens/s figure is greedy decoding with 5 draft tokens. The model card's B200 table at temperature 1.0 with probabilistic drafting shows 5,354 tokens/s at 64 users. The DSpark speedup figure uses 7 draft tokens.</li>
+<li>The Gemma 4 comparison uses Gemma's MTP drafter with 3 tokens, and there is no NVFP4 Gemma row.</li>
+<li>The W4A4 path is Blackwell only. On Hopper there are no FP4 tensor cores, and the post's own W4A16 measurement shows what the Marlin fallback costs.</li>
+<li>The workstation numbers depend on an unmerged vLLM fix, and Sarvam tested on vLLM 0.33.0, not the current 0.34.0.</li>
+<li>Benchmarks are thinking-mode with up to 65,536 output tokens; latency budgets for voice agents will look different.</li>
+</ul>
+<h2>My take</h2>
+<p>What I would copy is the quantization split: experts in NVFP4 where the bytes are, attention and shared experts in MXFP8, routers and head in BF16, activations calibrated on the model's own outputs, and W4A4 chosen because of which kernel vLLM dispatches, not because of a format preference. If you serve an MLA MoE on Blackwell, check your activation format before you trust an NVFP4 benchmark. I covered a natively NVFP4-trained MoE in <a href="/inkling-2-small-nvfp4-native-594b-moe-serving.html">Inkling 2 Small</a>; this is the post-training quantization version of that story, with the kernel-level reason it works spelled out.</p>
+<h2>Sources</h2>
+<ul>
+<li>Sarvam AI, Introducing Sarvam-105B-1711 (Nov 22, 2026): https://www.sarvam.ai/blogs/sarvam-105b-1711</li>
+<li>sarvamai/sarvam-105b-1711 (NVFP4 model card, config.json, dspark/config.json, model.safetensors.index.json): https://huggingface.co/sarvamai/sarvam-105b-1711</li>
+<li>sarvamai/sarvam-105b-1711-bf16: https://huggingface.co/sarvamai/sarvam-105b-1711-bf16</li>
+<li>sarvamai/sarvam-105b config.json (February release): https://huggingface.co/sarvamai/sarvam-105b</li>
+<li>vLLM PR #54013, drop num_stages for MLA decode with FP8 KV cache on small-smem GPUs (open): https://github.com/vllm-project/vllm/pull/54013</li>
+<li>vLLM issue #60172 and PR #60173, TRITON_MLA decode shared memory on sm_120 (open): https://github.com/vllm-project/vllm/issues/60172 and https://github.com/vllm-project/vllm/pull/60173</li>
+<li>vLLM PRs #53052, #55817, #55902, #56034 (Sarvam EAGLE3, torch.compile for Sarvam MLA, DSpark pipeline parallelism, routing defaults; merged): https://github.com/vllm-project/vllm/pull/55902</li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
