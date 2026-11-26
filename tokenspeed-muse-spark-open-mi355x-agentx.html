@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Muse Spark Open on MI355X with TokenSpeed: Tensor-Parallel Experts, Mailbox Collectives, and the TTFT Bill — Anpoo Sivanadi</title>
+  <meta name="description" content="AMD published Advancing Muse Spark Open Agentic Inference on AMD Instinct MI355X GPUs with TokenSpeed today." />
+  <link rel="canonical" href="https://asivanadi0.github.io/tokenspeed-muse-spark-open-mi355x-agentx.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Muse Spark Open on MI355X with TokenSpeed: Tensor-Parallel Experts, Mailbox Collectives, and the TTFT Bill — Anpoo Sivanadi" />
+  <meta property="og:description" content="AMD published Advancing Muse Spark Open Agentic Inference on AMD Instinct MI355X GPUs with TokenSpeed today." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/tokenspeed-muse-spark-open-mi355x-agentx.html" />
+  <meta property="article:published_time" content="2026-11-25T18:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Muse Spark Open on MI355X with TokenSpeed: Tensor-Parallel Experts, Mailbox Collectives, and the TTFT Bill</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-25T18:00:00-08:00">25 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>AMD published <a href="https://www.amd.com/en/developer/resources/technical-articles/2026/advancing-muse-spark-open-agentic-inference-on-amd-gpus-with-tok.html" target="_blank" rel="noopener noreferrer">Advancing Muse Spark Open Agentic Inference on AMD Instinct MI355X GPUs with TokenSpeed</a> today. The headline is 645 output tokens/s per user at concurrency 6 on eight MI355X GPUs and 48,868 total tokens/s per GPU at concurrency 40 on four, measured by SemiAnalysis on its <a href="https://inferencex.semianalysis.com/infx/agentx" target="_blank" rel="noopener noreferrer">InferenceX AgentX</a> benchmark, which replays recorded coding-agent sessions.</p>
+<p>I care less about the frontier chart than the method. The post is a clear account of where decode time goes for a large MoE under agent traffic, and every row behind the chart is in the public <a href="https://inferencex.semianalysis.com/api/v1/benchmarks?model=Muse-Spark-Open&amp;date=2026-11-25&amp;exact=false" target="_blank" rel="noopener noreferrer">InferenceX API</a>. So the claims can be checked, including the column the post says least about: time to first token.</p>
+<p>I covered the architecture in <a href="/muse-spark-open-latent-moe-hybrid-attention.html">October</a>; this is about serving it.</p>
+<h2>1. The workload and why decode dominates</h2>
+<p>Muse Spark Open is an 816B-total, 42B-active MoE. All 62 layers are MoE layers with 256 routed experts and top-8 routing. Attention is grouped-query with a 2,048-token sliding window in 46 layers and full attention in 16. In this setup the routed experts are served in MXFP4 from <a href="https://huggingface.co/amd/Muse-Spark-Open-816B-A42B-Quark-MXFP4" target="_blank" rel="noopener noreferrer">AMD's Quark checkpoint</a> and everything else in BF16, with an FP8 KV cache.</p>
+<p>AMD's framing: each turn appends a tool result to a long, mostly cached history, so prefill runs as an extend over only the new tokens, and most of the wait is decode. The InferenceX rows show a theoretical prefix-cache hit rate of about 97.6% and mean inputs around 150,000 to 330,000 tokens per request, depending on the point.</p>
+<p>Decode uses the <a href="https://huggingface.co/RadixArk/Muse-Spark-Open-DFlash2" target="_blank" rel="noopener noreferrer">DFlash2 draft</a>, seven proposed tokens per step, so each request adds eight rows. At that size the 67 MB BF16 post-expert projection does about 8 FLOP per weight byte, far from compute-bound on MI355X. Step time is set by weight reads, kernel launches and inter-GPU latency, and the post attacks each.</p>
+<h2>2. Tensor-parallel experts at low concurrency</h2>
+<p>With expert parallelism (EP8 on eight GPUs), each token travels to the GPUs that own its eight experts and back. With tensor-parallel experts (TP8 with EP1), each GPU holds a 512-wide slice of every expert's 4,096-wide intermediate dimension, no token moves, and one all-reduce per MoE layer sums the partial outputs.</p>
+<p>AMD measured TP8/EP1 decoding 3 to 5% faster than TP8/EP8 at concurrency 1 to 8. At concurrency 16 they are level, and EP8 does 2.9% more tokens per second. So the eight-GPU recipes use TP8/EP1 and cap decode at two requests per step from concurrency 2 to 16. The four-GPU throughput recipes keep EP4 and run up to 20 requests per step, where weight reads matter more than launch count.</p>
+<p>My take: pick the layout from a measured crossover, not habit. Here it sits around 16 concurrent sessions on eight GPUs. Above it, EP wins.</p>
+<h2>3. Collectives that are just stores</h2>
+<p>TP8 adds a collective after every MoE layer. At decode these move a few kilobytes per row, but the first implementations cost 10 µs or more per call; the gather feeding the experts spent about 17 µs on two rounds of cross-GPU synchronization to move 8 KB per row.</p>
+<p>The fix uses AMD's <a href="https://github.com/ROCm/iris" target="_blank" rel="noopener noreferrer">Iris</a> library, which puts buffers on a symmetric heap so a kernel can store directly into a peer's memory. TokenSpeed builds Lamport mailboxes on it: every slot starts as a negative-zero sentinel, senders rewrite any negative zero in the data as positive zero, and the receiver polls until no sentinel remains. The data is its own ready flag, so there is no separate fence or barrier.</p>
+<p>The numbers AMD reports per layer on eight GPUs:</p>
+<ul>
+<li>Post-expert projection plus norms: 15.39 to 7.57 µs, with each GPU computing one eighth of the output columns and pushing them to peers instead of every GPU running the full 67 MB GEMV.</li>
+<li>Router plus pre-expert projection: four launches down to two, 22.5 to 13.1 µs.</li>
+<li>Standalone BF16 all-reduce at eight rows: 12.7 to 4.8 µs.</li>
+</ul>
+<p>My take: 7.82 µs saved on the projection alone, times 62 layers, is roughly 0.48 ms per decode step if it applied to every layer. At this batch size, launch and sync latency is the target, not bandwidth.</p>
+<h2>4. One launch per decoder layer</h2>
+<p>The decode monokernel, written in Triton's <a href="https://triton-lang.org/main/gluon/" target="_blank" rel="noopener noreferrer">Gluon</a> dialect, replaces the roughly twenty kernels per layer with one persistent launch, with stages passing data through tagged mailboxes. The last stage also computes the next layer's QKV on idle workgroups.</p>
+<p>Three details stood out:</p>
+<ul>
+<li>The kernel code is 92 to 100 KB, larger than the 64 KB instruction cache, so a prologue prefetches it into the L2 of every XCD. Expert weights use non-temporal loads so they do not evict that code or the KV cache.</li>
+<li>A poll waiting more than about 59 seconds on a peer records what it was waiting for and kills the process with a GPU error, instead of hanging the group.</li>
+<li>The monokernel adds some FP32 partial sums in a different order, so greedy outputs can diverge after a few dozen tokens. AIME26 stayed at 28.0 of 30.</li>
+</ul>
+<p>Time per output token at concurrency 1 on eight GPUs fell from 2.485 to 2.081 ms, about 16%. It only covers batches of one or two equal-length requests; everything else uses the regular kernels.</p>
+<h2>5. Kernels shaped for agent traffic</h2>
+<ul>
+<li><strong>Long cached prefixes.</strong> The old decode attention kernel loaded one 64-token KV page, waited, consumed it, then loaded the next. Pipelining K and V loads four deep and raising max decode splits from 32 to 64 took one request over 131k tokens from 84.2 to 23.5 µs per layer.</li>
+<li><strong>Speculative verify.</strong> One workgroup per query token meant each KV page was read eight times. Processing all eight query tokens for every query head sharing a KV head in one 64-row tile took 16 requests over 8k tokens from 74.2 to 20.2 µs per layer.</li>
+<li><strong>Mixed lengths.</strong> Sizing splits from actual lengths took a padded batch with nine 190k-token requests from 276 to 165 µs per layer.</li>
+<li><strong>An FP8 accuracy bug.</strong> Probabilities at or below 2⁻¹⁰ of the row max were rounded to zero in FP8 but still counted in the row sum. One dominant key among 4,096 small ones produced 50% output error. Scaling by 256 before the cast brought it under 0.2% of an FP32 reference.</li>
+<li><strong>JIT stalls.</strong> One Triton compile on the forward thread cost 0.6 s on every GPU. All variants now compile at startup.</li>
+</ul>
+<h2>6. The prefill gate, and the TTFT bill</h2>
+<p>Outside mixed prefill-decode batches, every scheduler round that ran a prompt chunk stalled every running decode. TokenSpeed now owes running requests N decode rounds after each chunk, but only while at least T requests are decoding (<a href="https://github.com/lightseekorg/tokenspeed/pull/3763" target="_blank" rel="noopener noreferrer">PR #3763</a>). At concurrency 28 on eight GPUs over an hour, interactivity rose from 206.2 to 228.8 tokens/s per user, throughput fell 1.1%, and the longest decode stall fell from 25.2 to 1.9 seconds. AMD states the cost: p90 TTFT rose from 9.43 to 12.50 seconds. T also has to be tuned per point; T of 10 cost 9.5% throughput at concurrency 40 on four GPUs, so that recipe uses 2.</p>
+<p>My take, from the public rows. AMD does not name the "published baseline," but the only other MI355X rows are SGLang from November 11, and they reproduce AMD's 2.5 to 30% and 0.5 to 13% ranges to rounding. Here are the six matched points (InferenceX's displayed P90 interactivity, total tokens/s per GPU, and p90 TTFT):</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>GPUs, concurrency</th>
+<th>Interactivity, SGLang to TokenSpeed</th>
+<th>Tokens/s/GPU</th>
+<th>p90 TTFT (s)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>4, c28</td>
+<td>122.7 to 125.8 (+2.5%)</td>
+<td>40,946 to 41,140 (+0.5%)</td>
+<td>3.50 to 6.89</td>
+</tr>
+<tr>
+<td>4, c36</td>
+<td>97.1 to 101.4 (+4.5%)</td>
+<td>44,513 to 45,880 (+3.1%)</td>
+<td>3.21 to 9.94</td>
+</tr>
+<tr>
+<td>4, c40</td>
+<td>72.5 to 78.5 (+8.2%)</td>
+<td>48,418 to 48,868 (+0.9%)</td>
+<td>2.41 to 6.46</td>
+</tr>
+<tr>
+<td>8, c6</td>
+<td>500.0 to 645.2 (+29.0%)</td>
+<td>5,275 to 5,976 (+13.3%)</td>
+<td>9.07 to 5.81</td>
+</tr>
+<tr>
+<td>8, c10</td>
+<td>373.1 to 485.4 (+30.1%)</td>
+<td>8,774 to 9,034 (+3.0%)</td>
+<td>6.12 to 5.36</td>
+</tr>
+<tr>
+<td>8, c28</td>
+<td>219.8 to 225.2 (+2.5%)</td>
+<td>21,793 to 22,373 (+2.7%)</td>
+<td>13.86 to 12.95</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>On eight GPUs TokenSpeed wins all three columns. On four GPUs, small gains in the two headline columns come with p90 TTFT roughly two to three times higher. For an agent loop where each turn waits on the first token, that matters as much as inter-token latency. AgentX's frontier chart does not plot TTFT.</p>
+<h2>7. Limits</h2>
+<ul>
+<li>Kernel and decode-step numbers are TokenSpeed team measurements, each against its own baseline, not end-to-end results.</li>
+<li>The recipes differ in more than the engine. On eight GPUs they place experts differently (EP1 versus EP8). Both four-GPU recipes offload KV to host DRAM, with TokenSpeed at 360 GB per GPU per <a href="https://github.com/SemiAnalysisAI/InferenceX/pull/5211" target="_blank" rel="noopener noreferrer">InferenceX PR #5211</a>. These compare tested recipes, not engines.</li>
+<li>The baseline rows are from November 11 and TokenSpeed's from November 25. Either recipe may be updated.</li>
+<li>InferenceX throughput runs use synthetic draft acceptance from a reference curve, so real DFlash2 acceptance on your traffic will differ.</li>
+<li>The four-GPU concurrency-28 point is a second attempt: the first crossed 00:00 UTC, which changed the date in the system prompt and invalidated cached contexts. Timestamps in prompt templates break prefix caching.</li>
+<li>I have not run this; my table comes from the public API rows.</li>
+</ul>
+<h2>My take</h2>
+<p>At decode batch sizes, treat every collective launch as a cost and fuse it into the producer. Pipeline KV page reads for long agent histories. Test FP8 attention probabilities against a dominant-key case. And read p90 TTFT next to interactivity on any agentic frontier chart, because a prefill gate can buy the second with the first. If I were sizing an MI355X pool for coding agents from these rows, I would use the eight-GPU TP8 recipe for latency-tier sessions and test the four-GPU recipe against my own TTFT budget before trusting its throughput.</p>
+<h2>Sources</h2>
+<ul>
+<li>AMD, Advancing Muse Spark Open Agentic Inference on AMD Instinct MI355X GPUs with TokenSpeed (Nov 25, 2026): https://www.amd.com/en/developer/resources/technical-articles/2026/advancing-muse-spark-open-agentic-inference-on-amd-gpus-with-tok.html</li>
+<li>SemiAnalysis InferenceX API, Muse Spark Open rows as of Nov 25, 2026: https://inferencex.semianalysis.com/api/v1/benchmarks?model=Muse-Spark-Open&amp;date=2026-11-25&amp;exact=false</li>
+<li>SemiAnalysis InferenceX, AgentX benchmark: https://inferencex.semianalysis.com/infx/agentx</li>
+<li>SemiAnalysis InferenceX, Muse Spark Open chart: https://inferencex.semianalysis.com/infx/inference/muse-spark-open</li>
+<li>InferenceX PR #5211, TokenSpeed Muse Spark Open MXFP4 MI355X AgentX recipe (merged Nov 24, 2026 PT): https://github.com/SemiAnalysisAI/InferenceX/pull/5211</li>
+<li>TokenSpeed repository and model recipes: https://github.com/lightseekorg/tokenspeed and https://github.com/lightseekorg/tokenspeed/blob/main/docs/recipes/models.md</li>
+<li>TokenSpeed PR #3763, prefill interval minimum decoding: https://github.com/lightseekorg/tokenspeed/pull/3763</li>
+<li>TokenSpeed PR #3777, EP4 MXFP4 expert route tiles: https://github.com/lightseekorg/tokenspeed/pull/3777</li>
+<li>ROCm Iris: https://github.com/ROCm/iris</li>
+<li>Triton Gluon: https://triton-lang.org/main/gluon/</li>
+<li>amd/Muse-Spark-Open-816B-A42B-Quark-MXFP4: https://huggingface.co/amd/Muse-Spark-Open-816B-A42B-Quark-MXFP4</li>
+<li>RadixArk/Muse-Spark-Open-DFlash2: https://huggingface.co/RadixArk/Muse-Spark-Open-DFlash2</li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
