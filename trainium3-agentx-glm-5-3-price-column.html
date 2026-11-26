@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Trainium3 on AgentX: Where the 2.28x Perf per Dollar Comes From — Anpoo Sivanadi</title>
+  <meta name="description" content="On November 25 SemiAnalysis announced that Amazon had submitted its first Trainium3 UltraServer results to the InferenceX AgentX benchmark, with &quot;2.28x better perf per dollar than even GB300 NVL72, B300, and MI355, thanks to its wide EP-based approach.&quot; A follow-up early the next morning widened it: Trainium and TPU &quot;deliver anywhere from 1.2x to 2.5x the performance per dollar of NVIDIA GPUs.&quot;." />
+  <link rel="canonical" href="https://asivanadi0.github.io/trainium3-agentx-glm-5-3-price-column.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Trainium3 on AgentX: Where the 2.28x Perf per Dollar Comes From — Anpoo Sivanadi" />
+  <meta property="og:description" content="On November 25 SemiAnalysis announced that Amazon had submitted its first Trainium3 UltraServer results to the InferenceX AgentX benchmark, with &quot;2.28x better perf per dollar than even GB300 NVL72, B300, and MI355, thanks to its wide EP-based approach.&quot; A follow-up early the next morning widened it: Trainium and TPU &quot;deliver anywhere from 1.2x to 2.5x the performance per dollar of NVIDIA GPUs.&quot;." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/trainium3-agentx-glm-5-3-price-column.html" />
+  <meta property="article:published_time" content="2026-11-26T06:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Trainium3 on AgentX: Where the 2.28x Perf per Dollar Comes From</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-26T06:00:00-08:00">26 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>On November 25 SemiAnalysis <a href="https://x.com/SemiAnalysis_/status/2125658708357128703" target="_blank" rel="noopener noreferrer">announced</a> that Amazon had submitted its first Trainium3 UltraServer results to the <a href="https://inferencex.semianalysis.com/infx/agentx" target="_blank" rel="noopener noreferrer">InferenceX AgentX</a> benchmark, with "2.28x better perf per dollar than even GB300 NVL72, B300, and MI355, thanks to its wide EP-based approach." A <a href="https://x.com/SemiAnalysis_/status/2125867835050111357" target="_blank" rel="noopener noreferrer">follow-up</a> early the next morning widened it: Trainium and TPU "deliver anywhere from 1.2x to 2.5x the performance per dollar of NVIDIA GPUs."</p>
+<p>SemiAnalysis calls AgentX the first industry-standard inference benchmark to carry Trainium, TPU, NVIDIA and AMD together, so this result is worth more than a glance at the chart. The rows behind the <a href="https://inferencex.semianalysis.com/infx/inference/glm-5-3" target="_blank" rel="noopener noreferrer">GLM-5.3 dashboard</a> are in the public <a href="https://inferencex.semianalysis.com/api/v1/benchmarks?model=GLM-5.2&amp;date=2026-11-26&amp;exact=false" target="_blank" rel="noopener noreferrer">InferenceX API</a>. I pulled them and split the headline into its two factors.</p>
+<h2>1. What was run</h2>
+<p>The model is GLM-5.3, which InferenceX lists as a <a href="https://inferencex.semianalysis.com/model/glm-5-3" target="_blank" rel="noopener noreferrer">744B-class MoE</a> with MLA and sparse attention (DSA, top 2,048 tokens) aimed at 1M-token contexts. The Trainium3 submission is eight FP4 points served with vLLM, all disaggregated: a prefill pool of 16 to 48 chips and a decode pool of 16 to 80 chips, multi-token prediction for speculative decode, NIXL for prefill-to-decode KV transfer, and KV cache offload to host DRAM on every point except concurrency 1. The decode context is 1,048,576 tokens. The workload is the AgentX replay of recorded coding-agent sessions, with mean inputs mostly around 140,000 tokens and a theoretical prefix-cache hit rate around 97%.</p>
+<p>For hardware context, AWS's <a href="https://aws.amazon.com/ec2/instance-types/trn3/" target="_blank" rel="noopener noreferrer">Trn3 page</a> lists 144 GB of HBM3e and 4.9 TB/s per Trainium3 chip, up to 144 chips per UltraServer (362 MXFP8 PFLOPs), NeuronLink-v4 at 2 TB/s per chip through the NeuronSwitch-v1 all-to-all fabric, and MXFP8 and MXFP4 support.</p>
+<p>The NVIDIA comparison I use is GB300 NVL72 FP4, served with Dynamo SGLang (October 20 rows) and Dynamo TRT-LLM (November 11 rows). Those rows are GLM-5.2. InferenceX charts GLM-5.2 and GLM-5.3 together and describes 5.3 as adding a major agentic post-training pass.</p>
+<h2>2. The y-axis is tokens per dollar, and the dollar is an input</h2>
+<p>The chart plots total tokens per $1 of TCO against p90 interactivity (tokens/s per user). Total tokens per dollar is per-chip throughput times 3,600, divided by a price per chip-hour. The price table under SemiAnalysis's chart, on the External TCO basis ("Owning at Large Hyperscaler Volume," from its July 2026 pricing surveys and <a href="https://semianalysis.com/ai-cloud-tco-model/" target="_blank" rel="noopener noreferrer">AI Cloud TCO Model</a>), lists:</p>
+<ul>
+<li>GB300: $2.31</li>
+<li>B300: $2.26</li>
+<li>GB200: $1.86</li>
+<li>MI355X: $1.50</li>
+<li>Trn3: $1.05</li>
+</ul>
+<p>So before any token is generated, Trainium3 starts with a 2.20x advantage over GB300 (2.31 / 1.05). Every Trainium3-versus-GB300 ratio on that chart is that 2.20x times the per-chip throughput ratio at the same interactivity.</p>
+<p>One check first. In these rows, <code>tput_per_gpu</code> is total input plus output tokens per second divided by prefill plus decode chips. I confirmed it on both submissions (for the headline Trainium3 point, 32 prefill chips at 32,200 input tok/s each and 80 decode chips at 92.2 output tok/s each give about 1.04 million tok/s, which is 9,266 per chip over 112 chips). So the comparison counts every chip in both pools.</p>
+<h2>3. The 2.28x, reproduced</h2>
+<p>Two of the rows land on exactly the same p90 interactivity, 246.3 tokens/s per user:</p>
+<ul>
+<li>Trainium3, concurrency 170, 32 prefill plus 80 decode chips: 9,266 tok/s per chip.</li>
+<li>GB300 Dynamo SGLang, concurrency 30, 4 prefill plus 20 decode GPUs: 8,942 tok/s per GPU.</li>
+</ul>
+<p>Per chip, Trainium3 is 1.04x. Multiply by 2.20 and you get 2.28x, which is SemiAnalysis's number to the second decimal. My take: the headline is correct arithmetic, and about 96% of it, measured in log terms, is the price ratio.</p>
+<h2>4. The rest of the curve</h2>
+<p>Here is every Trainium3 point inside the GB300 range, against the best GB300 row at the same interactivity (linear interpolation between the two nearest GB300 frontier points from either framework, using SemiAnalysis's prices). The break-even column is the Trainium3 price per chip-hour at which the two would tie on tokens per dollar.</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>p90 tok/s/user</th>
+<th>Trn3 chips</th>
+<th>Trn3 tok/s/chip</th>
+<th>GB300 tok/s/GPU</th>
+<th>Per chip</th>
+<th>Per dollar</th>
+<th>Trn3 break-even $/hr</th>
+<th>p90 TTFT, Trn3 vs GB300 (s)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>317.5</td>
+<td>96</td>
+<td>3,282</td>
+<td>3,840</td>
+<td>0.85x</td>
+<td>1.88x</td>
+<td>1.97</td>
+<td>2.06 vs 0.88 to 0.93</td>
+</tr>
+<tr>
+<td>246.3</td>
+<td>112</td>
+<td>9,266</td>
+<td>8,942</td>
+<td>1.04x</td>
+<td>2.28x</td>
+<td>2.39</td>
+<td>4.46 vs 1.83</td>
+</tr>
+<tr>
+<td>187.6</td>
+<td>64</td>
+<td>16,337</td>
+<td>16,154</td>
+<td>1.01x</td>
+<td>2.23x</td>
+<td>2.34</td>
+<td>9.21 vs 2.25 to 8.11</td>
+</tr>
+<tr>
+<td>138.9</td>
+<td>128</td>
+<td>23,006</td>
+<td>26,863</td>
+<td>0.86x</td>
+<td>1.88x</td>
+<td>1.98</td>
+<td>10.97 vs 2.25 to 3.16</td>
+</tr>
+<tr>
+<td>104.2</td>
+<td>32</td>
+<td>24,526</td>
+<td>46,879</td>
+<td>0.52x</td>
+<td>1.15x</td>
+<td>1.21</td>
+<td>7.43 vs 4.07 to 4.81</td>
+</tr>
+<tr>
+<td>102.7</td>
+<td>32</td>
+<td>28,324</td>
+<td>47,238</td>
+<td>0.60x</td>
+<td>1.32x</td>
+<td>1.39</td>
+<td>17.32 vs 4.07 to 4.81</td>
+</tr>
+<tr>
+<td>89.4</td>
+<td>32</td>
+<td>31,045</td>
+<td>63,647</td>
+<td>0.49x</td>
+<td>1.07x</td>
+<td>1.13</td>
+<td>8.47 vs 9.43</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Where GB300 is interpolated, the TTFT column shows the range of the two GB300 rows on either side. At 89.4 both submissions have a row at exactly that interactivity, so no interpolation is needed. SemiAnalysis labels 1.98x near 139 tokens/s per user; my straight-line interpolation gives 1.88x, so its curve fit is a little kinder there.</p>
+<p>What I read from it:</p>
+<ul>
+<li><strong>Per chip, Trainium3 matches GB300 in the 190 to 250 tokens/s per user band</strong> and drops to about half of GB300 at the throughput end. At maximum throughput the per-dollar lead is 1.07x, which is noise next to any real price negotiation.</li>
+<li><strong>Trainium3 reaches higher interactivity than any GB300 row here.</strong> Its concurrency-1 point runs at 480.8 tokens/s per user on 32 chips; the fastest GB300 row is 342.5. If your product is a single fast agent session, that is a real result.</li>
+<li><strong>Time to first token is worse at most matched points.</strong> At the headline point p90 TTFT is 4.46 s against 1.83 s, and at 138.9 it is 10.97 s against roughly 2 to 3 s. AgentX's frontier chart does not plot TTFT, but an agent turn waits on it.</li>
+</ul>
+<h2>5. What the rows do not tell you</h2>
+<ul>
+<li><strong>The price is the result.</strong> SemiAnalysis's External basis puts Trainium3 at $1.05 per chip-hour. Your price is whatever your contract says. If it is above about $2.39, Trainium3 loses even at its best matched point; above about $1.13, it loses at the throughput end.</li>
+<li><strong>Preview status.</strong> The dashboard marks Trainium3 (along with TPU7x and Vera Rubin) as "InferenceX Official Preview: Results may change as validation and publication continue." InferenceX's own banner says every point comes from a public GitHub Actions run, and the GB300 rows do link to <a href="https://github.com/SemiAnalysisAI/InferenceX/actions/runs/39187209967/attempts/2" target="_blank" rel="noopener noreferrer">one</a>. The Trainium3 rows have no run URL and no recipe fingerprint, and the image is tagged <code>trn3-glm53-drop3</code>, not a public registry path. Today they are not reproducible by an outsider.</li>
+<li><strong>Synthetic acceptance.</strong> Seven of the eight Trainium3 rows record a synthetic MTP acceptance length, 3.74 on six and 2.94 at the 89.4 point. Under synthetic acceptance, vLLM streams draft tokens that were never verified, as <a href="https://github.com/SemiAnalysisAI/InferenceX/pull/4840" target="_blank" rel="noopener noreferrer">PR #4840</a> describes for vLLM throughput points. The GB300 rows record no such field. Real decode speed will depend on real acceptance on your traffic.</li>
+<li><strong>Different models and stacks.</strong> Trainium3 ran GLM-5.3 on vLLM; GB300 ran GLM-5.2 on Dynamo SGLang or TRT-LLM, two to five weeks earlier. Same architecture, different weights and engines.</li>
+<li><strong>Scale differs.</strong> The headline Trainium3 point uses 112 chips; the GB300 point it beats uses 24. Per-chip normalization hides that, and wide EP generally needs a big pool to pay off.</li>
+<li><strong>Parallelism metadata is opaque.</strong> Every Trainium3 row lists a decode tensor degree of 128 and expert degree of 128 whether the decode pool is 16, 48 or 80 chips, so I cannot map ranks to chips from the API.</li>
+<li>I have not run this. Everything above comes from the public rows, SemiAnalysis's chart, and AWS's spec page.</li>
+</ul>
+<h2>My take</h2>
+<p>Trainium3 has earned a real data point: on a 744B MoE under agent traffic it is about level with GB300 per chip in the mid-interactivity band, and it reaches higher interactivity than any GB300 row. But the 2.28x is mostly a statement about price, and the price is an assumption. When I size anything off this chart I would turn it into tokens per chip-hour, apply my own quote, and read p90 TTFT next to it. I would also wait for public run links and measured acceptance before treating the preview rows as settled.</p>
+<h2>Sources</h2>
+<ul>
+<li>SemiAnalysis on X, Trainium3 UltraServer AgentX thread and chart (Nov 25, 2026): https://x.com/SemiAnalysis_/status/2125658708357128703</li>
+<li>SemiAnalysis on X, TPU and Trainium on InferenceX follow-up (Nov 26, 2026): https://x.com/SemiAnalysis_/status/2125867835050111357</li>
+<li>SemiAnalysis InferenceX, GLM-5.3 dashboard: https://inferencex.semianalysis.com/infx/inference/glm-5-3</li>
+<li>SemiAnalysis InferenceX API, GLM-5.2/5.3 rows as of Nov 26, 2026: https://inferencex.semianalysis.com/api/v1/benchmarks?model=GLM-5.2&amp;date=2026-11-26&amp;exact=false</li>
+<li>SemiAnalysis InferenceX, AgentX benchmark: https://inferencex.semianalysis.com/infx/agentx</li>
+<li>SemiAnalysis InferenceX, GLM-5.2 / GLM-5.3 architecture page: https://inferencex.semianalysis.com/model/glm-5-3</li>
+<li>SemiAnalysis AI Cloud TCO Model: https://semianalysis.com/ai-cloud-tco-model/</li>
+<li>AWS, Amazon EC2 Trn3 UltraServers: https://aws.amazon.com/ec2/instance-types/trn3/</li>
+<li>InferenceX PR #4840, synthetic acceptance and vLLM parsers: https://github.com/SemiAnalysisAI/InferenceX/pull/4840</li>
+<li>InferenceX GitHub Actions run for the GB300 Dynamo SGLang GLM-5.2 rows: https://github.com/SemiAnalysisAI/InferenceX/actions/runs/39187209967/attempts/2</li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
