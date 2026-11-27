@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GigaChat 4 708B: Three Linear Layers per Sparse One, and Where the Serving Memory Goes — Anpoo Sivanadi</title>
+  <meta name="description" content="Sber released GigaChat 4 on Thursday with open weights and an 83-page technical report." />
+  <link rel="canonical" href="https://asivanadi0.github.io/gigachat-4-708b-hybrid-gdn-dsa-serving.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="GigaChat 4 708B: Three Linear Layers per Sparse One, and Where the Serving Memory Goes — Anpoo Sivanadi" />
+  <meta property="og:description" content="Sber released GigaChat 4 on Thursday with open weights and an 83-page technical report." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/gigachat-4-708b-hybrid-gdn-dsa-serving.html" />
+  <meta property="article:published_time" content="2026-11-27T06:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>GigaChat 4 708B: Three Linear Layers per Sparse One, and Where the Serving Memory Goes</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-27T06:00:00-08:00">27 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>Sber released GigaChat 4 on Thursday with <a href="https://huggingface.co/ai-sage/GigaChat4-708B-A41B" target="_blank" rel="noopener noreferrer">open weights</a> and an 83-page <a href="https://github.com/salute-developers/gigachat4/blob/main/GigaChat_4.pdf" target="_blank" rel="noopener noreferrer">technical report</a>. Most coverage, like <a href="https://www.techtimes.com/articles/331654/20261127/sber-releases-gigachat-4-1m-token-window-lists-35-coding-test-where-deepseek-gets-74.htm" target="_blank" rel="noopener noreferrer">Tech Times</a>, led with the benchmark table. I care more about the architecture, because it stacks two long-context tricks I have written about separately, <a href="https://asivanadi0.github.io/ling-3-1-flash-hybrid-linear-kv-budget.html" target="_blank" rel="noopener noreferrer">hybrid linear attention</a> and <a href="https://asivanadi0.github.io/sparse-attention-indexer-topk-nvidia-co-design.html" target="_blank" rel="noopener noreferrer">DSA's indexer and top-k</a>, into one 708B model. The report and the <a href="https://docs.sglang.io/cookbook/autoregressive/GigaChat/GigaChat4" target="_blank" rel="noopener noreferrer">SGLang cookbook</a> include enough serving numbers to see what that costs and buys.</p>
+<p>One note up front: Sber is under US blocking sanctions. I worked only from the public report, model card, config and cookbook, and have not downloaded or run the weights.</p>
+<h2>1. The shape</h2>
+<p>From the <a href="https://huggingface.co/ai-sage/GigaChat4-708B-A41B/blob/main/config.json" target="_blank" rel="noopener noreferrer">config</a> and Table 1 of the report:</p>
+<ul>
+<li>708B total, about 41B active. 64 layers at hidden size 7,168, the first 3 with dense FFNs. Each MoE layer picks 8 of 256 routed experts plus 1 shared expert.</li>
+<li>48 Gated DeltaNet (GDN) layers and 16 MLA layers, in a 3:1 pattern (every fourth layer is MLA). GigaChat 3.5 had the same ratio at 40 layers.</li>
+<li>The MLA layers use DeepSeek Sparse Attention: a 64-head indexer scores every earlier token and attention runs over the top 2,048.</li>
+<li>1,048,576-token window via YaRN (factor 32 over a 32K base). Context was extended from 128K dense to 1M sparse with about 400B tokens of joint indexer and trunk training.</li>
+<li>One built-in MTP layer, reused recurrently for drafting, plus a separate 5-layer BF16 DFlash2 drafter.</li>
+</ul>
+<p>The released checkpoint is FP8 E4M3 with 128x128 weight blocks: 701B parameters in FP8 and 9.3B in BF16, about 726 GB of safetensors.</p>
+<h2>2. Where the per-request memory goes</h2>
+<p>The cookbook warns that SGLang keeps two pools for this model: a paged KV pool for the 16 DSA layers and a Mamba-style pool for the GDN recurrent and convolution states. Here is my arithmetic from config.json.</p>
+<p><strong>DSA cache.</strong> Each MLA layer stores a 512-value latent, 64 RoPE values and a 128-value indexer key per token. At one byte per value (FP8, scales excluded) that is 704 bytes per layer, or about 11.3 KB per token across 16 layers. A full 1M-token request needs about 11.8 GB.</p>
+<p><strong>GDN state.</strong> Each GDN layer keeps a 128x128 state for each of 64 value heads. Across 48 layers that is 50.3M values per request, about 201 MB in FP32 or 101 MB in BF16 (the cookbook's playground exposes state precision as a knob), plus under 5 MB of convolution state. This does not grow with context.</p>
+<p>My read: for short and medium requests, the fixed state is the bigger term. At FP32 it equals the DSA cache of about 17,900 tokens. For the cookbook's 8K-in, 1K-out benchmark, the DSA cache is about 104 MB per request and the GDN state about twice that. Pool sizing for this model is a concurrency problem first and a context problem second, which matches the cookbook's advice to tune the state pool together with concurrency.</p>
+<p>Parallelism changes the picture per GPU. The report notes that within an attention tensor-parallel group the MLA KV cache and indexer keys stay replicated. GDN state, by contrast, splits by heads. On the 16-GPU recipe, each H100 holds a full copy of every request's DSA cache but only a sixteenth of its GDN state. Weights take roughly 45 GB per GPU, and with <code>--mem-fraction-static 0.8</code> that leaves on the order of 20 GB per GPU for both pools. A single 1M-token request would use more than half of it. The cookbook says the same thing more politely: a configured 1M window does not guarantee the server can admit a 1M request, so check <code>max_total_num_tokens</code> in the startup log.</p>
+<h2>3. What sparse attention buys, and when it does not</h2>
+<p>Appendix H of the report has useful numbers on DSA crossover points.</p>
+<ul>
+<li><strong>Decode, batch 1, 1M context, TP8:</strong> summed attention time across the 16 MLA layers is 7.497 ms with dense MLA and 2.622 ms with optimized DSA, about 2.9x faster. Baseline DSA was 3.132 ms. Indexer fusions and running MLA preparation on a second CUDA stream took off 16.3%.</li>
+<li><strong>Decode crossover:</strong> the estimated point where DSA beats dense moved from about 115K to about 15K tokens after those optimizations.</li>
+<li><strong>Prefill:</strong> at 220K input, sparse attention cut attention-kernel time from 433.38 to 100.33 ms (4.32x), but the full GPU step only from 825.77 to 492.16 ms (1.68x). At 10K input the sparse step was 14.5% slower because the indexer costs more than it saves.</li>
+</ul>
+<p>That is why the serving stack picks dense or sparse separately for prefill and decode, with a K-only indexer filling the decode cache after a dense prefill. My take: anyone porting DSA should copy that switch, or pay indexer cost on exactly the short prompts that dominate chat traffic.</p>
+<p>At the system level, Figure 5 shows prefill holding at about 79K to 82K input tokens/s from 50K to 200K context, and decode at about 3.0K to 3.4K output tokens/s at concurrency 64, both about 1.7x GigaChat 3.5 at 200K. Those runs use four GPUs with TP4, EP4 and DP4 attention. The report does not name the GPU, and decode is slower than GigaChat 3.5 below 40K.</p>
+<h2>4. Two H100 nodes, three decode modes</h2>
+<p>The cookbook's verified recipe is two 8x H100 80 GB nodes at TP16 on SGLang. The 8x H200 TP8 recipe is listed but marked not validated. The numbers below are 8K input, 1K output, greedy, P50, with throughput per GPU counting input and output tokens.</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th style="text-align: right;">Conc. 1 TPOT</th>
+<th style="text-align: right;">Conc. 16 TPOT / TTFT</th>
+<th style="text-align: right;">Conc. 64 tok/s/GPU / TTFT</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>No speculation</td>
+<td style="text-align: right;">23.68 ms</td>
+<td style="text-align: right;">42.07 ms / 8.0 s</td>
+<td style="text-align: right;">310 / 28.9 s</td>
+</tr>
+<tr>
+<td>Recurrent MTP (3 steps)</td>
+<td style="text-align: right;">7.37 ms</td>
+<td style="text-align: right;">24.78 ms / 2.6 s</td>
+<td style="text-align: right;">409 / 14.0 s</td>
+</tr>
+<tr>
+<td>DFlash2 (block 8)</td>
+<td style="text-align: right;">4.26 ms</td>
+<td style="text-align: right;">15.70 ms / 4.8 s</td>
+<td style="text-align: right;">427 / 34.2 s</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>At concurrency 1 that is 42, 136 and 235 tokens/s per user. DFlash2 is 5.6x faster than plain decode and 1.7x faster than MTP. At concurrency 64 the gap between the two drafters shrinks to 4%, and DFlash2's TTFT is the worst of the three, because its effective running-request limit was 52, so some requests queued.</p>
+<p>My read on the drafters: the report's Table 6 shows nearly identical mean acceptance lengths at up to 7 proposed tokens (4.49 vs 4.61 in instant mode, 4.51 vs 4.47 in reasoning mode). The H100 MTP recipe drafts only 3 tokens in sequential steps, so the latency gap comes mostly from DFlash2 proposing 7 positions in one pass, not from better guesses. For single-stream agent loops DFlash2 wins. For a busy shared endpoint, MTP gets nearly the same throughput without a separate 6.5 GB draft checkpoint.</p>
+<p>Two more details are worth noting. In the cookbook, EP16 showed no output-throughput gain over EP1 at concurrency 16 or 64. And the report points to an NCCL fix for receive-proxy hangs in multi-node inference (<a href="https://github.com/NVIDIA/nccl/pull/2390" target="_blank" rel="noopener noreferrer">PR #2390</a>, closed on GitHub without a merge), so check your NCCL build before spanning two nodes. vLLM support is still an open PR (<a href="https://github.com/vllm-project/vllm/pull/69762" target="_blank" rel="noopener noreferrer">#69762</a>).</p>
+<h2>5. The opposite bet, same week</h2>
+<p>China Telecom's <a href="https://huggingface.co/XingChen-AGI/Xing4.1-Preview" target="_blank" rel="noopener noreferrer">Xing4.1-Preview</a> (285B, 17B active, also 1M context) also uses MLA with DSA but drops linear attention entirely. Its model card says GDN's gating, state updates and scans lean on vector compute and operator fusion that are hard to exploit on the Ascend 910C software stack it trained on, while DSA is mostly matrix multiplies. My take: hybrid linear attention is a hardware-dependent choice, not a free win. GigaChat 4's stack is built on CUDA kernels (DeepGEMM, FlashMLA, Triton), which is what makes the GDN layers cheap.</p>
+<h2>6. What the benchmarks say</h2>
+<p>All model scores are Sber's own and unconfirmed. In reasoning mode, GigaChat 4 posts 80.89 on SWE-bench Verified (GLM-5.3: 86.67), 71.26 on Terminal-Bench 2.0 (GLM-5.3: 71.67) and 70.33 on AA-LCR. It trails badly on DeepSWE (35.40 against 74.34 for DeepSeek 4.1) and HLE text-only (23.91 against 43.42). Instant mode scores 80.82 on SWE-bench Verified, almost the same as reasoning mode, which is a useful cost lever if it holds up.</p>
+<h2>7. What this does not show</h2>
+<ul>
+<li>Every serving number is vendor-measured. The MTP and DFlash2 rows are single runs; only the no-speculation row is a median of three.</li>
+<li>The cookbook table stops at 8K input. There is no end-to-end serving number for 1M-token requests.</li>
+<li>The GPU behind Figure 5 is not named, and the H200 single-node recipe is untested.</li>
+<li>My memory math assumes FP8 values and ignores scales, page padding and draft buffers. Treat it as a floor.</li>
+<li>I have not run any of this.</li>
+</ul>
+<h2>My take</h2>
+<p>GigaChat 4 comes with an unusually detailed public write-up of a hybrid GDN plus DSA model at this scale, and the serving lesson is concrete. The DSA cache is small enough that 1M tokens fits on paper, but it is replicated under tensor parallelism, and the fixed GDN state dominates at normal request lengths. Size the state pool for concurrency, switch the indexer off for short prefills, and pick the drafter by traffic shape. Those lessons carry over to any hybrid model, whoever trains it.</p>
+<h2>Sources</h2>
+<ul>
+<li>GigaChat 4 model card (FP8): https://huggingface.co/ai-sage/GigaChat4-708B-A41B</li>
+<li>GigaChat 4 config.json: https://huggingface.co/ai-sage/GigaChat4-708B-A41B/blob/main/config.json</li>
+<li>GigaChat 4 technical report (Nov 26, 2026): https://github.com/salute-developers/gigachat4/blob/main/GigaChat_4.pdf</li>
+<li>GigaChat 4 GitHub repository: https://github.com/salute-developers/gigachat4</li>
+<li>SGLang cookbook, GigaChat 4: https://docs.sglang.io/cookbook/autoregressive/GigaChat/GigaChat4</li>
+<li>vLLM PR #69762, GigaChat4 support: https://github.com/vllm-project/vllm/pull/69762</li>
+<li>NCCL PR #2390: https://github.com/NVIDIA/nccl/pull/2390</li>
+<li>TileLang PR #4382, fused DSA indexer top-k: https://github.com/tile-ai/tilelang/pull/4382</li>
+<li>Xing4.1-Preview model card: https://huggingface.co/XingChen-AGI/Xing4.1-Preview</li>
+<li>Tech Times coverage (Nov 27, 2026): https://www.techtimes.com/articles/331654/20261127/sber-releases-gigachat-4-1m-token-window-lists-35-coding-test-where-deepseek-gets-74.htm</li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
