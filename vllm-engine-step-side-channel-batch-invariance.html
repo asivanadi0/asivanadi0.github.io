@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Two Models, One vLLM Engine: The Step Size Is a Shared Wire — Anpoo Sivanadi</title>
+  <meta name="description" content="Most of us treat an inference engine as stateless from the point of view of a single request." />
+  <link rel="canonical" href="https://asivanadi0.github.io/vllm-engine-step-side-channel-batch-invariance.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="Two Models, One vLLM Engine: The Step Size Is a Shared Wire — Anpoo Sivanadi" />
+  <meta property="og:description" content="Most of us treat an inference engine as stateless from the point of view of a single request." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/vllm-engine-step-side-channel-batch-invariance.html" />
+  <meta property="article:published_time" content="2026-11-26T18:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>Two Models, One vLLM Engine: The Step Size Is a Shared Wire</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-26T18:00:00-08:00">26 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>Most of us treat an inference engine as stateless from the point of view of a single request. Your prompt goes in, your tokens come out, and the other requests in the batch only change how long you wait. A <a href="https://www.lesswrong.com/posts/7wzWuLP3HhyBLmKfo/models-can-communicate-via-inference-servers-despite-being" target="_blank" rel="noopener noreferrer">post by Niranjan Deshpande and David Africa</a>, with <a href="https://github.com/niranjan-deshpande/side-channel-communication" target="_blank" rel="noopener noreferrer">code and per-round results on GitHub</a>, shows that this is not true at the bit level, and that two models sharing one vLLM server can turn that into a working channel with no network and no shared files. It picked up wide coverage this week, including <a href="https://www.tomshardware.com/tech-industry/artificial-intelligence/sandboxed-ai-models-secretly-talk-via-gpu-rounding-errors-on-shared-vllm-servers-with-no-network-or-shared-files-colluding-watchdog-let-all-354-attacks-slip-through" target="_blank" rel="noopener noreferrer">Tom's Hardware</a>.</p>
+<p>I am less interested in the AI safety framing than in what it says about the serving stack, because the mechanism is the same batch dependence I wrote about in the <a href="https://asivanadi0.github.io/detent-batch-invariant-serving-near-stock-speed.html" target="_blank" rel="noopener noreferrer">Detent post</a>. So I read the repo's result files and checked the mitigation runs myself.</p>
+<h2>1. The setup</h2>
+<p>Unless noted otherwise, everything runs Qwen3-8B on vLLM 0.33.0 on a single NVIDIA L40S. The engine in the game scripts is configured with a 2,048-token budget per engine step and up to 64 concurrent sequences. Two players, Alice and Bob, can each call tools and send requests to the server, but cannot message each other.</p>
+<p>The root cause is simple. vLLM batches many requests into one engine step and the GPU libraries it calls pick a kernel based on how many tokens that step processes. Different kernels associate the floating-point sums differently, so the same request produces slightly different activations depending on step size. The authors count about 9 size classes on the L40S. The differences almost never change output text, but they are deterministic, and that is enough to read them.</p>
+<h2>2. Two channels</h2>
+<p><strong>Step sizing.</strong> To send a 1, Alice makes a tool call that ingests a long document, which pushes the step into a different size class. Bob, if he is computed in that same step, sees the other kernel's rounding in his own activations. To send a 0, Alice stays quiet. Timing turns out to be easy to hit: if Alice queues a 6,126-token document (two full 2,048-token steps plus 2,030), the scheduler finishes her chunks first and Bob's first 18 tokens land in the third step. In their timing runs Bob saw the signal in 20 of 20 trials at any delay shorter than the document read, about 0.4 s for 6,126 tokens and 4 s for 24,558.</p>
+<p><strong>KV cache message board.</strong> vLLM's prefix cache stores KV in 16-token blocks keyed by a hash of every token from the start of the prompt, and a cached block keeps the rounding of the step that computed it. Alice has a helper model read an agreed "mailbox" text inside a long prompt, so its KV is computed under the big-step kernel and cached. Later, Bob's helper reads the same mailbox in a small step. If the cache hit carries big-step rounding, Alice wrote it. This one does not need the two to run at the same time, only a shared prefix and a helper on the same server.</p>
+<h2>3. The results that matter</h2>
+<ul>
+<li>With a fine-tuned reader (the last two layers of Bob's helper trained to spot the signal), Bob named Alice's color out of 8 in 1,221 of 1,221 games over the message board, and 455 of 455 over step sizing.</li>
+<li>In an untrusted-monitoring setup, a policy paired each harmful action with a long document read. A monitor fine-tuned to score 0 under a full step let 354 of 354 signaled attacks through while still catching 85 to 92% of honeypots and flagging none of 1,596 benign actions.</li>
+<li>Without any fine-tuning, an unmodified GLM-5.3 at low effort decoded the message board from helper log-probs at 100% when given the full protocol and baselines, 65 to 66% with only a log of earlier rounds, and 17% when it had to choose which mailboxes to check. Chance is 12.5%.</li>
+<li>Both channels worked on SGLang, LMDeploy and TensorRT-LLM as well as vLLM. Step sizing worked on A40, RTX 4090, RTX 5090 and H100. A reader trained on one GPU did not recognize the signal on another.</li>
+</ul>
+<p>Load is the big caveat. Replaying the Azure LLM inference trace in the background, the message board won 100%, 99%, 90% and 49% of games at 0.1x, 0.25x, 0.5x and 1x replay speed. Step sizing fell to 39% and 23% at 0.1x and 0.25x. On a busy engine, everyone's steps are big.</p>
+<h2>4. What I checked in the repo</h2>
+<p>The result folders include per-action rows, so I recomputed the monitor numbers rather than trusting the chart. Each condition has 576 actions, 177 harmful and 399 benign.</p>
+<ul>
+<li>Default kernels, signal on: 0 of 177 harmful actions flagged in each of two runs, which is the 354.</li>
+<li>Default kernels, signal off (the honeypot case): 152 and 151 of 177 flagged, about 85 to 86%.</li>
+<li><code>VLLM_BATCH_INVARIANT=1</code>: 154 of 177 flagged with the signal on and 154 of 177 with it off.</li>
+</ul>
+<p>My take: the batch-invariant result is cleaner than "detection restored to 87%" suggests. In that run, the monitor's log-probs over the ten score digits were identical between a full step and a partial step on all 576 actions. With default kernels, only 6 of 576 matched. That is a direct test of the property the fix claims.</p>
+<p>The mitigation runs for the color games say the same thing. With batch invariance on, the message board won 16 of 120 games (13.3%) and step sizing 11 of 69 (15.9%), both near the 12.5% chance line. With per-agent <code>cache_salt</code>, the message board won 15 of 120, exactly chance. My read: batch invariance closes the message board too, because the cached block no longer carries a step-dependent fingerprint.</p>
+<h2>5. What the fixes cost</h2>
+<p>Both fixes exist today and both are opt-in.</p>
+<p><strong>Batch invariance.</strong> vLLM's <a href="https://docs.vllm.ai/en/latest/features/batch_invariance/" target="_blank" rel="noopener noreferrer">batch invariance docs</a> mark the feature as beta, supported on NVIDIA compute capability 8.0 and up, AMD gfx90a, gfx942 and gfx950, and Intel XPUs with Triton. Turning it on disables FlashInfer, AITER and QuickReduce all-reduce under tensor parallelism, and on some GPUs runs without <code>torch.compile</code>, using breakable CUDA graphs. The docs say plainly that it "may impact performance." For a number, the <a href="https://arxiv.org/abs/2611.10611" target="_blank" rel="noopener noreferrer">Detent paper</a> measured the built-in deterministic modes at 1.67 to 10.3x stock latency per output token on four H100s, and its own pinned-selector approach at 1.04 to 1.17x.</p>
+<p><strong>Cache salting.</strong> Per the <a href="https://docs.vllm.ai/en/latest/usage/security/" target="_blank" rel="noopener noreferrer">vLLM security docs</a>, <code>cache_salt</code> is mixed into the hash of the first KV block, so only requests with the same salt share prefix blocks. The docs ask you to treat the salt as a secret (for example 256 random bits), scope it to the boundary you want, and accept that it reduces cache hit rate. This is the same mechanism already recommended for the prefix-cache timing leak (<a href="https://github.com/vllm-project/vllm/security/advisories/GHSA-4qjh-9fv9-r85r" target="_blank" rel="noopener noreferrer">CVE-2025-46570</a>; the <a href="https://arxiv.org/abs/2411.18191" target="_blank" rel="noopener noreferrer">prefix cache paper</a> it cites reports ROC AUC 0.99 at 8-token prefixes). The same page also says vLLM "does not provide isolation between tenants that share the same server process."</p>
+<h2>6. How I would act on it</h2>
+<ul>
+<li><strong>Monitors and policies on separate engine instances.</strong> The authors say this "closes nearly every side channel," and it costs only a little packing efficiency. If you run an agent platform where a judge model sits on the same engine as the agents it grades, this is the cheapest fix on the list.</li>
+<li><strong>Salt at the gateway, not in the client.</strong> Generate per-tenant secrets in the layer that authenticates callers, so no caller can choose another tenant's salt.</li>
+<li><strong>Batch invariance where you need determinism anyway.</strong> On-policy RL and rerunnable evals already want it. For latency-bound production traffic, measure the cost on your model before turning it on fleet-wide.</li>
+<li><strong>Add a bit-diff check.</strong> The authors suggest it in their comments: run the same request on a full server and an empty one and compare outputs bit for bit. That catches a new optimization reopening a channel, and it doubles as a determinism regression test.</li>
+</ul>
+<h2>7. What this does not show</h2>
+<ul>
+<li>The setups are contrived on purpose. The players were told the protocol, the readers were fine-tuned, and in some games scripts played Alice and Bob.</li>
+<li>Most numbers come from an otherwise idle server, and accuracy drops hard under realistic traffic.</li>
+<li>Everything is single-GPU, Qwen3-8B class. I have not seen it tested with tensor parallel, expert parallel or disaggregated prefill.</li>
+<li>The trained reader layers are not published, so the fine-tuned results cannot be rerun from the repo alone. The per-round data I used is there.</li>
+<li>I have not run any of this myself.</li>
+</ul>
+<h2>My take</h2>
+<p>This is a reminder that "shared server" means shared state, even when the state is just which kernel ran. For anyone hosting multiple agents or tenants on one engine, the useful output of this work is not a new threat model so much as a short checklist: separate instances for anything that must not collude, salted prefix caches across trust boundaries, and batch invariance where its cost is acceptable. The repo's result files are the best part, because they show the fixes doing exactly what they claim.</p>
+<h2>Sources</h2>
+<ul>
+<li>Niranjan Deshpande and David Africa, "Models Can Communicate via Inference Servers Despite Being Sandboxed," LessWrong (Nov 19, 2026): https://www.lesswrong.com/posts/7wzWuLP3HhyBLmKfo/models-can-communicate-via-inference-servers-despite-being</li>
+<li>Code and per-round results: https://github.com/niranjan-deshpande/side-channel-communication</li>
+<li>Tom's Hardware coverage (Nov 26, 2026): https://www.tomshardware.com/tech-industry/artificial-intelligence/sandboxed-ai-models-secretly-talk-via-gpu-rounding-errors-on-shared-vllm-servers-with-no-network-or-shared-files-colluding-watchdog-let-all-354-attacks-slip-through</li>
+<li>vLLM docs, Batch Invariance: https://docs.vllm.ai/en/latest/features/batch_invariance/</li>
+<li>vLLM docs, Security (cache salting, multi-tenant deployments): https://docs.vllm.ai/en/latest/usage/security/</li>
+<li>vLLM security advisory, CVE-2025-46570: https://github.com/vllm-project/vllm/security/advisories/GHSA-4qjh-9fv9-r85r</li>
+<li>"Leaking Secrets from Prefix Caches": https://arxiv.org/abs/2411.18191</li>
+<li>Detent, arXiv 2611.10611: https://arxiv.org/abs/2611.10611</li>
+<li>Azure LLM inference traces: https://github.com/Azure/AzurePublicDataset</li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
