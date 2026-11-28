@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ERNIE 5.5 Flash Preview: Six Layers Hold the Cache, and 1,074 Tokens per Second Uses a Simulated Draft — Anpoo Sivanadi</title>
+  <meta name="description" content="Baidu put the ERNIE 5.5 Flash Preview weights on Hugging Face on November 23 under Apache 2.0, about two weeks after the model launched as API only." />
+  <link rel="canonical" href="https://asivanadi0.github.io/ernie-5-5-flash-preview-hca-dsa-simulated-acceptance.html" />
+  <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151512" media="(prefers-color-scheme: dark)" />
+  <meta property="og:title" content="ERNIE 5.5 Flash Preview: Six Layers Hold the Cache, and 1,074 Tokens per Second Uses a Simulated Draft — Anpoo Sivanadi" />
+  <meta property="og:description" content="Baidu put the ERNIE 5.5 Flash Preview weights on Hugging Face on November 23 under Apache 2.0, about two weeks after the model launched as API only." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://asivanadi0.github.io/ernie-5-5-flash-preview-hca-dsa-simulated-acceptance.html" />
+  <meta property="article:published_time" content="2026-11-27T18:00:00-08:00" />
+  <meta property="article:author" content="Anpoo Sivanadi" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">skip to content</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Anpoo Sivanadi, home">anpoo.</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/">home</a>
+      <a href="/#work">work</a>
+      <a href="/writing.html">writing</a>
+      <a href="/cv.html">cv</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article class="article">
+      <header class="article-header">
+        <p class="kicker">Writing</p>
+        <h1>ERNIE 5.5 Flash Preview: Six Layers Hold the Cache, and 1,074 Tokens per Second Uses a Simulated Draft</h1>
+        <p class="article-meta">
+          <time datetime="2026-11-27T18:00:00-08:00">27 November 2026</time>
+          · Anpoo Sivanadi
+        </p>
+      </header>
+
+      <div class="article-body prose">
+<p>Baidu put the <a href="https://huggingface.co/baidu/ERNIE-5.5-Flash-Preview" target="_blank" rel="noopener noreferrer">ERNIE 5.5 Flash Preview weights</a> on Hugging Face on November 23 under Apache 2.0, about two weeks after the model launched as API only. The same week brought an <a href="https://www.lmsys.org/blog/2026-11-23-ernie55-flash-low-latency" target="_blank" rel="noopener noreferrer">SGLang low-latency write-up</a> with a headline of 1,074 tokens/s on four GPUs, a <a href="https://vllm.ai/blog/2026-11-24-ernie-5-5-flash-preview" target="_blank" rel="noopener noreferrer">vLLM day-0 post</a> built on a plugin rather than a fork, and an <a href="https://docs.sglang.io/cookbook/autoregressive/Baidu/ERNIE-5.5-Flash" target="_blank" rel="noopener noreferrer">SGLang cookbook page</a> with a hardware matrix. I wanted two answers: where the KV cache goes in a model that mixes compressed and sparse attention, and what the 1,074 number actually measures.</p>
+<h2>1. The shape</h2>
+<p>From the model card and <a href="https://huggingface.co/baidu/ERNIE-5.5-Flash-Preview/blob/main/config.json" target="_blank" rel="noopener noreferrer">config.json</a>:</p>
+<ul>
+<li>280B total, 14B active per token. 43 layers: 1 dense FFN layer, then 42 MoE layers.</li>
+<li>Each MoE layer routes to 10 of 512 experts plus 1 shared expert. Routed experts compute in a 2,048-dim latent space, picked by several sigmoid routers (Baidu calls it Multi-Router Latent MoE).</li>
+<li>37 layers use Heavily Compressed Attention (HCA): one cached entry per 128 tokens plus a 128-token sliding window, 512-dim heads, one KV head. The config tags this variant <code>dsv4_hybrid</code>.</li>
+<li>One layer in seven, 6 in total, uses MLA with DeepSeek Sparse Attention: a 64-head indexer picks the top 2,048 earlier tokens for each query.</li>
+<li>4 manifold-constrained hyper-connection (mHC) residual streams, a 4-piece MultiMax output head, and a 1M-token window via YaRN.</li>
+<li>Default checkpoint: routed experts in MXFP4 run as W4A8 (FP4 weights, FP8 activations), quantization-aware trained. Everything else is blockwise FP8. KV cache in FP8, DSA indexer in FP4. A 3-layer DSpark draft model ships in the same repo.</li>
+</ul>
+<p>The cookbook lists weight sizes of about 155 GB for FP4, 280 GB for FP8 and 560 GB for BF16.</p>
+<h2>2. Where the cache goes</h2>
+<p>I covered the sparse indexer itself in an <a href="https://asivanadi0.github.io/sparse-attention-indexer-topk-nvidia-co-design.html" target="_blank" rel="noopener noreferrer">earlier post</a>. Here is the memory side, from config.json, at one byte per FP8 value with scales and page padding excluded.</p>
+<p><strong>HCA layers.</strong> Each stores one 512-value entry per 128 tokens. Across 37 layers that is 148 bytes per token of history. That assumes one entry serves as both key and value, which the single KV head suggests. If keys and values are stored separately, it is 296 bytes. Either way it is small. The sliding window adds a fixed 2.4 MB per request.</p>
+<p><strong>DSA layers.</strong> Each stores a 512-value latent, 64 RoPE values and a 128-value indexer key per token. With the indexer key in MXFP4 that is 640 bytes per layer, or 3,840 bytes across 6 layers.</p>
+<p>My read: the total is about 4.0 KB per token, and 96% of it lives in the 6 uncompressed layers. A full 1,048,576-token request needs about 4.2 GB, or 4.6 GB if the indexer cache stays in FP8. That is roughly a third of the 11.3 KB per token I worked out for <a href="https://asivanadi0.github.io/gigachat-4-708b-hybrid-gdn-dsa-serving.html" target="_blank" rel="noopener noreferrer">GigaChat 4</a>, and well above the 890 bytes per token DeepSeek published for <a href="https://asivanadi0.github.io/deepseek-v4-1-flash.html" target="_blank" rel="noopener noreferrer">V4.1 Flash</a>. The 37 compressed layers are close to free. If Baidu wants a smaller cache later, the six full-context layers are the only place left to cut.</p>
+<p>This also explains a line in the cookbook. It says to drop <code>--max-running-requests</code> to single digits on two B300s for 1M-token requests, because each rank's KV pool must hold whole requests and a 1M prefill needs tens of GB of activation memory. By my numbers the cache is not the main limit at 1M. Prefill activations are.</p>
+<h2>3. What 1,074 tokens/s measures</h2>
+<p>The SGLang setup: four SM100 GPUs (the post does not name B200 or B300), batch size 1, 55K input tokens, 1K output, CUDA 13.0, PyTorch 2.14.1, HALOps 0.2.0, attention TP4 and MoE TP4. Their table, in merge order:</p>
+<div class="table-wrap" role="region" aria-label="Table 1" tabindex="0">
+<table>
+<thead>
+<tr>
+<th>Stage</th>
+<th style="text-align: right;">Per-step time</th>
+<th style="text-align: right;">Decode speed</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Naive DP/EP</td>
+<td style="text-align: right;">9.80 ms</td>
+<td style="text-align: right;">102 tok/s</td>
+</tr>
+<tr>
+<td>Low-latency backend, TP</td>
+<td style="text-align: right;">7.52 ms</td>
+<td style="text-align: right;">133 tok/s</td>
+</tr>
+<tr>
+<td>DSpark speculative decoding</td>
+<td style="text-align: right;">10.5 ms</td>
+<td style="text-align: right;">524 tok/s</td>
+</tr>
+<tr>
+<td>Comm/compute fusion, multi-stream, PDL</td>
+<td style="text-align: right;">7.27 ms</td>
+<td style="text-align: right;">757 tok/s</td>
+</tr>
+<tr>
+<td>One-Pass mHC, quantization fusion</td>
+<td style="text-align: right;">6.58 ms</td>
+<td style="text-align: right;">836 tok/s</td>
+</tr>
+<tr>
+<td>Attention dataflow restructuring</td>
+<td style="text-align: right;">5.80 ms</td>
+<td style="text-align: right;">948 tok/s</td>
+</tr>
+<tr>
+<td>MegaLLMoE</td>
+<td style="text-align: right;">5.12 ms</td>
+<td style="text-align: right;">1,074 tok/s</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Every row from DSpark onward uses a simulated acceptance length of 5.5. The reproduction sets <code>SGLANG_SIMULATE_ACC_LEN=5.5</code> along with two other simulation flags. Decode speed is 1/TPOT, and per-step time is TPOT times acceptance length, so 5.5 divided by 5.12 ms gives the 1,074. The 1,310 tokens/s figure uses a simulated 7.2 with block size 7.</p>
+<p>The vLLM post gives the measured number: DSpark's mean acceptance length is "above 4.0 on real-world coding and complex agent workloads." My arithmetic, assuming step time does not change: 4.0 accepted tokens at 5.12 ms is about 780 tokens/s. That is still very fast for a 280B model at batch 1. It is just not 1,074. The cookbook repeats the 1,074 and 1,310 figures without the word "simulated", so expect to see them quoted without it.</p>
+<p>Simulating acceptance is a reasonable way to isolate kernel work from draft quality, and the post says plainly that it does it. My take: read the table as a kernel progress chart. Per-step time fell from 10.5 ms to 5.12 ms with speculation on, and that holds whatever the draft accepts. Use your own acceptance rate for the tokens/s.</p>
+<h2>4. The kernel work worth stealing</h2>
+<p>Several of these carry over to other models:</p>
+<ul>
+<li><strong>Small GEMMs at batch 1.</strong> Blackwell's FP8 UMMA tiles are too coarse for tiny TP-sharded matrices. They emulate m16n8k32 MMA to cut finer tiles and swap A and B below 8 tokens. A 2,048 x 1,024 GEMM with 6 tokens went from 4.30 to 2.23 µs, 1.9x faster than DeepGEMM's FP8 GEMM.</li>
+<li><strong>TP over EP for latency.</strong> With attention DP, the busiest rank sets the step time. With MoE EP, there is an exchange before and after the experts, and routing skew lands on one GPU. Plain TP spreads weight reads evenly and needs one reduction.</li>
+<li><strong>HCA compressor off the critical path.</strong> The compressor only emits a new entry every 128 tokens, so it moves to a side stream with the attention over the one block that depends on it.</li>
+<li><strong>MegaLLMoE.</strong> Routing, latent projections, routed and shared experts, and both all-reduces run in one kernel per rank. The reductions use single-round NVLS multicast, with routed outputs sent block by block as they finish.</li>
+<li><strong>One-Pass mHC.</strong> They expand the norm of the aggregated stream as a quadratic form over the streams' Gram matrix, which merges two serial reductions into one.</li>
+</ul>
+<p>The vLLM side adds its own fusions for the VHA post-mix, router chain, MultiMax head and gated attention, at 1.55x to 6.53x per kernel, plus FlashIndexer. FlashIndexer is a small head router trained on about 1B tokens to imitate full-indexer selections, plus exact threshold pre-filtering. They measured a 1.4x speedup at 1M context.</p>
+<h2>5. Where it runs</h2>
+<p>The cookbook matrix gives the smallest GPU count per precision: B300/GB300 at 2/2/4 GPUs for FP4/FP8/BF16, B200 and GB200 at 4/4/8, and H100 at 8 for FP8 and 2 nodes of 8 for BF16. FP4 is SM100 only, because the W4A8 experts run through DeepGEMM MegaMoE with expert parallelism. Only B300 is verified for every recipe. The FP8 high-throughput recipe is also verified on GB300, B200, GB200 and H100. The rest "follow from the same memory budget and are not yet verified."</p>
+<p>A few operator details: attention TP must divide 8, the number of output groups. DeepEP needs <code>--ep 4</code> or more, because at EP2 each rank would hold 256 experts, past DeepEP's per-rank limit. SGLang picks page size 256 and FP8 KV on its own. Baidu recommends DSpark blocks of up to 7 at low concurrency and 2 to 3 at high concurrency.</p>
+<p>On quality, every ERNIE score is Baidu's own. It posts 46.5 on Terminal-Bench 4.0 against 42.3 for DeepSeek-V4.1-Flash-1017, and 71.2 on DeepSWE v1.1 against 77.0. It is a preview checkpoint, and Baidu says post-training is still running.</p>
+<h2>6. What this does not show</h2>
+<ul>
+<li>The 1,074 and 1,310 tokens/s figures use simulated acceptance. The write-up does not include a run with the real DSpark draft at those settings.</li>
+<li>The low-latency backend is <a href="https://github.com/sgl-project/sglang/pull/52603" target="_blank" rel="noopener noreferrer">SGLang PR #52603</a>, which was still open when I checked on November 27. HALOps installs from PaddlePaddle's package index, not PyPI.</li>
+<li>The benchmark is batch 1 at 55K input. The write-up has no throughput curve under concurrency for the low-latency path.</li>
+<li>My cache math ignores scales, padding, the compressor's partial-block state and draft buffers. Treat it as a floor.</li>
+<li>I have not run any of this.</li>
+</ul>
+<h2>My take</h2>
+<p>ERNIE 5.5 Flash is a clear example of a hybrid where the compressed layers are close to free and the few full-context layers set the memory bill. The serving work behind it is real, and the per-step times are the honest part of the headline. When you size a deployment, take the cookbook's GPU counts, use the vLLM post's measured acceptance rather than the simulated one, and plan for long-context admission to be limited by prefill memory rather than by the cache.</p>
+<h2>Sources</h2>
+<ul>
+<li>ERNIE 5.5 Flash Preview model card: https://huggingface.co/baidu/ERNIE-5.5-Flash-Preview</li>
+<li>ERNIE 5.5 Flash Preview config.json: https://huggingface.co/baidu/ERNIE-5.5-Flash-Preview/blob/main/config.json</li>
+<li>ERNIE 5.5 Flash Base model card: https://huggingface.co/baidu/ERNIE-5.5-Flash-Base</li>
+<li>Baidu release blog: https://ernie.baidu.com/release/ernie-5-5-flash-preview/</li>
+<li>LMSYS, "Toward the Decode Limit: ERNIE 5.5 Flash at 1074 tokens/s on SGLang" (Nov 23, 2026): https://www.lmsys.org/blog/2026-11-23-ernie55-flash-low-latency</li>
+<li>vLLM, "vLLM Day-0 Support for ERNIE 5.5 Flash Preview" (Nov 24, 2026): https://vllm.ai/blog/2026-11-24-ernie-5-5-flash-preview</li>
+<li>SGLang cookbook, ERNIE-5.5-Flash: https://docs.sglang.io/cookbook/autoregressive/Baidu/ERNIE-5.5-Flash</li>
+<li>SGLang PR #52603, ernie55 low-latency decode backend: https://github.com/sgl-project/sglang/pull/52603</li>
+<li>vLLM-ERNIE plugin: https://github.com/baidu/vLLM-ERNIE</li>
+<li>HALOps: https://github.com/paddlepaddle/halops</li>
+</ul>
+        <p><em>Anpoo Sivanadi, Staff Software Engineer</em></p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Anpoo Sivanadi</p>
+    <p>Personal views only · updated October 2026</p>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
